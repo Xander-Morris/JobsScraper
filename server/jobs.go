@@ -1,6 +1,8 @@
 package server
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,6 +39,30 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 		Limit:  params.Limit,
 		Offset: params.Offset,
 	})
+}
+
+func handleGetJob(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	job, err := database.GetJobByID(r.Context(), id)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return
+		}
+
+		log.Printf("get job: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get job")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, job)
 }
 
 type jobSearchResponse struct {

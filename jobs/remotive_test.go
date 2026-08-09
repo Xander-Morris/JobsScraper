@@ -18,10 +18,6 @@ func TestRemotiveJobToJob(t *testing.T) {
 		want Job
 	}{
 		{
-			// The salary parser's digit buffer never resets between flushes, so once
-			// SalaryMin/SalaryMax are set from the first number found, later numbers
-			// in the string are parsed but discarded. "$50k" and "$50k - $80k" both
-			// resolve to min=max=50 here.
 			name: "salary string yields same min and max from first parsed number",
 			raw: RemotiveJob{
 				ID:                        1,

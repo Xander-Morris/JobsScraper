@@ -39,7 +39,6 @@ func runScraper(sources []jobs.JobSource) {
 		var filtered []jobs.Job
 
 		for _, job := range sourceJobs {
-			// I thought that the past month would be a good decision for deduplication.
 			key := job.Company + job.Title + job.PostedAt.Month().String()
 			exists, _ := seen[key]
 

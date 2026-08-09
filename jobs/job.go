@@ -14,8 +14,6 @@ const (
 	InPerson
 )
 
-// ParseWorkplaceType maps a query-string style value (e.g. "remote") to a
-// WorkplaceType. Empty string is treated as "no filter" and maps to Unknown.
 func ParseWorkplaceType(s string) (WorkplaceType, bool) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "":
@@ -32,6 +30,7 @@ func ParseWorkplaceType(s string) (WorkplaceType, bool) {
 }
 
 type Job struct {
+	ID                   int64
 	Title                string
 	Company              string
 	Location             string

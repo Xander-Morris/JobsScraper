@@ -6,6 +6,7 @@ import (
 	"log"
 	"main/jobs"
 	"strings"
+	"time"
 
 	_ "github.com/glebarez/go-sqlite"
 )
@@ -58,7 +59,9 @@ func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt) erro
 	for _, job := range jobs {
 		var jobID int64
 
-		if err := tableNameToInsertStmt["jobs"].QueryRow(job.Title, job.Company, job.Location, job.WorkplaceType, job.SalaryMin, job.SalaryMax, job.PostedAt, job.URL, job.Description).Scan(&jobID); err != nil {
+		postedAt := job.PostedAt.UTC().Format(time.RFC3339)
+
+		if err := tableNameToInsertStmt["jobs"].QueryRow(job.Title, job.Company, job.Location, job.WorkplaceType, job.SalaryMin, job.SalaryMax, postedAt, job.URL, job.Description).Scan(&jobID); err != nil {
 			return err
 		}
 

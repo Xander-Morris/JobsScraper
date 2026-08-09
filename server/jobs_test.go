@@ -1,12 +1,26 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	"main/database"
 	"main/jobs"
 )
+
+func TestMain(m *testing.M) {
+	for _, f := range []string{"jobs.db", "jobs.db-shm", "jobs.db-wal"} {
+		os.Remove(f)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestParseJobSearchParams(t *testing.T) {
 	tests := []struct {
@@ -116,5 +130,86 @@ func TestParseJobSearchParams(t *testing.T) {
 				tt.check(t, params)
 			}
 		})
+	}
+}
+
+func seedJob(t *testing.T, url string) int64 {
+	t.Helper()
+
+	job := jobs.Job{
+		Title:    "Backend Engineer",
+		Company:  "Acme",
+		URL:      url,
+		PostedAt: time.Now(),
+	}
+
+	if err := database.WriteToDatabase([]jobs.Job{job}); err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+
+	result, err := database.SearchForJobs(context.Background(), &database.JobSearchParams{Limit: database.MaxSearchLimit})
+
+	if err != nil {
+		t.Fatalf("find seeded job: %v", err)
+	}
+
+	for _, j := range result.Jobs {
+		if j.URL == url {
+			return j.ID
+		}
+	}
+
+	t.Fatalf("seeded job %q not found in search results", url)
+	return 0
+}
+
+func TestHandleGetJob(t *testing.T) {
+	id := seedJob(t, "https://example.com/jobs/handle-get-job")
+
+	r := httptest.NewRequest("GET", "/api/jobs/"+strconv.FormatInt(id, 10), nil)
+	r.SetPathValue("id", strconv.FormatInt(id, 10))
+	rec := httptest.NewRecorder()
+
+	handleGetJob(rec, r)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var got jobs.Job
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if got.ID != id {
+		t.Errorf("ID = %d, want %d", got.ID, id)
+	}
+
+	if got.URL != "https://example.com/jobs/handle-get-job" {
+		t.Errorf("URL = %q, want seeded url", got.URL)
+	}
+}
+
+func TestHandleGetJobNotFound(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/jobs/999999999", nil)
+	r.SetPathValue("id", "999999999")
+	rec := httptest.NewRecorder()
+
+	handleGetJob(rec, r)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleGetJobInvalidID(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/jobs/abc", nil)
+	r.SetPathValue("id", "abc")
+	rec := httptest.NewRecorder()
+
+	handleGetJob(rec, r)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }

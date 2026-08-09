@@ -103,6 +103,34 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	return &SearchResult{Jobs: results, Total: total}, nil
 }
 
+func GetJobByID(ctx context.Context, id int64) (*jobs.Job, error) {
+	db, err := getDb()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	const query = `SELECT j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
+		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, '')
+		FROM jobs j WHERE j.id = ?`
+
+	job, jobID, err := scanJobRow(db.QueryRowContext(ctx, query, id))
+
+	if err != nil {
+		return nil, err
+	}
+
+	tagMap, err := fetchTagsForJobs(ctx, db, []int64{jobID})
+
+	if err != nil {
+		return nil, fmt.Errorf("fetch tags for job: %w", err)
+	}
+
+	job.Tags = tagMap[jobID]
+
+	return &job, nil
+}
+
 func countJobSearchResults(ctx context.Context, db *sql.DB, from string, args []any) (int, error) {
 	var total int
 
@@ -112,8 +140,6 @@ func countJobSearchResults(ctx context.Context, db *sql.DB, from string, args []
 	return total, err
 }
 
-// buildJobSearchFromWhere builds the shared FROM/WHERE clause (and its args) used by
-// both the paginated select and the count query.
 func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 	var from string
 	var conditions []string
@@ -150,7 +176,6 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 			args = append(args, tag)
 		}
 
-		// Requires a job to match every requested tag, not just one.
 		conditions = append(conditions, fmt.Sprintf(
 			`j.id IN (SELECT jt.job_id FROM job_tags jt JOIN tags t ON t.id = jt.tag_id
 				WHERE t.tag IN (%s) GROUP BY jt.job_id HAVING COUNT(DISTINCT t.tag) = %d)`,
@@ -202,18 +227,24 @@ func sanitizeFTSQuery(query string) string {
 	return strings.Join(quoted, " ")
 }
 
-func scanJobRow(rows *sql.Rows) (jobs.Job, int64, error) {
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 	var job jobs.Job
 	var jobID int64
 	var salaryMin, salaryMax sql.NullInt64
 	var postedAtRaw any
 
-	err := rows.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
+	err := row.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
 		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description)
 
 	if err != nil {
 		return jobs.Job{}, 0, err
 	}
+
+	job.ID = jobID
 
 	if salaryMin.Valid {
 		min := int(salaryMin.Int64)

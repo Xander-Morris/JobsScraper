@@ -99,7 +99,6 @@ func (raw RemotiveJob) toJob() Job {
 		Description:   utils.StripHTML(raw.Description),
 	}
 
-	// I have to parse the salary strings manually since their API does not provide integer fields for it.
 	var chars []rune
 
 	for _, char := range raw.Salary {

@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// assertJobEqual compares the fields toJob() populates. Tags treats nil and
-// empty slices as equal since converters aren't consistent about which they
-// return, and callers don't care about the difference.
 func assertJobEqual(t *testing.T, got, want Job) {
 	t.Helper()
 
