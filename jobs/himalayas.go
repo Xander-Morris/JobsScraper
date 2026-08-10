@@ -101,7 +101,7 @@ func (raw himalayasJob) toJob() Job {
 		Company:       raw.CompanyName,
 		Location:      location,
 		WorkplaceType: Remote,
-		Tags:          raw.Categories,
+		Tags:          utils.CleanTags(raw.Categories),
 		URL:           url,
 		Description:   utils.StripHTML(raw.Description),
 	}

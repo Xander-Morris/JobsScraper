@@ -94,7 +94,7 @@ func (raw RemotiveJob) toJob() Job {
 		Company:       raw.CompanyName,
 		Location:      raw.CandidateRequiredLocation,
 		WorkplaceType: Remote,
-		Tags:          tags,
+		Tags:          utils.CleanTags(tags),
 		URL:           raw.URL,
 		Description:   utils.StripHTML(raw.Description),
 	}

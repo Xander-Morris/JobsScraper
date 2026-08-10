@@ -125,7 +125,7 @@ func (raw weWorkRemotelyItem) toJob() Job {
 		Company:       company,
 		Location:      location,
 		WorkplaceType: Remote,
-		Tags:          tags,
+		Tags:          utils.CleanTags(tags),
 		URL:           raw.Link,
 		Description:   utils.StripHTML(raw.Description),
 	}

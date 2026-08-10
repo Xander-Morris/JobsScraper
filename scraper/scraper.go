@@ -63,6 +63,7 @@ func runScraper(sources []jobs.JobSource) {
 
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
 	fmt.Printf("Found %d matching jobs:\n", results.Total)

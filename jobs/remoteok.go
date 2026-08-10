@@ -84,7 +84,7 @@ func (raw remoteOKJob) toJob() Job {
 		Company:       raw.Company,
 		Location:      raw.Location,
 		WorkplaceType: Remote,
-		Tags:          raw.Tags,
+		Tags:          utils.CleanTags(raw.Tags),
 		URL:           raw.URL,
 		Description:   utils.StripHTML(raw.Description),
 	}

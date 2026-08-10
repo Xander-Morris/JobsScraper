@@ -272,6 +272,38 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 	return job, jobID, nil
 }
 
+func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
+	db, err := getDb()
+	var res []string 
+
+	if err != nil {
+		return res, err
+	}
+
+	query := "SELECT DISTINCT tag FROM tags"
+	rows, err := db.QueryContext(ctx, query)
+
+	if err != nil {
+		return nil, err	
+	}
+
+	for rows.Next() {
+		var tag string
+		
+		if err := rows.Scan(&tag); err != nil {
+			return res, err
+		}
+
+		if rows.Err() != nil {
+			return res, err
+		}
+
+		res = append(res, tag)
+	}
+
+	return res, nil 
+}
+
 func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int64][]string, error) {
 	if len(jobIDs) == 0 {
 		return make(map[int64][]string), nil

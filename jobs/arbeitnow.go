@@ -98,7 +98,7 @@ func (raw arbeitnowJob) toJob() Job {
 		Company:       raw.CompanyName,
 		Location:      raw.Location,
 		WorkplaceType: workplaceType,
-		Tags:          tags,
+		Tags:          utils.CleanTags(tags),
 		URL:           raw.URL,
 		Description:   utils.StripHTML(raw.Description),
 	}

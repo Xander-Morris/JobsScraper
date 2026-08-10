@@ -93,7 +93,7 @@ func (raw jobicyJob) toJob() Job {
 		Company:       raw.CompanyName,
 		Location:      raw.JobGeo,
 		WorkplaceType: Remote,
-		Tags:          tags,
+		Tags:          utils.CleanTags(tags),
 		URL:           raw.URL,
 		Description:   utils.StripHTML(raw.JobDescription),
 	}

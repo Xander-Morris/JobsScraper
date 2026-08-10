@@ -55,13 +55,17 @@ func prepareInsertStatements(tx *sql.Tx) (map[string]*sql.Stmt, error) {
 	return tableNameToInsertStmt, nil
 }
 
-func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt) error {
+func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt, deleteJobTagsStmt *sql.Stmt) error {
 	for _, job := range jobs {
 		var jobID int64
 
 		postedAt := job.PostedAt.UTC().Format(time.RFC3339)
 
 		if err := tableNameToInsertStmt["jobs"].QueryRow(job.Title, job.Company, job.Location, job.WorkplaceType, job.SalaryMin, job.SalaryMax, postedAt, job.URL, job.Description).Scan(&jobID); err != nil {
+			return err
+		}
+
+		if _, err := deleteJobTagsStmt.Exec(jobID); err != nil {
 			return err
 		}
 
@@ -122,7 +126,15 @@ func WriteToDatabase(jobs []jobs.Job) error {
 		defer stmt.Close()
 	}
 
-	if err := writeJobs(jobs, tableNameToInsertStmt); err != nil {
+	deleteJobTagsStmt, err := tx.Prepare("DELETE FROM job_tags WHERE job_id = ?")
+
+	if err != nil {
+		return fmt.Errorf("prepare delete job_tags: %w", err)
+	}
+
+	defer deleteJobTagsStmt.Close()
+
+	if err := writeJobs(jobs, tableNameToInsertStmt, deleteJobTagsStmt); err != nil {
 		return fmt.Errorf("failed to write jobs: %w", err)
 	}
 

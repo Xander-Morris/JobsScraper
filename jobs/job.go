@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -29,15 +30,33 @@ func ParseWorkplaceType(s string) (WorkplaceType, bool) {
 	}
 }
 
+func (w WorkplaceType) String() string {
+	switch w {
+	case Remote:
+		return "remote"
+	case Hybrid:
+		return "hybrid"
+	case InPerson:
+		return "in_person"
+	default:
+		return "unknown"
+	}
+}
+
+func (w WorkplaceType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(w.String())
+}
+
 type Job struct {
-	ID                   int64
-	Title                string
-	Company              string
-	Location             string
-	WorkplaceType        WorkplaceType
-	Tags                 []string
-	SalaryMin, SalaryMax *int
-	PostedAt             time.Time
-	URL                  string
-	Description          string
+	ID            int64         `json:"id"`
+	Title         string        `json:"title"`
+	Company       string        `json:"company"`
+	Location      string        `json:"location"`
+	WorkplaceType WorkplaceType `json:"workplace_type"`
+	Tags          []string      `json:"tags"`
+	SalaryMin     *int          `json:"salary_min"`
+	SalaryMax     *int          `json:"salary_max"`
+	PostedAt      time.Time     `json:"posted_at"`
+	URL           string        `json:"url"`
+	Description   string        `json:"description"`
 }
