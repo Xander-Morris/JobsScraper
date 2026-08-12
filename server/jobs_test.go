@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,11 +16,18 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	for _, f := range []string{"jobs.db", "jobs.db-shm", "jobs.db-wal"} {
-		os.Remove(f)
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		panic(err)
 	}
+	db.SetMaxOpenConns(1)
 
-	os.Exit(m.Run())
+	database.SetDB(db)
+
+	code := m.Run()
+
+	db.Close()
+	os.Exit(code)
 }
 
 func TestParseJobSearchParams(t *testing.T) {

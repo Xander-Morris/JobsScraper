@@ -38,7 +38,7 @@ type SearchResult struct {
 }
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	db, err := getDb()
+	db, err := GetDb() 
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -104,7 +104,7 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 }
 
 func GetJobByID(ctx context.Context, id int64) (*jobs.Job, error) {
-	db, err := getDb()
+	db, err := GetDb()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -273,7 +273,7 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 }
 
 func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
-	db, err := getDb()
+	db, err := GetDb()
 	var res []string 
 
 	if err != nil {

@@ -9,13 +9,16 @@ import (
 	"syscall"
 	"time"
 
+	"main/database"
 	"main/scraper"
 	"main/server"
 )
 
 func main() {
+	defer database.CloseDb()
+
 	go scraper.StartScrapingJob()
-	
+
 	srv := server.New(serverAddr())
 
 	go func() {

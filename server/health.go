@@ -7,7 +7,14 @@ import (
 )
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	if err := database.Ping(r.Context()); err != nil {
+	db, err := database.GetDb()
+
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+		return
+	}
+
+	if err := db.Ping(); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 		return
 	}

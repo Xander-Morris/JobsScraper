@@ -47,6 +47,18 @@ func (w WorkplaceType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(w.String())
 }
 
+func (w *WorkplaceType) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	parsed, _ := ParseWorkplaceType(s)
+	*w = parsed
+
+	return nil
+}
+
 type Job struct {
 	ID            int64         `json:"id"`
 	Title         string        `json:"title"`

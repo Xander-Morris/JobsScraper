@@ -29,9 +29,9 @@ func createTables(db *sql.DB) error {
 			return fmt.Errorf("create table %s: %w", tableName, err)
 		}
 
-		for indexName, indexCmd := range tableInfo.Indexes {
+		for _, indexCmd := range tableInfo.Indexes {
 			if _, err := db.Exec(indexCmd); err != nil {
-				return fmt.Errorf("create index %s: %w", indexName, err)
+				return fmt.Errorf("create index %s: %w", indexCmd, err)
 			}
 		}
 	}
@@ -77,7 +77,7 @@ func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt, dele
 			}
 
 			if _, err := tableNameToInsertStmt["job_tags"].Exec(jobID, tagID); err != nil {
-				return err 
+				return err
 			}
 		}
 	}
@@ -86,7 +86,7 @@ func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt, dele
 }
 
 func WriteToDatabase(jobs []jobs.Job) error {
-	db, err := getDb()
+	db, err := GetDb()
 
 	if err != nil {
 		return err

@@ -9,7 +9,7 @@ type Schema map[string]TableDefinition
 
 type TableDefinition struct {
 	Columns         []map[string]string
-	Indexes         map[string]string
+	Indexes         []string
 	InsertStatement string
 }
 
@@ -27,8 +27,11 @@ var tables = Schema{
 			{"url": "TEXT NOT NULL"},
 			{"description": "TEXT"},
 		},
-		Indexes: map[string]string{
-			"idx_job_url": "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_url ON jobs(url);",
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_url ON jobs(url);",
+			"CREATE INDEX IF NOT EXISTS idx_workplace_type ON jobs(workplace_type)",
+			"CREATE INDEX IF NOT EXISTS idx_salary_min ON jobs(salary_min)",
+			"CREATE INDEX IF NOT EXISTS idx_salary_max ON jobs(salary_max)",
 		},
 		InsertStatement: `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -48,8 +51,8 @@ var tables = Schema{
 			{"id": "INTEGER PRIMARY KEY AUTOINCREMENT"},
 			{"tag": "TEXT NOT NULL"},
 		},
-		Indexes: map[string]string{
-			"idx_tag": "CREATE UNIQUE INDEX IF NOT EXISTS idx_tag ON tags(tag);",
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_tag ON tags(tag);",
 		},
 		InsertStatement: `INSERT INTO tags (tag) VALUES (?) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
 	},
@@ -58,8 +61,8 @@ var tables = Schema{
 			{"job_id": "INTEGER REFERENCES jobs(id)"},
 			{"tag_id": "INTEGER REFERENCES tags(id)"},
 		},
-		Indexes: map[string]string{
-			"idx_job_tag_pair": "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_tag_pair ON job_tags(job_id, tag_id);",
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_tag_pair ON job_tags(job_id, tag_id);",
 		},
 		InsertStatement: `INSERT OR IGNORE INTO job_tags (job_id, tag_id) VALUES (?, ?);`,
 	},

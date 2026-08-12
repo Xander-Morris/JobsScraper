@@ -93,7 +93,7 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 	if raw := query.Get("min_salary"); raw != "" {
 		minSalary, err := strconv.Atoi(raw)
 
-		if err != nil {
+		if err != nil || minSalary < 0 {
 			return nil, fmt.Errorf("invalid min_salary %q", raw)
 		}
 
@@ -103,7 +103,7 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 	if raw := query.Get("max_salary"); raw != "" {
 		maxSalary, err := strconv.Atoi(raw)
 
-		if err != nil {
+		if err != nil || maxSalary < params.MinSalary {
 			return nil, fmt.Errorf("invalid max_salary %q", raw)
 		}
 
