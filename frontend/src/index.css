@@ -1,5 +1,18 @@
 @import 'tailwindcss';
 
+@theme {
+  --color-heading: var(--text-h);
+  --color-muted: var(--text);
+  --color-surface: var(--bg);
+  --color-border: var(--border);
+  --color-code-bg: var(--code-bg);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-border: var(--accent-border);
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
