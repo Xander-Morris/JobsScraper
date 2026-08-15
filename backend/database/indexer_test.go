@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"main/jobs"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -13,20 +14,31 @@ import (
 func newTestDB(t *testing.T) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", ":memory:")
+	connString := os.Getenv("TEST_DATABASE_CONNECTION")
 
-	if err != nil {
-		t.Fatalf("open in-memory db: %v", err)
+	if connString == "" {
+		t.Skip("TEST_DATABASE_CONNECTION not set; skipping tests that require a live Postgres database")
 	}
 
-	db.SetMaxOpenConns(1)
+	db, err := sql.Open("pgx", connString)
 
-	prev := cachedDb
-	cachedDb = db
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		t.Fatalf("ping test db: %v", err)
+	}
+
+	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags CASCADE;"); err != nil {
+		t.Fatalf("reset test db: %v", err)
+	}
+
+	prev := SetDB(db)
 
 	t.Cleanup(func() {
 		db.Close()
-		cachedDb = prev
+		SetDB(prev)
 	})
 }
 

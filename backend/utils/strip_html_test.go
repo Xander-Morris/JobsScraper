@@ -38,6 +38,11 @@ func TestStripHTML(t *testing.T) {
 			input: "Test things",
 			want:  "Test things",
 		},
+		{
+			name:  "unclosed paragraph before the next one still separates blocks",
+			input: "<p>$77,000 - $90,000<p>Originally posted on <a href=\"https://himalayas.app\">Himalayas</a></p>",
+			want:  "$77,000 - $90,000\n\nOriginally posted on Himalayas",
+		},
 	}
 
 	for _, tt := range tests {

@@ -25,3 +25,6 @@ src/routeTree.gen.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Environment Variables
+.env 

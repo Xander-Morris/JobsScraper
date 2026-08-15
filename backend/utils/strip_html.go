@@ -14,6 +14,7 @@ var (
 
 	lineBreakTag   = regexp.MustCompile(`(?i)<br\s*/?>`)
 	listItemOpen   = regexp.MustCompile(`(?i)<li[^>]*>`)
+	blockOpen      = regexp.MustCompile(`(?i)<(p|div|h[1-6]|tr)(\s[^>]*)?>`)
 	blockClose     = regexp.MustCompile(`(?i)</(p|div|h[1-6]|tr|li|ul|ol)>`)
 	excessNewlines = regexp.MustCompile(`\n{3,}`)
 )
@@ -30,21 +31,16 @@ func decodeUnicodeEscapes(input string) string {
 	})
 }
 
-// StripHTML converts scraped HTML into plain text. Block-level boundaries
-// (paragraphs, line breaks, list items) are turned into newlines before the
-// tags are stripped, so the original layout survives instead of collapsing
-// every element onto one line.
 func StripHTML(input string) string {
 	decoded := html.UnescapeString(decodeUnicodeEscapes(input))
 
 	withBreaks := lineBreakTag.ReplaceAllString(decoded, "\n")
 	withBreaks = listItemOpen.ReplaceAllString(withBreaks, "\n• ")
+	withBreaks = blockOpen.ReplaceAllString(withBreaks, "\n\n")
 	withBreaks = blockClose.ReplaceAllString(withBreaks, "\n\n")
 
 	stripped := bluemonday.StrictPolicy().Sanitize(withBreaks)
 
-	// bluemonday re-escapes entities so its output stays safe to embed as
-	// HTML; undo that since callers store/display this as plain text.
 	plain := html.UnescapeString(stripped)
 
 	return normalizeWhitespace(plain)

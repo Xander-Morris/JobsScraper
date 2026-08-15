@@ -1,10 +1,5 @@
 package database
 
-import (
-	"database/sql"
-	"fmt"
-)
-
 type Schema map[string]TableDefinition
 
 type TableDefinition struct {
@@ -16,7 +11,7 @@ type TableDefinition struct {
 var tables = Schema{
 	"jobs": TableDefinition{
 		Columns: []map[string]string{
-			{"id": "INTEGER PRIMARY KEY AUTOINCREMENT"},
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
 			{"title": "TEXT NOT NULL"},
 			{"company": "TEXT NOT NULL"},
 			{"location": "TEXT"},
@@ -26,15 +21,17 @@ var tables = Schema{
 			{"posted_at": "TEXT"},
 			{"url": "TEXT NOT NULL"},
 			{"description": "TEXT"},
+			{"search_vector": "tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))) STORED"},
 		},
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_url ON jobs(url);",
 			"CREATE INDEX IF NOT EXISTS idx_workplace_type ON jobs(workplace_type)",
 			"CREATE INDEX IF NOT EXISTS idx_salary_min ON jobs(salary_min)",
 			"CREATE INDEX IF NOT EXISTS idx_salary_max ON jobs(salary_max)",
+			"CREATE INDEX IF NOT EXISTS idx_jobs_search_vector ON jobs USING GIN(search_vector);",
 		},
 		InsertStatement: `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT(url) DO UPDATE SET
 				title = excluded.title,
 				company = excluded.company,
@@ -48,13 +45,13 @@ var tables = Schema{
 	},
 	"tags": TableDefinition{
 		Columns: []map[string]string{
-			{"id": "INTEGER PRIMARY KEY AUTOINCREMENT"},
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
 			{"tag": "TEXT NOT NULL"},
 		},
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_tag ON tags(tag);",
 		},
-		InsertStatement: `INSERT INTO tags (tag) VALUES (?) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
+		InsertStatement: `INSERT INTO tags (tag) VALUES ($1) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
 	},
 	"job_tags": TableDefinition{
 		Columns: []map[string]string{
@@ -64,45 +61,6 @@ var tables = Schema{
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_tag_pair ON job_tags(job_id, tag_id);",
 		},
-		InsertStatement: `INSERT OR IGNORE INTO job_tags (job_id, tag_id) VALUES (?, ?);`,
+		InsertStatement: `INSERT INTO job_tags (job_id, tag_id) VALUES ($1, $2) ON CONFLICT (job_id, tag_id) DO NOTHING;`,
 	},
-}
-
-const jobsFTSTable = `CREATE VIRTUAL TABLE IF NOT EXISTS jobs_fts USING fts5(
-	title, description, content='jobs', content_rowid='id'
-);`
-
-var jobsFTSTriggers = []string{
-	`CREATE TRIGGER IF NOT EXISTS jobs_fts_ai AFTER INSERT ON jobs BEGIN
-		INSERT INTO jobs_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
-	END;`,
-	`CREATE TRIGGER IF NOT EXISTS jobs_fts_ad AFTER DELETE ON jobs BEGIN
-		INSERT INTO jobs_fts(jobs_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
-	END;`,
-	`CREATE TRIGGER IF NOT EXISTS jobs_fts_au AFTER UPDATE ON jobs BEGIN
-		INSERT INTO jobs_fts(jobs_fts, rowid, title, description) VALUES ('delete', old.id, old.title, old.description);
-		INSERT INTO jobs_fts(rowid, title, description) VALUES (new.id, new.title, new.description);
-	END;`,
-}
-
-const backfillJobsFTS = `INSERT INTO jobs_fts(rowid, title, description)
-	SELECT id, title, description FROM jobs
-	WHERE id NOT IN (SELECT rowid FROM jobs_fts);`
-
-func createFullTextSearch(db *sql.DB) error {
-	if _, err := db.Exec(jobsFTSTable); err != nil {
-		return fmt.Errorf("create jobs_fts table: %w", err)
-	}
-
-	for _, trigger := range jobsFTSTriggers {
-		if _, err := db.Exec(trigger); err != nil {
-			return fmt.Errorf("create fts sync trigger: %w", err)
-		}
-	}
-
-	if _, err := db.Exec(backfillJobsFTS); err != nil {
-		return fmt.Errorf("backfill jobs_fts: %w", err)
-	}
-
-	return nil
 }

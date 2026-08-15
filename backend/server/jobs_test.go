@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,11 +17,25 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	db, err := sql.Open("sqlite", ":memory:")
+	connString := os.Getenv("TEST_DATABASE_CONNECTION")
+
+	if connString == "" {
+		fmt.Println("TEST_DATABASE_CONNECTION not set; skipping tests that require a live Postgres database")
+		os.Exit(0)
+	}
+
+	db, err := sql.Open("pgx", connString)
 	if err != nil {
 		panic(err)
 	}
-	db.SetMaxOpenConns(1)
+
+	if err := db.Ping(); err != nil {
+		panic(err)
+	}
+
+	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags CASCADE;"); err != nil {
+		panic(err)
+	}
 
 	database.SetDB(db)
 

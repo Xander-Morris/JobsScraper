@@ -45,7 +45,6 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	}
 
 	from, whereArgs := buildJobSearchFromWhere(params)
-
 	total, err := countJobSearchResults(ctx, db, from, whereArgs)
 
 	if err != nil {
@@ -112,7 +111,7 @@ func GetJobByID(ctx context.Context, id int64) (*jobs.Job, error) {
 
 	const query = `SELECT j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
 		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, '')
-		FROM jobs j WHERE j.id = ?`
+		FROM jobs j WHERE j.id = $1`
 
 	job, jobID, err := scanJobRow(db.QueryRowContext(ctx, query, id))
 
@@ -141,39 +140,36 @@ func countJobSearchResults(ctx context.Context, db *sql.DB, from string, args []
 }
 
 func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
-	var from string
+	from := "FROM jobs j"
 	var conditions []string
 	var args []any
 
 	if params.SearchQuery != "" {
-		from = "FROM jobs_fts JOIN jobs j ON j.id = jobs_fts.rowid"
-		conditions = append(conditions, "jobs_fts MATCH ?")
-		args = append(args, sanitizeFTSQuery(params.SearchQuery))
-	} else {
-		from = "FROM jobs j"
+		args = append(args, params.SearchQuery)
+		conditions = append(conditions, fmt.Sprintf("j.search_vector @@ plainto_tsquery('english', $%d)", len(args)))
 	}
 
 	if params.WorkplaceType != jobs.Unknown {
-		conditions = append(conditions, "j.workplace_type = ?")
 		args = append(args, params.WorkplaceType)
+		conditions = append(conditions, fmt.Sprintf("j.workplace_type = $%d", len(args)))
 	}
 
 	if params.MinSalary > 0 {
-		conditions = append(conditions, "j.salary_max >= ?")
 		args = append(args, params.MinSalary)
+		conditions = append(conditions, fmt.Sprintf("j.salary_max >= $%d", len(args)))
 	}
 
 	if params.MaxSalary > 0 {
-		conditions = append(conditions, "j.salary_min <= ?")
 		args = append(args, params.MaxSalary)
+		conditions = append(conditions, fmt.Sprintf("j.salary_min <= $%d", len(args)))
 	}
 
 	if len(params.Tags) > 0 {
 		placeholders := make([]string, len(params.Tags))
 
 		for i, tag := range params.Tags {
-			placeholders[i] = "?"
 			args = append(args, tag)
+			placeholders[i] = fmt.Sprintf("$%d", len(args))
 		}
 
 		conditions = append(conditions, fmt.Sprintf(
@@ -196,8 +192,12 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 
 	query := fmt.Sprintf("SELECT %s %s", jobColumns, from)
 
+	args := make([]any, len(whereArgs), len(whereArgs)+3)
+	copy(args, whereArgs)
+
 	if params.SearchQuery != "" && params.Sort != SortDate {
-		query += " ORDER BY rank"
+		args = append(args, params.SearchQuery)
+		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, plainto_tsquery('english', $%d)) DESC", len(args))
 	} else {
 		query += " ORDER BY j.posted_at DESC"
 	}
@@ -207,24 +207,10 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 		limit = DefaultSearchLimit
 	}
 
-	query += " LIMIT ? OFFSET ?"
-
-	args := make([]any, len(whereArgs), len(whereArgs)+2)
-	copy(args, whereArgs)
 	args = append(args, limit, max(params.Offset, 0))
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)-1, len(args))
 
 	return query, args
-}
-
-func sanitizeFTSQuery(query string) string {
-	fields := strings.Fields(query)
-	quoted := make([]string, len(fields))
-
-	for i, field := range fields {
-		quoted[i] = `"` + strings.ReplaceAll(field, `"`, `""`) + `"`
-	}
-
-	return strings.Join(quoted, " ")
 }
 
 type rowScanner interface {
@@ -309,17 +295,17 @@ func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int6
 		return make(map[int64][]string), nil
 	}
 
-	placeholders := strings.Repeat("?,", len(jobIDs))
-	placeholders = placeholders[:len(placeholders)-1] 
+	placeholders := make([]string, len(jobIDs))
 	args := make([]any, len(jobIDs))
 
 	for i, v := range jobIDs {
 		args[i] = v
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 
 	query := fmt.Sprintf(
 		"SELECT jt.job_id, t.tag FROM tags t JOIN job_tags jt ON jt.tag_id = t.id WHERE jt.job_id IN (%s)",
-		placeholders,
+		strings.Join(placeholders, ","),
 	)
 	rows, err := db.QueryContext(ctx, query, args...)
 

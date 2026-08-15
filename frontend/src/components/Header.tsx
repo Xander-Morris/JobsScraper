@@ -14,6 +14,13 @@ export function Header() {
         >
           Jobs
         </Link>
+        <Link
+          to="/profile"
+          activeOptions={{ exact: true }}
+          className="text-muted no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
+        >
+          Profile
+        </Link>
       </nav>
     </header>
   )

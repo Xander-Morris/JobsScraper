@@ -3,15 +3,10 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"main/jobs"
 	"strings"
 	"time"
-
-	_ "github.com/glebarez/go-sqlite"
 )
-
-const databaseFileName = "jobs.db"
 
 func createTables(db *sql.DB) error {
 	for tableName, tableInfo := range tables {
@@ -92,19 +87,7 @@ func WriteToDatabase(jobs []jobs.Job) error {
 		return err
 	}
 
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("Failed to set journal_mode: %v", err)
-	}
-
-	if _, err := db.Exec("PRAGMA synchronous=NORMAL;"); err != nil {
-		log.Printf("Failed to set synchronous: %v", err)
-	}
-
 	if err := createTables(db); err != nil {
-		return err
-	}
-
-	if err := createFullTextSearch(db); err != nil {
 		return err
 	}
 
@@ -126,7 +109,7 @@ func WriteToDatabase(jobs []jobs.Job) error {
 		defer stmt.Close()
 	}
 
-	deleteJobTagsStmt, err := tx.Prepare("DELETE FROM job_tags WHERE job_id = ?")
+	deleteJobTagsStmt, err := tx.Prepare("DELETE FROM job_tags WHERE job_id = $1")
 
 	if err != nil {
 		return fmt.Errorf("prepare delete job_tags: %w", err)

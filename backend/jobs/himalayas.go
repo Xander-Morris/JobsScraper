@@ -5,11 +5,33 @@ import (
 	"fmt"
 	"main/utils"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const himalayasEndpoint = "https://himalayas.app/jobs/api"
+var himalayasCompanySlug = regexp.MustCompile(`himalayas\.app/companies/([^/]+)/`)
+
+func companyNameFromURL(url string) string {
+	match := himalayasCompanySlug.FindStringSubmatch(url)
+
+	if match == nil {
+		return ""
+	}
+
+	words := strings.Split(match[1], "-")
+
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+
+	return strings.Join(words, " ")
+}
 
 var _ JobSource = (*Himalayas)(nil)
 
@@ -96,9 +118,17 @@ func (raw himalayasJob) toJob() Job {
 		url = raw.Guid
 	}
 
+	companyName := raw.CompanyName
+
+	if companyName == "" || strings.EqualFold(companyName, "name") {
+		if fallback := companyNameFromURL(url); fallback != "" {
+			companyName = fallback
+		}
+	}
+
 	job := Job{
 		Title:         raw.Title,
-		Company:       raw.CompanyName,
+		Company:       companyName,
 		Location:      location,
 		WorkplaceType: Remote,
 		Tags:          utils.CleanTags(raw.Categories),

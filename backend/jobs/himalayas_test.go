@@ -55,6 +55,60 @@ func TestHimalayasJobToJob(t *testing.T) {
 				Description:   "Worldwide role",
 			},
 		},
+		{
+			name: "placeholder companyName falls back to company slug from url",
+			raw: himalayasJob{
+				Title:           "Senior UX Designer",
+				Guid:            "https://himalayas.app/companies/blp-digital-ag/jobs/senior-ux-designer",
+				CompanyName:     "name",
+				Description:     "Design remote products",
+				ApplicationLink: "https://himalayas.app/companies/blp-digital-ag/jobs/senior-ux-designer",
+			},
+			want: Job{
+				Title:         "Senior UX Designer",
+				Company:       "Blp Digital Ag",
+				Location:      "Worldwide",
+				WorkplaceType: Remote,
+				URL:           "https://himalayas.app/companies/blp-digital-ag/jobs/senior-ux-designer",
+				Description:   "Design remote products",
+			},
+		},
+		{
+			name: "empty companyName falls back to company slug from url",
+			raw: himalayasJob{
+				Title:           "Underwriter",
+				Guid:            "https://himalayas.app/companies/hire-hangar/jobs/underwriter",
+				CompanyName:     "",
+				Description:     "Review policies",
+				ApplicationLink: "https://himalayas.app/companies/hire-hangar/jobs/underwriter",
+			},
+			want: Job{
+				Title:         "Underwriter",
+				Company:       "Hire Hangar",
+				Location:      "Worldwide",
+				WorkplaceType: Remote,
+				URL:           "https://himalayas.app/companies/hire-hangar/jobs/underwriter",
+				Description:   "Review policies",
+			},
+		},
+		{
+			name: "placeholder companyName with no company slug in url is left as-is",
+			raw: himalayasJob{
+				Title:           "Mystery Role",
+				Guid:            "https://himalayas.app/jobs/789",
+				CompanyName:     "name",
+				Description:     "Unknown employer",
+				ApplicationLink: "https://himalayas.app/jobs/789",
+			},
+			want: Job{
+				Title:         "Mystery Role",
+				Company:       "name",
+				Location:      "Worldwide",
+				WorkplaceType: Remote,
+				URL:           "https://himalayas.app/jobs/789",
+				Description:   "Unknown employer",
+			},
+		},
 	}
 
 	for _, tt := range tests {
