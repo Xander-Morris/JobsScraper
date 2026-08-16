@@ -7,6 +7,7 @@ export const Route = createFileRoute('/profile/')({
 function RouteComponent() {
   return (
     <>
+      
     </>
   );
 }

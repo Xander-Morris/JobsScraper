@@ -63,4 +63,34 @@ var tables = Schema{
 		},
 		InsertStatement: `INSERT INTO job_tags (job_id, tag_id) VALUES ($1, $2) ON CONFLICT (job_id, tag_id) DO NOTHING;`,
 	},
+	"profiles": TableDefinition{
+		Columns: []map[string]string {
+			// email and password required at first, but rest can be filled in as they want to
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
+			{"email": "TEXT NOT NULL"},
+			{"password": "TEXT NOT NULL"},
+
+			// to be filled in dynamically when they decide to on profile view 
+			{"name": "TEXT"},
+			{"address": "TEXT"},
+			{"linked_in": "TEXT"},
+			{"github": "TEXT"},
+			{"portfolio": "TEXT"},
+		},
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_email ON profiles(email);",
+		},
+		InsertStatement: `INSERT INTO profiles (email, password)`,
+	},
+	"profiles_education": TableDefinition{
+		Columns: []map[string]string {
+			{"profile_id": "INTEGER REFERENCES profiles(id)"},
+			{"school_name": "TEXT NOT NULL"},
+			{"major": "TEXT NOT NULL"},
+			{"degree": "TEXT NOT NULL"},
+			{"gpa": "DECIMAL(3,2)"},
+			{"start_date": "DATE"},
+			{"end_date": "DATE"},
+		},
+	},
 }
