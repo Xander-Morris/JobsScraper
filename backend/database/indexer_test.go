@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"main/jobs"
-	"os"
+	"main/utils"
 	"slices"
 	"testing"
 	"time"
@@ -14,7 +14,7 @@ import (
 func newTestDB(t *testing.T) {
 	t.Helper()
 
-	connString := os.Getenv("TEST_DATABASE_CONNECTION")
+	connString := utils.GetEnv()["TEST_DATABASE_CONNECTION"]
 
 	if connString == "" {
 		t.Skip("TEST_DATABASE_CONNECTION not set; skipping tests that require a live Postgres database")
@@ -33,6 +33,7 @@ func newTestDB(t *testing.T) {
 	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)
 	}
+	createdTables = false
 
 	prev := SetDB(db)
 
@@ -61,12 +62,12 @@ func TestGetJobByID(t *testing.T) {
 		Description:   "Build things",
 	}
 
-	if err := WriteToDatabase([]jobs.Job{seed}); err != nil {
+	if err := WriteJobsToDatabase([]jobs.Job{seed}); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
 	var id int64
-	if err := cachedDb.QueryRow("SELECT id FROM jobs WHERE url = ?", seed.URL).Scan(&id); err != nil {
+	if err := cachedDb.QueryRow("SELECT id FROM jobs WHERE url = $1", seed.URL).Scan(&id); err != nil {
 		t.Fatalf("lookup seeded id: %v", err)
 	}
 
@@ -112,7 +113,7 @@ func TestGetJobByID(t *testing.T) {
 func TestGetJobByIDNotFound(t *testing.T) {
 	newTestDB(t)
 
-	if err := WriteToDatabase(nil); err != nil {
+	if err := WriteJobsToDatabase(nil); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
 

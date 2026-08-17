@@ -8,7 +8,19 @@ import (
 	"time"
 )
 
-func createTables(db *sql.DB) error {
+var createdTables bool 
+
+func CreateTables() error {
+	if createdTables {
+		return nil 
+	}
+
+	db, err := GetDb()
+
+	if err != nil {
+		return err 
+	}
+
 	for tableName, tableInfo := range tables {
 		var colDefs []string
 
@@ -30,6 +42,8 @@ func createTables(db *sql.DB) error {
 			}
 		}
 	}
+
+	createdTables = true 
 
 	return nil
 }
@@ -80,14 +94,14 @@ func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt, dele
 	return nil
 }
 
-func WriteToDatabase(jobs []jobs.Job) error {
+func WriteJobsToDatabase(jobs []jobs.Job) error {
 	db, err := GetDb()
 
 	if err != nil {
 		return err
 	}
 
-	if err := createTables(db); err != nil {
+	if err := CreateTables(); err != nil {
 		return err
 	}
 

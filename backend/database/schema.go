@@ -80,7 +80,7 @@ var tables = Schema{
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_email ON profiles(email);",
 		},
-		InsertStatement: `INSERT INTO profiles (email, password)`,
+		InsertStatement: `INSERT INTO profiles (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id;`,
 	},
 	"profiles_education": TableDefinition{
 		Columns: []map[string]string {
@@ -92,5 +92,19 @@ var tables = Schema{
 			{"start_date": "DATE"},
 			{"end_date": "DATE"},
 		},
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_education_unique ON profiles_education(profile_id, school_name, major, degree);",
+		},
+		InsertStatement: `INSERT INTO profiles_education (profile_id, school_name, major, degree) VALUES ($1, $2, $3, $4) ON CONFLICT (profile_id, school_name, major, degree) DO NOTHING;`,
+	},
+	"profiles_skills": TableDefinition{
+		Columns: []map[string]string {
+			{"profile_id": "INTEGER REFERENCES profiles(id)"},
+			{"skill": "TEXT NOT NULL"},
+		},
+		Indexes: []string{
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_skills_unique ON profiles_skills(profile_id, skill);",
+		},
+		InsertStatement: `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO NOTHING;`,
 	},
 }

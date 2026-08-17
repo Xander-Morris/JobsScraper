@@ -15,6 +15,12 @@ import (
 )
 
 func main() {
+	err := database.CreateTables()
+
+	if err != nil {
+		log.Fatalf("Could not create tables for database: %v", err)
+	}
+
 	defer database.CloseDb()
 
 	go scraper.StartScrapingJob()

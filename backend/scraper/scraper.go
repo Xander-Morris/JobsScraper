@@ -51,7 +51,7 @@ func runScraper(sources []jobs.JobSource) {
 		fetchedJobs = append(fetchedJobs, filtered...)
 	}
 
-	if err := database.WriteToDatabase(fetchedJobs); err != nil {
+	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
 		fmt.Println(err)
 	}
 }

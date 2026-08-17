@@ -2,6 +2,7 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -14,12 +15,37 @@ type EnvPair struct {
 
 var allEnvVariables map[string]string
 
+func findEnvFile() string {
+	dir, err := os.Getwd()
+
+	if err != nil {
+		return ""
+	}
+
+	for {
+		candidate := filepath.Join(dir, ".env")
+		
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+
+		dir = parent
+	}
+}
+
 func GetEnv() map[string]string {
 	if allEnvVariables != nil {
 		return allEnvVariables
 	}
 
-	_ = godotenv.Load()
+	if path := findEnvFile(); path != "" {
+		_ = godotenv.Load(path)
+	}
 	rawEnv := os.Environ()
 	envList := make(map[string]string)
 

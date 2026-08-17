@@ -166,7 +166,7 @@ func seedJob(t *testing.T, url string) int64 {
 		PostedAt: time.Now(),
 	}
 
-	if err := database.WriteToDatabase([]jobs.Job{job}); err != nil {
+	if err := database.WriteJobsToDatabase([]jobs.Job{job}); err != nil {
 		t.Fatalf("seed job: %v", err)
 	}
 
