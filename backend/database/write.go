@@ -18,10 +18,15 @@ func CreateTables() error {
 	db, err := GetDb()
 
 	if err != nil {
-		return err 
+		return err
 	}
 
-	for tableName, tableInfo := range tables {
+	if len(tableCreationOrder) != len(tables) {
+		return fmt.Errorf("tableCreationOrder (%d entries) is out of sync with tables (%d entries)", len(tableCreationOrder), len(tables))
+	}
+
+	for _, tableName := range tableCreationOrder {
+		tableInfo := tables[tableName]
 		var colDefs []string
 
 		for _, colMap := range tableInfo.Columns {
@@ -34,6 +39,16 @@ func CreateTables() error {
 
 		if _, err := db.Exec(query); err != nil {
 			return fmt.Errorf("create table %s: %w", tableName, err)
+		}
+
+		for _, colMap := range tableInfo.Columns {
+			for colName, colType := range colMap {
+				alterQuery := fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s;", tableName, colName, colType)
+
+				if _, err := db.Exec(alterQuery); err != nil {
+					return fmt.Errorf("add column %s.%s: %w", tableName, colName, err)
+				}
+			}
 		}
 
 		for _, indexCmd := range tableInfo.Indexes {

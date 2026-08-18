@@ -1,11 +1,68 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"main/utils"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
+
+type contextKey string
+
+const profileIDContextKey contextKey = "profileID"
+
+func withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokenString, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		if !ok || tokenString == "" {
+			writeError(w, http.StatusUnauthorized, "missing bearer token")
+			return
+		}
+
+		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+
+			return []byte(utils.GetEnv()["SECRET_KEY"]), nil
+		})
+
+		if err != nil || !token.Valid {
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "invalid token claims")
+			return
+		}
+
+		profileID, ok := claims["profileID"].(float64)
+
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "invalid token claims")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), profileIDContextKey, int64(profileID))
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func profileIDFromContext(ctx context.Context) (int64, bool) {
+	id, ok := ctx.Value(profileIDContextKey).(int64)
+
+	return id, ok
+}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -54,8 +111,8 @@ func withCORS(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

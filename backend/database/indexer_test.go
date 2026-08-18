@@ -30,7 +30,7 @@ func newTestDB(t *testing.T) {
 		t.Fatalf("ping test db: %v", err)
 	}
 
-	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags CASCADE;"); err != nil {
+	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags, profiles_education, profiles_skills, profiles CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)
 	}
 	createdTables = false

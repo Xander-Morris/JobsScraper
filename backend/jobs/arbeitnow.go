@@ -31,16 +31,39 @@ type arbeitnowResponse struct {
 }
 
 type arbeitnowJob struct {
-	Slug        string   `json:"slug"`
-	CompanyName string   `json:"company_name"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Remote      bool     `json:"remote"`
-	URL         string   `json:"url"`
-	Tags        []string `json:"tags"`
-	JobTypes    []string `json:"job_types"`
-	Location    string   `json:"location"`
-	CreatedAt   int64    `json:"created_at"`
+	Slug        string            `json:"slug"`
+	CompanyName string            `json:"company_name"`
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	Remote      bool              `json:"remote"`
+	URL         string            `json:"url"`
+	Tags        []string          `json:"tags"`
+	JobTypes    arbeitnowJobTypes `json:"job_types"`
+	Location    string            `json:"location"`
+	CreatedAt   int64             `json:"created_at"`
+}
+
+type arbeitnowJobTypes []string
+
+func (jt *arbeitnowJobTypes) UnmarshalJSON(data []byte) error {
+	var asSlice []string
+	if err := json.Unmarshal(data, &asSlice); err == nil {
+		*jt = asSlice
+		return nil
+	}
+
+	var asMap map[string]string
+	if err := json.Unmarshal(data, &asMap); err != nil {
+		return err
+	}
+
+	values := make([]string, 0, len(asMap))
+	for _, v := range asMap {
+		values = append(values, v)
+	}
+
+	*jt = values
+	return nil
 }
 
 func (a *Arbeitnow) FetchJobs() ([]Job, error) {

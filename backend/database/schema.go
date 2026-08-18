@@ -8,6 +8,19 @@ type TableDefinition struct {
 	InsertStatement string
 }
 
+// tableCreationOrder lists table names in dependency order (referenced tables
+// before the tables that REFERENCE them). Go randomizes map iteration order,
+// so CreateTables must not range over the tables map directly when creating
+// tables with foreign keys.
+var tableCreationOrder = []string{
+	"jobs",
+	"tags",
+	"job_tags",
+	"profiles",
+	"profiles_education",
+	"profiles_skills",
+}
+
 var tables = Schema{
 	"jobs": TableDefinition{
 		Columns: []map[string]string{
@@ -84,6 +97,7 @@ var tables = Schema{
 	},
 	"profiles_education": TableDefinition{
 		Columns: []map[string]string {
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
 			{"profile_id": "INTEGER REFERENCES profiles(id)"},
 			{"school_name": "TEXT NOT NULL"},
 			{"major": "TEXT NOT NULL"},
@@ -95,16 +109,23 @@ var tables = Schema{
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_education_unique ON profiles_education(profile_id, school_name, major, degree);",
 		},
-		InsertStatement: `INSERT INTO profiles_education (profile_id, school_name, major, degree) VALUES ($1, $2, $3, $4) ON CONFLICT (profile_id, school_name, major, degree) DO NOTHING;`,
+		InsertStatement: `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (profile_id, school_name, major, degree) DO UPDATE SET
+				gpa = excluded.gpa,
+				start_date = excluded.start_date,
+				end_date = excluded.end_date
+			RETURNING id;`,
 	},
 	"profiles_skills": TableDefinition{
 		Columns: []map[string]string {
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
 			{"profile_id": "INTEGER REFERENCES profiles(id)"},
 			{"skill": "TEXT NOT NULL"},
 		},
 		Indexes: []string{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_skills_unique ON profiles_skills(profile_id, skill);",
 		},
-		InsertStatement: `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO NOTHING;`,
+		InsertStatement: `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id;`,
 	},
 }
