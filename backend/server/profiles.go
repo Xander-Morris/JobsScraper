@@ -246,3 +246,130 @@ func handleDeleteSkill(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
+
+func handleAddWorkExperience(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	req := &database.AddWorkExperienceRequest{}
+
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	id, err := database.AddWorkExperience(r.Context(), profileID, req)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
+}
+
+func handleDeleteWorkExperience(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid work experience id")
+		return
+	}
+
+	if err := database.DeleteWorkExperience(r.Context(), profileID, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "work experience entry not found")
+			return
+		}
+
+		log.Printf("delete work experience: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete work experience entry")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	workExperienceID, err := strconv.ParseInt(r.PathValue("workExperienceId"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid work experience id")
+		return
+	}
+
+	req := &database.AddWorkExperienceBulletRequest{}
+
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	id, err := database.AddWorkExperienceBullet(r.Context(), profileID, workExperienceID, req)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "work experience entry not found")
+			return
+		}
+
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
+}
+
+func handleDeleteWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	workExperienceID, err := strconv.ParseInt(r.PathValue("workExperienceId"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid work experience id")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid bullet id")
+		return
+	}
+
+	if err := database.DeleteWorkExperienceBullet(r.Context(), profileID, workExperienceID, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "bullet not found")
+			return
+		}
+
+		log.Printf("delete work experience bullet: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete bullet")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}

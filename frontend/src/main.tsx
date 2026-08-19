@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import './index.css'
 import { routeTree } from './routeTree.gen'
+import { ProfileAuthProvider } from './stores/profile-store'
 
 const queryClient = new QueryClient()
 
@@ -19,7 +20,9 @@ declare module '@tanstack/react-router' {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ProfileAuthProvider>
+        <RouterProvider router={router} />
+      </ProfileAuthProvider>
       <ReactQueryDevtools />
     </QueryClientProvider>
   </StrictMode>,
