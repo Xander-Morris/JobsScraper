@@ -6,6 +6,9 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import './index.css'
 import { routeTree } from './routeTree.gen'
 import { ProfileAuthProvider } from './stores/profile-store'
+import { initTheme } from './lib/theme'
+
+initTheme()
 
 const queryClient = new QueryClient()
 

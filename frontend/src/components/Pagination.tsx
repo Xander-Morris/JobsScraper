@@ -1,3 +1,5 @@
+import { Button } from './ui/button'
+
 export function Pagination({
   page,
   total,
@@ -13,26 +15,16 @@ export function Pagination({
   if (pageCount <= 1) return null
 
   return (
-    <div className="mt-6 flex items-center justify-center gap-3 text-sm">
-      <button
-        type="button"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-        className="rounded border border-border px-3 py-1.5 text-heading disabled:opacity-40"
-      >
+    <nav aria-label="Pagination" className="mt-6 flex items-center justify-center gap-3 text-sm">
+      <Button type="button" variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
         Prev
-      </button>
-      <span className="text-muted">
+      </Button>
+      <span aria-live="polite" className="text-muted-foreground">
         Page {page} of {pageCount}
       </span>
-      <button
-        type="button"
-        disabled={page >= pageCount}
-        onClick={() => onPageChange(page + 1)}
-        className="rounded border border-border px-3 py-1.5 text-heading disabled:opacity-40"
-      >
+      <Button type="button" variant="outline" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>
         Next
-      </button>
-    </div>
+      </Button>
+    </nav>
   )
 }
