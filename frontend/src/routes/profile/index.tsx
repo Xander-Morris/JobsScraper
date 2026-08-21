@@ -15,7 +15,7 @@ import {
   useProfileQuery,
   useUpdateProfileMutation,
 } from '../../api/profile'
-import type { JobType, WorkExperience } from '../../api/schemas'
+import type { Education, JobType, WorkExperience } from '../../api/schemas'
 import { useAuth } from '../../stores/profile-store'
 import { badgeVariants } from '../../components/ui/badge'
 import { Button, buttonVariants } from '../../components/ui/button'
@@ -232,29 +232,36 @@ function BasicInfoSection({
   )
 }
 
-function EducationSection({
-  token,
-  education,
-}: {
-  token: string
-  education: { id: number; school_name: string; major: string; degree: string }[]
-}) {
+function EducationSection({ token, education }: { token: string; education: Education[] }) {
   const addEducation = useAddEducationMutation(token)
   const deleteEducation = useDeleteEducationMutation(token)
   const [schoolName, setSchoolName] = useState('')
   const [major, setMajor] = useState('')
   const [degree, setDegree] = useState('')
+  const [gpa, setGpa] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const id = useId()
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     addEducation.mutate(
-      { school_name: schoolName, major, degree },
+      {
+        school_name: schoolName,
+        major,
+        degree,
+        gpa: gpa ? Number(gpa) : null,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      },
       {
         onSuccess: () => {
           setSchoolName('')
           setMajor('')
           setDegree('')
+          setGpa('')
+          setStartDate('')
+          setEndDate('')
         },
       },
     )
@@ -272,6 +279,8 @@ function EducationSection({
               <li key={entry.id} className="flex items-center justify-between text-sm">
                 <span>
                   {entry.school_name} — {entry.major}, {entry.degree}
+                  {entry.gpa != null ? ` · GPA ${entry.gpa}` : ''}
+                  {entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}
                 </span>
                 <Button
                   type="button"
@@ -322,6 +331,30 @@ function EducationSection({
               value={degree}
               onChange={(e) => setDegree(e.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-gpa`} className="sr-only">
+              GPA
+            </Label>
+            <Input
+              id={`${id}-gpa`}
+              type="number"
+              step="0.01"
+              min="0"
+              max="4"
+              placeholder="GPA"
+              className="w-20"
+              value={gpa}
+              onChange={(e) => setGpa(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-start`}>Start date</Label>
+            <Input id={`${id}-start`} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-end`}>End date</Label>
+            <Input id={`${id}-end`} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
           <Button type="submit" disabled={addEducation.isPending}>
             Add
