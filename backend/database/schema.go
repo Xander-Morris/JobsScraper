@@ -68,17 +68,22 @@ func (j *JobType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-/**
+/*
+*
+
 	tableCreationOrder lists table names in dependency order (referenced tables
 	before the tables that REFERENCE them). Go randomizes map iteration order,
 	so CreateTables must not range over the tables map directly when creating
 	tables with foreign keys.
-**/
+
+*
+*/
 var tableCreationOrder = []string{
 	"jobs",
 	"tags",
 	"job_tags",
 	"profiles",
+	"profile_refresh_tokens",
 	"profiles_education",
 	"profiles_work_experience",
 	"profiles_work_experience_bullets",
@@ -158,6 +163,17 @@ var tables = Schema{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_email ON profiles(email);",
 		},
 		InsertStatement: `INSERT INTO profiles (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id;`,
+	},
+	"profile_refresh_tokens": TableDefinition{
+		Columns: []map[string]string{
+			{"token_hash": "TEXT PRIMARY KEY"},
+			{"profile_id": "INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE"},
+			{"expires_at": "TIMESTAMPTZ NOT NULL"},
+			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+		},
+		Indexes: []string{
+			"CREATE INDEX IF NOT EXISTS idx_profile_refresh_tokens_expires_at ON profile_refresh_tokens(expires_at);",
+		},
 	},
 	"profiles_education": TableDefinition{
 		Columns: []map[string]string{

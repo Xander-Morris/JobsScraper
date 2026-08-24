@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,9 @@ import (
 	"main/database"
 	"main/utils"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,7 +21,7 @@ func createToken(profileID int64) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"profileID": profileID,
-			"exp":       time.Now().Add(time.Hour * 24).Unix(),
+			"exp":       time.Now().Add(15 * time.Minute).Unix(),
 		})
 
 	tokenString, err := token.SignedString([]byte(utils.GetEnv()["SECRET_KEY"]))
@@ -27,6 +30,60 @@ func createToken(profileID int64) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+const refreshCookieName = "profile_refresh"
+
+func refreshCookieSameSite() http.SameSite {
+	if strings.EqualFold(os.Getenv("COOKIE_SAME_SITE"), "none") {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
+}
+
+func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    token,
+		Path:     "/api/profile",
+		Expires:  expiresAt,
+		MaxAge:   int(time.Until(expiresAt).Seconds()),
+		HttpOnly: true,
+		Secure:   os.Getenv("COOKIE_SECURE") == "true",
+		SameSite: refreshCookieSameSite(),
+	})
+}
+
+func clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    "",
+		Path:     "/api/profile",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   os.Getenv("COOKIE_SECURE") == "true",
+		SameSite: refreshCookieSameSite(),
+	})
+}
+
+func createSession(w http.ResponseWriter, profileID int64) (string, error) {
+	accessToken, err := createToken(profileID)
+	if err != nil {
+		return "", err
+	}
+
+	refreshToken, err := database.NewRefreshToken()
+	if err != nil {
+		return "", err
+	}
+
+	expiresAt := time.Now().Add(database.RefreshTokenLifetime)
+	if err := database.StoreRefreshToken(context.Background(), profileID, refreshToken, expiresAt); err != nil {
+		return "", err
+	}
+
+	setRefreshCookie(w, refreshToken, expiresAt)
+	return accessToken, nil
 }
 
 func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +107,7 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createToken(id)
+	token, err := createSession(w, id)
 
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not create token!"})
@@ -76,7 +133,7 @@ func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createToken(profileID)
+	token, err := createSession(w, profileID)
 
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not create token!"})
@@ -84,6 +141,54 @@ func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{"token": token})
+}
+
+func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || cookie.Value == "" {
+		clearRefreshCookie(w)
+		writeError(w, http.StatusUnauthorized, "refresh token missing or expired")
+		return
+	}
+
+	newRefreshToken, err := database.NewRefreshToken()
+	if err != nil {
+		log.Printf("generate refresh token: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not refresh session")
+		return
+	}
+
+	expiresAt := time.Now().Add(database.RefreshTokenLifetime)
+	profileID, err := database.RotateRefreshToken(r.Context(), cookie.Value, newRefreshToken, expiresAt)
+	if err != nil {
+		clearRefreshCookie(w)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "refresh token missing or expired")
+			return
+		}
+		log.Printf("rotate refresh token: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not refresh session")
+		return
+	}
+
+	accessToken, err := createToken(profileID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not refresh session")
+		return
+	}
+
+	setRefreshCookie(w, newRefreshToken, expiresAt)
+	writeJSON(w, http.StatusOK, map[string]string{"token": accessToken})
+}
+
+func handleLogoutProfile(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(refreshCookieName); err == nil && cookie.Value != "" {
+		if err := database.DeleteRefreshToken(r.Context(), cookie.Value); err != nil {
+			log.Printf("delete refresh token: %v", err)
+		}
+	}
+	clearRefreshCookie(w)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleGetProfile(w http.ResponseWriter, r *http.Request) {

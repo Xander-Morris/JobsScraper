@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
-import { apiFetch } from './client'
+import { ApiError, apiFetch } from './client'
 import {
   authResponseSchema,
   profileSchema,
@@ -154,6 +154,7 @@ export function useProfileQuery(token: string | null) {
     queryKey: ['profile'],
     queryFn: () => fetchProfile(token!),
     enabled: !!token,
+    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 401) && failureCount < 2,
   })
 }
 

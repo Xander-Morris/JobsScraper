@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useId, useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import { ChevronDownIcon, XIcon } from 'lucide-react'
 import {
   createProfile,
@@ -15,6 +15,7 @@ import {
   useProfileQuery,
   useUpdateProfileMutation,
 } from '../../api/profile'
+import { ApiError } from '../../api/client'
 import type { Education, JobType, WorkExperience } from '../../api/schemas'
 import { useAuth } from '../../stores/profile-store'
 import { badgeVariants } from '../../components/ui/badge'
@@ -50,7 +51,7 @@ function RouteComponent() {
 }
 
 function AuthForms() {
-  const { login } = useAuth()
+  const { login, sessionMessage } = useAuth()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -76,6 +77,7 @@ function AuthForms() {
 
   return (
     <div className="mx-auto mt-10 max-w-sm text-left">
+      {sessionMessage && <p role="alert" className="mb-4 text-sm text-muted-foreground">{sessionMessage}</p>}
       <div role="group" aria-label="Authentication mode" className="mb-4 flex gap-2 text-sm">
         <Button
           type="button"
@@ -143,7 +145,20 @@ function AuthForms() {
 
 function ProfileView({ token }: { token: string }) {
   const { logout } = useAuth()
-  const { data: profile, isLoading } = useProfileQuery(token)
+  const { data: profile, error, isLoading, isError } = useProfileQuery(token)
+  const isUnauthorized = error instanceof ApiError && error.status === 401
+
+  useEffect(() => {
+    if (isUnauthorized) {
+      logout('Your session expired or is no longer valid. Please log in again.')
+    }
+  }, [isUnauthorized, logout])
+
+  if (isUnauthorized) return <p className="mt-10 text-muted-foreground">Signing you out...</p>
+
+  if (isError) {
+    return <p role="alert" className="mt-10 text-muted-foreground">Unable to load your profile. Please try again.</p>
+  }
 
   if (isLoading || !profile) return <p className="mt-10 text-muted-foreground">Loading profile…</p>
 
@@ -151,7 +166,7 @@ function ProfileView({ token }: { token: string }) {
     <div className="mx-auto mt-8 max-w-2xl space-y-6 text-left mb-4">
       <div className="flex items-center justify-between">
         <h2>{profile.email}</h2>
-        <Button type="button" variant="ghost" size="sm" onClick={logout}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => logout()}>
           Log out
         </Button>
       </div>

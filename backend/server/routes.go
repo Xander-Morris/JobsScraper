@@ -9,6 +9,8 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tags", handleGetTags)
 	mux.HandleFunc("POST /api/profile/create", handleCreateProfile)
 	mux.HandleFunc("POST /api/profile/login", handleLoginProfile)
+	mux.HandleFunc("POST /api/profile/refresh", handleRefreshProfile)
+	mux.HandleFunc("POST /api/profile/logout", handleLogoutProfile)
 	mux.HandleFunc("GET /api/profile", withAuth(handleGetProfile))
 	mux.HandleFunc("PUT /api/profile", withAuth(handleUpdateProfile))
 	mux.HandleFunc("POST /api/profile/education", withAuth(handleAddEducation))
