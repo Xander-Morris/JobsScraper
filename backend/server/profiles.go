@@ -171,6 +171,21 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	exists, err := database.ProfileExists(r.Context(), profileID)
+	if err != nil {
+		log.Printf("check refreshed profile: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not refresh session")
+		return
+	}
+	if !exists {
+		if err := database.DeleteRefreshToken(r.Context(), newRefreshToken); err != nil {
+			log.Printf("delete orphaned refresh token: %v", err)
+		}
+		clearRefreshCookie(w)
+		writeError(w, http.StatusUnauthorized, "profile no longer exists")
+		return
+	}
+
 	accessToken, err := createToken(profileID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not refresh session")

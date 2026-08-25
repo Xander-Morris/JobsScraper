@@ -70,6 +70,16 @@ export const workExperienceSchema = z.object({
 })
 export type WorkExperience = z.infer<typeof workExperienceSchema>
 
+export const resumeSchema = z.object({
+  id: z.number(),
+  file_name: z.string(),
+  content_type: z.string(),
+  file_size: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+export type Resume = z.infer<typeof resumeSchema>
+
 export const profileSchema = z.object({
   id: z.number(),
   email: z.string(),
@@ -81,6 +91,7 @@ export const profileSchema = z.object({
   education: z.array(educationSchema).nullable(),
   skills: z.array(skillSchema).nullable(),
   work_experience: z.array(workExperienceSchema).nullable(),
+  resumes: z.array(resumeSchema).nullable(),
 })
 export type Profile = z.infer<typeof profileSchema>
 

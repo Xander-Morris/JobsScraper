@@ -191,6 +191,50 @@ func TestDeleteEducationWrongProfile(t *testing.T) {
 	}
 }
 
+func TestResumeCRUD(t *testing.T) {
+	newTestDB(t)
+	profileID := newTestProfile(t)
+	content := []byte("resume version one")
+
+	resumeID, err := AddResume(context.Background(), profileID, "ada-resume.pdf", "application/pdf", content)
+	if err != nil {
+		t.Fatalf("AddResume: %v", err)
+	}
+
+	profile, err := GetProfile(context.Background(), profileID)
+	if err != nil {
+		t.Fatalf("GetProfile: %v", err)
+	}
+	if len(profile.Resumes) != 1 || profile.Resumes[0].ID != resumeID || profile.Resumes[0].FileName != "ada-resume.pdf" {
+		t.Fatalf("Resumes = %+v, want ada-resume.pdf", profile.Resumes)
+	}
+
+	if err := RenameResume(context.Background(), profileID, resumeID, "ada-resume-2026.pdf"); err != nil {
+		t.Fatalf("RenameResume: %v", err)
+	}
+
+	replacement := []byte("resume version two")
+	if err := ReplaceResume(context.Background(), profileID, resumeID, "ada-resume.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", replacement); err != nil {
+		t.Fatalf("ReplaceResume: %v", err)
+	}
+
+	resume, gotContent, err := GetResume(context.Background(), profileID, resumeID)
+	if err != nil {
+		t.Fatalf("GetResume: %v", err)
+	}
+	if resume.FileName != "ada-resume.docx" || string(gotContent) != string(replacement) {
+		t.Errorf("GetResume = %+v, %q; want replacement", resume, gotContent)
+	}
+
+	if err := DeleteResume(context.Background(), profileID, resumeID); err != nil {
+		t.Fatalf("DeleteResume: %v", err)
+	}
+
+	if _, _, err := GetResume(context.Background(), profileID, resumeID); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("GetResume after delete = %v, want sql.ErrNoRows", err)
+	}
+}
+
 func TestAddAndDeleteSkill(t *testing.T) {
 	newTestDB(t)
 	id := newTestProfile(t)

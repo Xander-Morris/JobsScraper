@@ -88,6 +88,7 @@ var tableCreationOrder = []string{
 	"profiles_work_experience",
 	"profiles_work_experience_bullets",
 	"profiles_skills",
+	"profile_resumes",
 }
 
 var tables = Schema{
@@ -245,5 +246,20 @@ var tables = Schema{
 			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_skills_unique ON profiles_skills(profile_id, skill);",
 		},
 		InsertStatement: `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id;`,
+	},
+	"profile_resumes": TableDefinition{
+		Columns: []map[string]string{
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
+			{"profile_id": "INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE"},
+			{"file_name": "TEXT NOT NULL"},
+			{"content_type": "TEXT NOT NULL"},
+			{"file_size": "INTEGER NOT NULL"},
+			{"content": "BYTEA NOT NULL"},
+			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+			{"updated_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+		},
+		Indexes: []string{
+			"CREATE INDEX IF NOT EXISTS idx_profile_resumes_profile_id ON profile_resumes(profile_id);",
+		},
 	},
 }

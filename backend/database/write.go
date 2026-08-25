@@ -63,44 +63,30 @@ func CreateTables() error {
 	return nil
 }
 
-func prepareInsertStatements(tx *sql.Tx) (map[string]*sql.Stmt, error) {
-	tableNameToInsertStmt := make(map[string]*sql.Stmt)
-
-	for tableName, tableInfo := range tables {
-		stmt, err := tx.Prepare(tableInfo.InsertStatement)
-
-		if err != nil {
-			return nil, fmt.Errorf("prepare insert for %s: %w", tableName, err)
-		}
-
-		tableNameToInsertStmt[tableName] = stmt
-	}
-
-	return tableNameToInsertStmt, nil
-}
-
-func writeJobs(jobs []jobs.Job, tableNameToInsertStmt map[string]*sql.Stmt, deleteJobTagsStmt *sql.Stmt) error {
+func writeJobs(tx *sql.Tx, jobs []jobs.Job) error {
 	for _, job := range jobs {
 		var jobID int64
 
 		postedAt := job.PostedAt.UTC().Format(time.RFC3339)
 
-		if err := tableNameToInsertStmt["jobs"].QueryRow(job.Title, job.Company, job.Location, job.WorkplaceType, job.SalaryMin, job.SalaryMax, postedAt, job.URL, job.Description).Scan(&jobID); err != nil {
+		if err := tx.QueryRow(tables["jobs"].InsertStatement,
+			job.Title, job.Company, job.Location, job.WorkplaceType, job.SalaryMin, job.SalaryMax, postedAt, job.URL, job.Description,
+		).Scan(&jobID); err != nil {
 			return err
 		}
 
-		if _, err := deleteJobTagsStmt.Exec(jobID); err != nil {
+		if _, err := tx.Exec("DELETE FROM job_tags WHERE job_id = $1", jobID); err != nil {
 			return err
 		}
 
 		for _, tag := range job.Tags {
 			var tagID int64
 
-			if err := tableNameToInsertStmt["tags"].QueryRow(tag).Scan(&tagID); err != nil {
+			if err := tx.QueryRow(tables["tags"].InsertStatement, tag).Scan(&tagID); err != nil {
 				return err
 			}
 
-			if _, err := tableNameToInsertStmt["job_tags"].Exec(jobID, tagID); err != nil {
+			if _, err := tx.Exec(tables["job_tags"].InsertStatement, jobID, tagID); err != nil {
 				return err
 			}
 		}
@@ -128,25 +114,7 @@ func WriteJobsToDatabase(jobs []jobs.Job) error {
 
 	defer tx.Rollback()
 
-	tableNameToInsertStmt, err := prepareInsertStatements(tx)
-
-	if err != nil {
-		return err
-	}
-
-	for _, stmt := range tableNameToInsertStmt {
-		defer stmt.Close()
-	}
-
-	deleteJobTagsStmt, err := tx.Prepare("DELETE FROM job_tags WHERE job_id = $1")
-
-	if err != nil {
-		return fmt.Errorf("prepare delete job_tags: %w", err)
-	}
-
-	defer deleteJobTagsStmt.Close()
-
-	if err := writeJobs(jobs, tableNameToInsertStmt, deleteJobTagsStmt); err != nil {
+	if err := writeJobs(tx, jobs); err != nil {
 		return fmt.Errorf("failed to write jobs: %w", err)
 	}
 

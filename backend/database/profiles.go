@@ -23,6 +23,16 @@ type Profile struct {
 	Education      []ProfileEducation      `json:"education"`
 	Skills         []ProfileSkill          `json:"skills"`
 	WorkExperience []ProfileWorkExperience `json:"work_experience"`
+	Resumes        []ProfileResume         `json:"resumes"`
+}
+
+type ProfileResume struct {
+	ID          int64     `json:"id"`
+	FileName    string    `json:"file_name"`
+	ContentType string    `json:"content_type"`
+	FileSize    int64     `json:"file_size"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type ProfileEducation struct {
@@ -164,12 +174,6 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 
 	defer tx.Rollback()
 
-	insertStatements, err := prepareInsertStatements(tx)
-
-	if err != nil {
-		return 0, err
-	}
-
 	hashedPassword, err := HashPassword(req.Password)
 
 	if err != nil {
@@ -178,7 +182,7 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 
 	var profileID int64
 
-	if err := insertStatements["profiles"].QueryRow(req.Email, hashedPassword).Scan(&profileID); err != nil {
+	if err := tx.QueryRow(tables["profiles"].InsertStatement, req.Email, hashedPassword).Scan(&profileID); err != nil {
 		return 0, err
 	}
 
@@ -187,6 +191,20 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 	}
 
 	return profileID, nil
+}
+
+func ProfileExists(ctx context.Context, id int64) (bool, error) {
+	db, err := GetDb()
+	if err != nil {
+		return false, err
+	}
+
+	var exists bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles WHERE id = $1)`, id).Scan(&exists); err != nil {
+		return false, err
+	}
+
+	return exists, nil
 }
 
 func GetProfile(ctx context.Context, id int64) (*Profile, error) {
@@ -229,7 +247,158 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 
 	profile.WorkExperience = workExperience
 
+	resumes, err := ListResumes(ctx, id)
+
+	if err != nil {
+		return nil, fmt.Errorf("list resumes: %w", err)
+	}
+
+	profile.Resumes = resumes
+
 	return profile, nil
+}
+
+func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) {
+	db, err := GetDb()
+
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, `SELECT id, file_name, content_type, file_size, created_at, updated_at
+		FROM profile_resumes WHERE profile_id = $1 ORDER BY updated_at DESC, id DESC`, profileID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var resumes []ProfileResume
+
+	for rows.Next() {
+		var resume ProfileResume
+
+		if err := rows.Scan(&resume.ID, &resume.FileName, &resume.ContentType, &resume.FileSize, &resume.CreatedAt, &resume.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		resumes = append(resumes, resume)
+	}
+
+	return resumes, rows.Err()
+}
+
+func AddResume(ctx context.Context, profileID int64, fileName, contentType string, content []byte) (int64, error) {
+	db, err := GetDb()
+
+	if err != nil {
+		return 0, err
+	}
+
+	var id int64
+	err = db.QueryRowContext(ctx, `INSERT INTO profile_resumes (profile_id, file_name, content_type, file_size, content)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`, profileID, fileName, contentType, len(content), content).Scan(&id)
+
+	return id, err
+}
+
+func ReplaceResume(ctx context.Context, profileID, resumeID int64, fileName, contentType string, content []byte) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	result, err := db.ExecContext(ctx, `UPDATE profile_resumes
+		SET file_name = $1, content_type = $2, file_size = $3, content = $4, updated_at = NOW()
+		WHERE id = $5 AND profile_id = $6`, fileName, contentType, len(content), content, resumeID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+func RenameResume(ctx context.Context, profileID, resumeID int64, fileName string) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	result, err := db.ExecContext(ctx, `UPDATE profile_resumes SET file_name = $1, updated_at = NOW()
+		WHERE id = $2 AND profile_id = $3`, fileName, resumeID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+func GetResume(ctx context.Context, profileID, resumeID int64) (ProfileResume, []byte, error) {
+	db, err := GetDb()
+
+	if err != nil {
+		return ProfileResume{}, nil, err
+	}
+
+	var resume ProfileResume
+	var content []byte
+	err = db.QueryRowContext(ctx, `SELECT id, file_name, content_type, file_size, content, created_at, updated_at
+		FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID).Scan(
+		&resume.ID, &resume.FileName, &resume.ContentType, &resume.FileSize, &content, &resume.CreatedAt, &resume.UpdatedAt,
+	)
+
+	return resume, content, err
+}
+
+func DeleteResume(ctx context.Context, profileID, resumeID int64) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	result, err := db.ExecContext(ctx, `DELETE FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 func UpdateProfile(ctx context.Context, id int64, req *UpdateProfileRequest) error {

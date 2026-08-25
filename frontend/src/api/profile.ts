@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
-import { ApiError, apiFetch } from './client'
+import { API_BASE_URL, ApiError, apiFetch } from './client'
 import {
   authResponseSchema,
   profileSchema,
@@ -149,12 +149,59 @@ export function deleteWorkExperienceBullet(token: string, workExperienceId: numb
   })
 }
 
+export function uploadResume(token: string, file: File) {
+  const body = new FormData()
+  body.append('resume', file)
+
+  return apiFetch('/api/profile/resumes', idResponseSchema, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body,
+  })
+}
+
+export function updateResume(token: string, id: number, update: File | string) {
+  const body = new FormData()
+  if (typeof update === 'string') {
+    body.append('file_name', update)
+  } else {
+    body.append('resume', update)
+  }
+
+  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body,
+  })
+}
+
+export function deleteResume(token: string, id: number) {
+  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+export async function downloadResume(token: string, id: number): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/profile/resumes/${id}/download`, {
+    credentials: 'include',
+    headers: authHeaders(token),
+  })
+
+  if (!response.ok) {
+    throw new ApiError(response.statusText || 'Unable to download resume', response.status)
+  }
+
+  return response.blob()
+}
+
 export function useProfileQuery(token: string | null) {
   return useQuery({
     queryKey: ['profile'],
     queryFn: () => fetchProfile(token!),
     enabled: !!token,
-    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 401) && failureCount < 2,
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && (error.status === 401 || error.status === 404)) && failureCount < 2,
   })
 }
 
@@ -209,4 +256,16 @@ export function useDeleteWorkExperienceBulletMutation(token: string | null) {
     ({ workExperienceId, id }: { workExperienceId: number; id: number }) =>
       deleteWorkExperienceBullet(token!, workExperienceId, id),
   )
+}
+
+export function useUploadResumeMutation(token: string | null) {
+  return useProfileMutation((file: File) => uploadResume(token!, file))
+}
+
+export function useUpdateResumeMutation(token: string | null) {
+  return useProfileMutation(({ id, update }: { id: number; update: File | string }) => updateResume(token!, id, update))
+}
+
+export function useDeleteResumeMutation(token: string | null) {
+  return useProfileMutation((id: number) => deleteResume(token!, id))
 }
