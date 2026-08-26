@@ -8,18 +8,18 @@ export function Header() {
       </Link>
       <nav aria-label="Main" className="flex gap-5 text-sm">
         <Link
-          to="/"
-          activeOptions={{ exact: true }}
-          className="text-muted-foreground no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
-        >
-          Jobs
-        </Link>
-        <Link
           to="/profile"
           activeOptions={{ exact: true }}
           className="text-muted-foreground no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
         >
           Profile
+        </Link>
+        <Link
+          to="/jobs"
+          activeOptions={{ exact: true }}
+          className="text-muted-foreground no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
+        >
+          Jobs
         </Link>
       </nav>
     </header>

@@ -14,8 +14,6 @@ const MAX_TAG_MATCHES = 40
 const WORKPLACE_TYPE_OPTIONS: { value: JobSearchState['workplaceType'] | ''; label: string }[] = [
   { value: '', label: 'Any workplace' },
   { value: 'remote', label: 'Remote' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'in_person', label: 'In person' },
 ]
 
 const SORT_OPTIONS: { value: NonNullable<JobSearchState['sort']>; label: string }[] = [

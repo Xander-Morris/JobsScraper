@@ -37,10 +37,11 @@ export function fetchJob(id: number): Promise<Job> {
   return apiFetch(`/api/jobs/${id}`, jobSchema)
 }
 
-export function useJobsQuery(params: JobSearchParams = {}) {
+export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['jobs', params],
     queryFn: () => fetchJobs(params),
+    enabled: options.enabled,
   })
 }
 

@@ -16,7 +16,7 @@ function JobDetailPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 text-left">
-      <Link to="/" className="text-sm text-muted-foreground no-underline hover:text-brand">
+      <Link to="/jobs" className="text-sm text-muted-foreground no-underline hover:text-brand">
         ← Back to jobs
       </Link>
 
