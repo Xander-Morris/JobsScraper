@@ -4,8 +4,10 @@ import { API_BASE_URL, ApiError, apiFetch } from './client'
 import {
   authResponseSchema,
   profileSchema,
+  resumeExtractionSchema,
   type AuthResponse,
   type Profile,
+  type ResumeExtraction,
 } from './schemas'
 
 const idResponseSchema = z.object({ id: z.number() })
@@ -182,6 +184,19 @@ export function deleteResume(token: string, id: number) {
   })
 }
 
+export function fetchResumeExtraction(token: string, id: number): Promise<ResumeExtraction> {
+  return apiFetch(`/api/profile/resumes/${id}/extraction`, resumeExtractionSchema, {
+    headers: authHeaders(token),
+  })
+}
+
+export function triggerResumeExtraction(token: string, id: number) {
+  return apiFetch(`/api/profile/resumes/${id}/extraction`, statusResponseSchema, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+}
+
 export async function downloadResume(token: string, id: number): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}/api/profile/resumes/${id}/download`, {
     credentials: 'include',
@@ -268,4 +283,26 @@ export function useUpdateResumeMutation(token: string | null) {
 
 export function useDeleteResumeMutation(token: string | null) {
   return useProfileMutation((id: number) => deleteResume(token!, id))
+}
+
+export function useResumeExtractionQuery(token: string | null, resumeId: number, options: { enabled: boolean }) {
+  return useQuery({
+    queryKey: ['profile', 'resume', resumeId, 'extraction'],
+    queryFn: () => fetchResumeExtraction(token!, resumeId),
+    enabled: options.enabled && !!token,
+    retry: (failureCount, error) => error instanceof ApiError && error.status === 404 && failureCount < 30,
+    retryDelay: 2000,
+    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 2000 : false),
+  })
+}
+
+export function useTriggerResumeExtractionMutation(token: string | null) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (resumeId: number) => triggerResumeExtraction(token!, resumeId),
+    onSuccess: (_data, resumeId) => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'resume', resumeId, 'extraction'] })
+    },
+  })
 }

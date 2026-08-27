@@ -25,4 +25,6 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/profile/resumes/{id}", withAuth(handleUpdateResume))
 	mux.HandleFunc("GET /api/profile/resumes/{id}/download", withAuth(handleDownloadResume))
 	mux.HandleFunc("DELETE /api/profile/resumes/{id}", withAuth(handleDeleteResume))
+	mux.HandleFunc("GET /api/profile/resumes/{id}/extraction", withAuth(handleGetResumeExtraction))
+	mux.HandleFunc("POST /api/profile/resumes/{id}/extraction", withAuth(handleTriggerResumeExtraction))
 }

@@ -1,17 +1,20 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"main/database"
+	"main/llm"
 	"mime"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const maxResumeSize = 10 << 20 // 10 MiB
@@ -35,6 +38,8 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to upload resume")
 		return
 	}
+
+	go runResumeExtraction(id, fileName, contentType, content)
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -62,6 +67,9 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 		err = database.RenameResume(r.Context(), profileID, resumeID, fileName)
 	} else {
 		err = database.ReplaceResume(r.Context(), profileID, resumeID, fileName, contentType, content)
+		if err == nil {
+			go runResumeExtraction(resumeID, fileName, contentType, content)
+		}
 	}
 
 	if err != nil {
@@ -135,6 +143,95 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+const resumeExtractionTimeout = 60 * time.Second
+
+// runResumeExtraction extracts structured fields from a resume in the background so the
+// upload/replace request doesn't block on the LLM call.
+func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
+	ctx, cancel := context.WithTimeout(context.Background(), resumeExtractionTimeout)
+	defer cancel()
+
+	if err := database.UpsertResumeExtractionPending(ctx, resumeID); err != nil {
+		log.Printf("resume extraction: mark pending resume %d: %v", resumeID, err)
+		return
+	}
+
+	extracted, err := llm.ExtractResumeFields(ctx, fileName, contentType, content)
+	if err != nil {
+		status := "failed"
+		if errors.Is(err, llm.ErrUnsupportedFormat) {
+			status = "unsupported"
+		}
+
+		if dbErr := database.SaveResumeExtractionFailure(ctx, resumeID, status, err.Error()); dbErr != nil {
+			log.Printf("resume extraction: save failure resume %d: %v", resumeID, dbErr)
+		}
+		return
+	}
+
+	if err := database.SaveResumeExtractionResult(ctx, resumeID, extracted); err != nil {
+		log.Printf("resume extraction: save result resume %d: %v", resumeID, err)
+	}
+}
+
+func handleGetResumeExtraction(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid resume id")
+		return
+	}
+
+	extraction, err := database.GetResumeExtraction(r.Context(), profileID, resumeID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "resume extraction not found")
+			return
+		}
+
+		log.Printf("get resume extraction: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get resume extraction")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, extraction)
+}
+
+func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid resume id")
+		return
+	}
+
+	resume, content, err := database.GetResume(r.Context(), profileID, resumeID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "resume not found")
+			return
+		}
+
+		log.Printf("trigger resume extraction: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to trigger resume extraction")
+		return
+	}
+
+	go runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "pending"})
 }
 
 // readResumeUpload reads a multipart request. A replacement may omit the file and

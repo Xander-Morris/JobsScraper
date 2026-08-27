@@ -3,11 +3,14 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	emailverifier "github.com/AfterShip/email-verifier"
 	"golang.org/x/crypto/bcrypt"
+
+	"main/llm"
 )
 
 const dateLayout = "2006-01-02"
@@ -399,6 +402,134 @@ func DeleteResume(ctx context.Context, profileID, resumeID int64) error {
 	}
 
 	return nil
+}
+
+type ResumeExtraction struct {
+	ResumeID       int64                     `json:"resume_id"`
+	Status         string                    `json:"status"`
+	FullName       string                    `json:"full_name"`
+	Email          string                    `json:"email"`
+	Phone          string                    `json:"phone"`
+	Summary        string                    `json:"summary"`
+	Skills         []string                  `json:"skills"`
+	Education      []llm.EducationEntry      `json:"education"`
+	WorkExperience []llm.WorkExperienceEntry `json:"work_experience"`
+	Error          string                    `json:"error"`
+	UpdatedAt      time.Time                 `json:"updated_at"`
+}
+
+func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status)
+		VALUES ($1, 'pending')
+		ON CONFLICT (resume_id) DO UPDATE SET status = 'pending', error = NULL, updated_at = NOW()`, resumeID)
+
+	return err
+}
+
+func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	skills, err := json.Marshal(extracted.Skills)
+	if err != nil {
+		return fmt.Errorf("encode skills: %w", err)
+	}
+
+	education, err := json.Marshal(extracted.Education)
+	if err != nil {
+		return fmt.Errorf("encode education: %w", err)
+	}
+
+	workExperience, err := json.Marshal(extracted.WorkExperience)
+	if err != nil {
+		return fmt.Errorf("encode work experience: %w", err)
+	}
+
+	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions
+			(resume_id, status, full_name, email, phone, summary, skills, education, work_experience, error)
+		VALUES ($1, 'completed', $2, $3, $4, $5, $6, $7, $8, NULL)
+		ON CONFLICT (resume_id) DO UPDATE SET
+			status = 'completed', full_name = excluded.full_name, email = excluded.email,
+			phone = excluded.phone, summary = excluded.summary, skills = excluded.skills,
+			education = excluded.education, work_experience = excluded.work_experience,
+			error = NULL, updated_at = NOW()`,
+		resumeID, extracted.FullName, extracted.Email, extracted.Phone, extracted.Summary,
+		string(skills), string(education), string(workExperience))
+
+	return err
+}
+
+func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, errMsg string) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status, error)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (resume_id) DO UPDATE SET status = excluded.status, error = excluded.error, updated_at = NOW()`,
+		resumeID, status, errMsg)
+
+	return err
+}
+
+func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
+	db, err := GetDb()
+
+	if err != nil {
+		return ResumeExtraction{}, err
+	}
+
+	var extraction ResumeExtraction
+	var fullName, email, phone, summary, errMsg sql.NullString
+	var skills, education, workExperience sql.NullString
+
+	err = db.QueryRowContext(ctx, `SELECT e.resume_id, e.status, e.full_name, e.email, e.phone, e.summary,
+			e.skills, e.education, e.work_experience, e.error, e.updated_at
+		FROM profile_resume_extractions e
+		JOIN profile_resumes r ON r.id = e.resume_id
+		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID).Scan(
+		&extraction.ResumeID, &extraction.Status, &fullName, &email, &phone, &summary,
+		&skills, &education, &workExperience, &errMsg, &extraction.UpdatedAt,
+	)
+
+	if err != nil {
+		return ResumeExtraction{}, err
+	}
+
+	extraction.FullName = fullName.String
+	extraction.Email = email.String
+	extraction.Phone = phone.String
+	extraction.Summary = summary.String
+	extraction.Error = errMsg.String
+
+	if skills.Valid {
+		if err := json.Unmarshal([]byte(skills.String), &extraction.Skills); err != nil {
+			return ResumeExtraction{}, fmt.Errorf("decode skills: %w", err)
+		}
+	}
+	if education.Valid {
+		if err := json.Unmarshal([]byte(education.String), &extraction.Education); err != nil {
+			return ResumeExtraction{}, fmt.Errorf("decode education: %w", err)
+		}
+	}
+	if workExperience.Valid {
+		if err := json.Unmarshal([]byte(workExperience.String), &extraction.WorkExperience); err != nil {
+			return ResumeExtraction{}, fmt.Errorf("decode work experience: %w", err)
+		}
+	}
+
+	return extraction, nil
 }
 
 func UpdateProfile(ctx context.Context, id int64, req *UpdateProfileRequest) error {

@@ -89,6 +89,7 @@ var tableCreationOrder = []string{
 	"profiles_work_experience_bullets",
 	"profiles_skills",
 	"profile_resumes",
+	"profile_resume_extractions",
 }
 
 var tables = Schema{
@@ -260,6 +261,23 @@ var tables = Schema{
 		},
 		Indexes: []string{
 			"CREATE INDEX IF NOT EXISTS idx_profile_resumes_profile_id ON profile_resumes(profile_id);",
+		},
+	},
+	"profile_resume_extractions": TableDefinition{
+		Columns: []map[string]string{
+			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
+			{"resume_id": "INTEGER NOT NULL UNIQUE REFERENCES profile_resumes(id) ON DELETE CASCADE"},
+			{"status": "TEXT NOT NULL DEFAULT 'pending'"},
+			{"full_name": "TEXT"},
+			{"email": "TEXT"},
+			{"phone": "TEXT"},
+			{"summary": "TEXT"},
+			{"skills": "JSONB"},
+			{"education": "JSONB"},
+			{"work_experience": "JSONB"},
+			{"error": "TEXT"},
+			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
+			{"updated_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
 		},
 	},
 }

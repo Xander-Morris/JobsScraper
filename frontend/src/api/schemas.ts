@@ -80,6 +80,41 @@ export const resumeSchema = z.object({
 })
 export type Resume = z.infer<typeof resumeSchema>
 
+export const resumeExtractionStatusSchema = z.enum(['pending', 'completed', 'failed', 'unsupported'])
+export type ResumeExtractionStatus = z.infer<typeof resumeExtractionStatusSchema>
+
+export const extractedEducationSchema = z.object({
+  school_name: z.string(),
+  degree: z.string(),
+  major: z.string(),
+  start_date: z.string(),
+  end_date: z.string(),
+})
+
+export const extractedWorkExperienceSchema = z.object({
+  company: z.string(),
+  job_title: z.string(),
+  location: z.string(),
+  start_date: z.string(),
+  end_date: z.string(),
+  bullets: z.array(z.string()).nullable(),
+})
+
+export const resumeExtractionSchema = z.object({
+  resume_id: z.number(),
+  status: resumeExtractionStatusSchema,
+  full_name: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  summary: z.string(),
+  skills: z.array(z.string()).nullable(),
+  education: z.array(extractedEducationSchema).nullable(),
+  work_experience: z.array(extractedWorkExperienceSchema).nullable(),
+  error: z.string(),
+  updated_at: z.string(),
+})
+export type ResumeExtraction = z.infer<typeof resumeExtractionSchema>
+
 export const profileSchema = z.object({
   id: z.number(),
   email: z.string(),
