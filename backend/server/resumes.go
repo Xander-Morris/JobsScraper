@@ -145,7 +145,7 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-const resumeExtractionTimeout = 60 * time.Second
+const resumeExtractionTimeout = 5 * time.Minute // local Ollama inference can be slow on CPU
 
 // runResumeExtraction extracts structured fields from a resume in the background so the
 // upload/replace request doesn't block on the LLM call.

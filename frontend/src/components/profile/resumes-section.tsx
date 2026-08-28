@@ -59,7 +59,6 @@ function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
   const [baseName, extension] = splitFileName(resume.file_name)
   const [fileName, setFileName] = useState(baseName)
   const [error, setError] = useState<string | null>(null)
-  const [showDetails, setShowDetails] = useState(false)
   const replaceId = useId()
   const newFileName = `${fileName.trim()}${extension}`
 
@@ -102,7 +101,6 @@ function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
       </form>
       <span className="text-xs text-muted-foreground">{formatFileSize(resume.file_size)}</span>
       <Button type="button" variant="outline" size="sm" onClick={() => void handleDownload()}><DownloadIcon aria-hidden="true" /> Download</Button>
-      <Button type="button" variant="outline" size="sm" onClick={() => setShowDetails((v) => !v)}>{showDetails ? 'Hide details' : 'View details'}</Button>
       <Button type="button" variant="destructive" size="sm" onClick={() => deleteResume.mutate(resume.id)} disabled={deleteResume.isPending}>Delete</Button>
     </div>
     <div className="mt-2 flex items-center gap-2">
@@ -110,9 +108,9 @@ function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
       <Input id={replaceId} type="file" accept={acceptedResumeTypes} onChange={(e) => handleReplace(e.target.files?.[0] ?? null)} disabled={updateResume.isPending} className="max-w-sm text-xs" />
     </div>
     {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
-    {showDetails && <div className="mt-3 border-t border-border pt-3">
+    <div className="mt-3 border-t border-border pt-3">
       <ResumeExtractionPanel token={token} resumeId={resume.id} />
-    </div>}
+    </div>
   </li>
 }
 
