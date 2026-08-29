@@ -17,6 +17,36 @@ type contextKey string
 
 const profileIDContextKey contextKey = "profileID"
 
+// parseProfileIDFromToken validates a bearer token and extracts its profileID
+// claim. ok is false for any invalid/expired/malformed token.
+func parseProfileIDFromToken(tokenString string) (profileID int64, ok bool) {
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+
+		return []byte(utils.GetEnv()["SECRET_KEY"]), nil
+	})
+
+	if err != nil || !token.Valid {
+		return 0, false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+
+	if !ok {
+		return 0, false
+	}
+
+	id, ok := claims["profileID"].(float64)
+
+	if !ok {
+		return 0, false
+	}
+
+	return int64(id), true
+}
+
 func withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tokenString, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -26,35 +56,30 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
+		profileID, ok := parseProfileIDFromToken(tokenString)
 
-			return []byte(utils.GetEnv()["SECRET_KEY"]), nil
-		})
-
-		if err != nil || !token.Valid {
+		if !ok {
 			writeError(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-
-		if !ok {
-			writeError(w, http.StatusUnauthorized, "invalid token claims")
-			return
-		}
-
-		profileID, ok := claims["profileID"].(float64)
-
-		if !ok {
-			writeError(w, http.StatusUnauthorized, "invalid token claims")
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), profileIDContextKey, int64(profileID))
+		ctx := context.WithValue(r.Context(), profileIDContextKey, profileID)
 		next(w, r.WithContext(ctx))
+	}
+}
+
+// withOptionalAuth attaches profileID to the request context when a valid bearer
+// token is present, but never rejects the request — for endpoints (like job
+// search) that behave sensibly both for anonymous and authenticated callers.
+func withOptionalAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if tokenString, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && tokenString != "" {
+			if profileID, ok := parseProfileIDFromToken(tokenString); ok {
+				r = r.WithContext(context.WithValue(r.Context(), profileIDContextKey, profileID))
+			}
+		}
+
+		next(w, r)
 	}
 }
 

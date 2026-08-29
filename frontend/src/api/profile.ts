@@ -184,6 +184,13 @@ export function deleteResume(token: string, id: number) {
   })
 }
 
+export function activateResume(token: string, id: number) {
+  return apiFetch(`/api/profile/resumes/${id}/activate`, statusResponseSchema, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+}
+
 export function fetchResumeExtraction(token: string, id: number): Promise<ResumeExtraction> {
   return apiFetch(`/api/profile/resumes/${id}/extraction`, resumeExtractionSchema, {
     headers: authHeaders(token),
@@ -279,6 +286,10 @@ export function useUploadResumeMutation(token: string | null) {
 
 export function useUpdateResumeMutation(token: string | null) {
   return useProfileMutation(({ id, update }: { id: number; update: File | string }) => updateResume(token!, id, update))
+}
+
+export function useActivateResumeMutation(token: string | null) {
+  return useProfileMutation((id: number) => activateResume(token!, id))
 }
 
 export function useDeleteResumeMutation(token: string | null) {

@@ -30,7 +30,15 @@ func newTestDB(t *testing.T) {
 		t.Fatalf("ping test db: %v", err)
 	}
 
-	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags, profiles_education, profiles_skills, profiles CASCADE;"); err != nil {
+	// DROP TABLE ... CASCADE only cascades to dependent objects (e.g. FK constraints),
+	// not to child tables themselves — every table with a FK into profiles must be
+	// listed explicitly or its rows outlive profiles' id sequence reset and collide
+	// with fresh test profiles that reuse the same ids.
+	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
+		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
+		profile_resume_extractions, profile_resumes, profiles`
+
+	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)
 	}
 	createdTables = false

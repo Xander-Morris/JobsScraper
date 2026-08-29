@@ -75,6 +75,7 @@ export const resumeSchema = z.object({
   file_name: z.string(),
   content_type: z.string(),
   file_size: z.number(),
+  is_active: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -100,16 +101,27 @@ export const extractedWorkExperienceSchema = z.object({
   bullets: z.array(z.string()).nullable(),
 })
 
+export const extractedProjectSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  technologies: z.array(z.string()).nullable(),
+  bullets: z.array(z.string()).nullable(),
+})
+
 export const resumeExtractionSchema = z.object({
   resume_id: z.number(),
   status: resumeExtractionStatusSchema,
   full_name: z.string(),
   email: z.string(),
   phone: z.string(),
+  linked_in: z.string(),
+  github: z.string(),
+  portfolio: z.string(),
   summary: z.string(),
   skills: z.array(z.string()).nullable(),
   education: z.array(extractedEducationSchema).nullable(),
   work_experience: z.array(extractedWorkExperienceSchema).nullable(),
+  projects: z.array(extractedProjectSchema).nullable(),
   error: z.string(),
   updated_at: z.string(),
 })

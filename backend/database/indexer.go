@@ -18,6 +18,10 @@ const (
 
 type JobSearchParams struct {
 	SearchQuery   string
+	// ResumeQuery is a websearch_to_tsquery-style query string (terms OR'd together)
+	// built from the caller's active resume, used to boost relevance ranking toward
+	// jobs matching their skills/experience. Empty when there's no active resume.
+	ResumeQuery   string
 	Tags          []string
 	WorkplaceType jobs.WorkplaceType
 	MinSalary     int
@@ -192,13 +196,28 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 
 	query := fmt.Sprintf("SELECT %s %s", jobColumns, from)
 
-	args := make([]any, len(whereArgs), len(whereArgs)+3)
+	args := make([]any, len(whereArgs), len(whereArgs)+4)
 	copy(args, whereArgs)
 
-	if params.SearchQuery != "" && params.Sort != SortDate {
+	rankable := params.Sort != SortDate
+	hasSearchQuery := params.SearchQuery != ""
+	hasResumeQuery := params.ResumeQuery != ""
+
+	switch {
+	case rankable && hasSearchQuery && hasResumeQuery:
+		// Typed search stays the primary signal; the resume nudges ties toward jobs
+		// matching the candidate's skills/experience without overriding an explicit query.
+		args = append(args, params.SearchQuery, params.ResumeQuery)
+		query += fmt.Sprintf(
+			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * ts_rank(j.search_vector, websearch_to_tsquery('english', $%d))) DESC",
+			len(args)-1, len(args))
+	case rankable && hasSearchQuery:
 		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, plainto_tsquery('english', $%d)) DESC", len(args))
-	} else {
+	case rankable && hasResumeQuery:
+		args = append(args, params.ResumeQuery)
+		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, websearch_to_tsquery('english', $%d)) DESC", len(args))
+	default:
 		query += " ORDER BY j.posted_at DESC"
 	}
 

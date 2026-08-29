@@ -1,7 +1,6 @@
-import { useId, useState, type FormEvent } from 'react'
-import { DownloadIcon, FileTextIcon } from 'lucide-react'
 import {
   downloadResume,
+  useActivateResumeMutation,
   useDeleteResumeMutation,
   useResumeExtractionQuery,
   useTriggerResumeExtractionMutation,
@@ -14,6 +13,9 @@ import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
+import { cn } from '@/src/lib/utils'
+import { DownloadIcon, FileTextIcon } from 'lucide-react'
+import { useId, useState, type FormEvent } from 'react'
 
 const acceptedResumeTypes = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
@@ -33,7 +35,7 @@ export function ResumesSection({ token, resumes }: { token: string; resumes: Res
   return <Card>
     <CardHeader>
       <h3 className="text-sm font-semibold text-heading">Resumes</h3>
-      <p className="text-xs text-muted-foreground">Upload PDF, DOC, or DOCX files up to 10 MB.</p>
+      <p className="text-xs text-muted-foreground">Upload PDF, DOC, or DOCX files up to 10 MB. Your active resume is used to rank job search results by relevance.</p>
     </CardHeader>
     <CardContent className="space-y-3">
       {resumes.length > 0 ? <ul className="space-y-2">{resumes.map((resume) => <ResumeEntry key={resume.id} token={token} resume={resume} />)}</ul> : <p className="text-sm text-muted-foreground">No resumes uploaded yet.</p>}
@@ -56,6 +58,7 @@ function splitFileName(fileName: string): [string, string] {
 function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
   const updateResume = useUpdateResumeMutation(token)
   const deleteResume = useDeleteResumeMutation(token)
+  const activateResume = useActivateResumeMutation(token)
   const [baseName, extension] = splitFileName(resume.file_name)
   const [fileName, setFileName] = useState(baseName)
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +103,9 @@ function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
         <Button type="submit" variant="outline" size="sm" disabled={updateResume.isPending || newFileName === resume.file_name}>Rename</Button>
       </form>
       <span className="text-xs text-muted-foreground">{formatFileSize(resume.file_size)}</span>
+      {resume.is_active
+        ? <span className={badgeVariants({ variant: 'default' })}>Active</span>
+        : <Button type="button" variant="outline" size="sm" onClick={() => activateResume.mutate(resume.id)} disabled={activateResume.isPending}>Set active</Button>}
       <Button type="button" variant="outline" size="sm" onClick={() => void handleDownload()}><DownloadIcon aria-hidden="true" /> Download</Button>
       <Button type="button" variant="destructive" size="sm" onClick={() => deleteResume.mutate(resume.id)} disabled={deleteResume.isPending}>Delete</Button>
     </div>
@@ -138,27 +144,31 @@ function ResumeExtractionPanel({ token, resumeId }: { token: string; resumeId: n
   const skills = data.skills ?? []
   const education = data.education ?? []
   const workExperience = data.work_experience ?? []
-  const hasContactInfo = data.full_name || data.email || data.phone
+  const projects = data.projects ?? []
+  const hasContactInfo = data.full_name || data.email || data.phone || data.linked_in || data.github || data.portfolio
 
   return <div className="space-y-3 text-sm">
     {hasContactInfo && <div className="space-y-0.5">
       {data.full_name && <p><span className="text-muted-foreground">Name:</span> {data.full_name}</p>}
       {data.email && <p><span className="text-muted-foreground">Email:</span> {data.email}</p>}
       {data.phone && <p><span className="text-muted-foreground">Phone:</span> {data.phone}</p>}
+      {data.linked_in && <p><span className="text-muted-foreground">LinkedIn:</span> <a href={data.linked_in} target="_blank" rel="noreferrer" className="text-primary hover:underline">{data.linked_in}</a></p>}
+      {data.github && <p><span className="text-muted-foreground">GitHub:</span> <a href={data.github} target="_blank" rel="noreferrer" className="text-primary hover:underline">{data.github}</a></p>}
+      {data.portfolio && <p><span className="text-muted-foreground">Portfolio:</span> <a href={data.portfolio} target="_blank" rel="noreferrer" className="text-primary hover:underline">{data.portfolio}</a></p>}
     </div>}
-    {data.summary && <p className="text-muted-foreground">{data.summary}</p>}
+    {data.summary && <p className="text-muted-foreground pb-2">{data.summary}</p>}
     {skills.length > 0 && <ul className="flex flex-wrap gap-1.5">
-      {skills.map((skill) => <li key={skill} className={badgeVariants({ variant: 'secondary' })}>{skill}</li>)}
+      {skills.map((skill) => <li key={skill} className={cn(badgeVariants({ variant: 'secondary' }), 'h-auto max-w-full items-start whitespace-normal break-words text-left')}>{skill}</li>)}
     </ul>}
     {education.length > 0 && <div className="space-y-2">
-      <p className="text-xs font-semibold text-heading">Education</p>
+      <p className="text-xs font-semibold text-heading pb-2">Education</p>
       {education.map((entry, i) => <div key={i} className="rounded-lg border border-border p-2">
         <p className="font-medium">{entry.degree} in {entry.major} — {entry.school_name}</p>
         {(entry.start_date || entry.end_date) && <p className="text-xs text-muted-foreground">{entry.start_date} – {entry.end_date}</p>}
       </div>)}
     </div>}
     {workExperience.length > 0 && <div className="space-y-2">
-      <p className="text-xs font-semibold text-heading">Work experience</p>
+      <p className="text-xs font-semibold text-heading pb-2">Work experience</p>
       {workExperience.map((entry, i) => <div key={i} className="rounded-lg border border-border p-2">
         <p className="font-medium">{entry.job_title} — {entry.company}</p>
         <p className="text-xs text-muted-foreground">
@@ -169,7 +179,17 @@ function ResumeExtractionPanel({ token, resumeId }: { token: string; resumeId: n
         </ul>}
       </div>)}
     </div>}
-    {!hasContactInfo && !data.summary && skills.length === 0 && education.length === 0 && workExperience.length === 0 &&
+    {projects.length > 0 && <div className="space-y-2">
+      <p className="text-xs font-semibold text-heading pb-2">Projects</p>
+      {projects.map((entry, i) => <div key={i} className="rounded-lg border border-border p-2">
+        {entry.url ? <a href={entry.url} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">{entry.name}</a> : <p className="font-medium">{entry.name}</p>}
+        {(entry.technologies ?? []).length > 0 && <p className="text-xs text-muted-foreground">{(entry.technologies ?? []).join(', ')}</p>}
+        {(entry.bullets ?? []).length > 0 && <ul className="mt-1 space-y-0.5 text-xs">
+          {(entry.bullets ?? []).map((bullet, bi) => <li key={bi}>• {bullet}</li>)}
+        </ul>}
+      </div>)}
+    </div>}
+    {!hasContactInfo && !data.summary && skills.length === 0 && education.length === 0 && workExperience.length === 0 && projects.length === 0 &&
       <p className="text-sm text-muted-foreground">No details were found in this resume.</p>}
   </div>
 }

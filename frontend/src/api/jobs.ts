@@ -28,19 +28,24 @@ function buildJobSearchQuery(params: JobSearchParams): string {
   return search.toString()
 }
 
-export function fetchJobs(params: JobSearchParams = {}): Promise<JobSearchResponse> {
+export function fetchJobs(params: JobSearchParams = {}, token?: string | null): Promise<JobSearchResponse> {
   const qs = buildJobSearchQuery(params)
-  return apiFetch(`/api/jobs${qs ? `?${qs}` : ''}`, jobSearchResponseSchema)
+  return apiFetch(`/api/jobs${qs ? `?${qs}` : ''}`, jobSearchResponseSchema, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
 }
 
 export function fetchJob(id: number): Promise<Job> {
   return apiFetch(`/api/jobs/${id}`, jobSchema)
 }
 
-export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean } = {}) {
+export function useJobsQuery(
+  params: JobSearchParams = {},
+  options: { enabled?: boolean; token?: string | null } = {},
+) {
   return useQuery({
-    queryKey: ['jobs', params],
-    queryFn: () => fetchJobs(params),
+    queryKey: ['jobs', params, options.token],
+    queryFn: () => fetchJobs(params, options.token),
     enabled: options.enabled,
   })
 }

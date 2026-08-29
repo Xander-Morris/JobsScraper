@@ -39,14 +39,25 @@ type WorkExperienceEntry struct {
 	Bullets   []string `json:"bullets"`
 }
 
+type ProjectEntry struct {
+	Name         string   `json:"name"`
+	Url          string   `json:"url"`
+	Technologies []string `json:"technologies"`
+	Bullets      []string `json:"bullets"`
+}
+
 type ExtractedResume struct {
 	FullName       string                `json:"full_name"`
 	Email          string                `json:"email"`
 	Phone          string                `json:"phone"`
+	LinkedIn       string                `json:"linked_in"`
+	GitHub         string                `json:"github"`
+	Portfolio      string                `json:"portfolio"`
 	Summary        string                `json:"summary"`
 	Skills         []string              `json:"skills"`
 	Education      []EducationEntry      `json:"education"`
 	WorkExperience []WorkExperienceEntry `json:"work_experience"`
+	Projects       []ProjectEntry        `json:"projects"`
 }
 
 func ollamaBaseURL() string {
@@ -65,8 +76,6 @@ func ollamaModel() string {
 	return defaultOllamaModel
 }
 
-// ExtractResumeFields pulls plain text out of the resume and asks a local Ollama
-// model to extract structured fields from it via tool calling.
 func ExtractResumeFields(ctx context.Context, fileName, contentType string, content []byte) (*ExtractedResume, error) {
 	text, err := extractResumeText(contentType, content)
 	if err != nil {
@@ -118,8 +127,6 @@ func ExtractResumeFields(ctx context.Context, fileName, contentType string, cont
 	return parseExtractionResponse(respBody)
 }
 
-// extractResumeText returns the plain text of a resume, pulling it out of the PDF or
-// DOCX container. Scanned/image-only PDFs and legacy .doc files aren't supported.
 func extractResumeText(contentType string, content []byte) (string, error) {
 	switch contentType {
 	case "application/pdf":
@@ -133,12 +140,13 @@ func extractResumeText(contentType string, content []byte) (string, error) {
 
 const extractionPrompt = "Extract structured fields from the resume text below as JSON matching the given schema. " +
 	"Use an empty string for any field you cannot find, and an empty array for missing lists. " +
-	"Do not invent information that isn't in the resume."
+	"Do not invent information that isn't in the resume. " +
+	"For URL fields, only use a URL that appears verbatim in the text (including any 'Hyperlinks embedded in this document' " +
+	"list) — never guess or construct one from a project/company name. " +
+	"The header/contact area often has several distinct links next to the name and email (e.g. a personal " +
+	"website/portfolio, a GitHub profile, and a LinkedIn profile) — treat each as a separate field (linked_in, " +
+	"github, portfolio) rather than collapsing them into one."
 
-// resumeSchema returns the JSON Schema for ExtractedResume, passed as Ollama's
-// "format" parameter so the model's output is grammar-constrained to match it
-// (structured outputs) rather than relying on tool-call parsing, which proved
-// unreliable for longer resumes with local models.
 func resumeSchema() map[string]any {
 	stringProp := map[string]string{"type": "string"}
 
@@ -148,6 +156,9 @@ func resumeSchema() map[string]any {
 			"full_name": stringProp,
 			"email":     stringProp,
 			"phone":     stringProp,
+			"linked_in": stringProp,
+			"github":    stringProp,
+			"portfolio": stringProp,
 			"summary":   stringProp,
 			"skills": map[string]any{
 				"type":  "array",
@@ -185,8 +196,27 @@ func resumeSchema() map[string]any {
 					"required": []string{"company", "job_title", "location", "start_date", "end_date", "bullets"},
 				},
 			},
+			"projects": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": stringProp,
+						"url":  stringProp,
+						"technologies": map[string]any{
+							"type":  "array",
+							"items": stringProp,
+						},
+						"bullets": map[string]any{
+							"type":  "array",
+							"items": stringProp,
+						},
+					},
+					"required": []string{"name", "url", "technologies", "bullets"},
+				},
+			},
 		},
-		"required": []string{"full_name", "email", "phone", "summary", "skills", "education", "work_experience"},
+		"required": []string{"full_name", "email", "phone", "linked_in", "github", "portfolio", "summary", "skills", "education", "work_experience", "projects"},
 	}
 }
 
@@ -214,8 +244,6 @@ func parseExtractionResponse(body []byte) (*ExtractedResume, error) {
 	return &extracted, nil
 }
 
-// extractPdfText pulls all visible text out of a (non-scanned) PDF using its
-// embedded text streams.
 func extractPdfText(content []byte) (string, error) {
 	reader, err := pdf.NewReader(bytes.NewReader(content), int64(len(content)))
 	if err != nil {
@@ -236,11 +264,44 @@ func extractPdfText(content []byte) (string, error) {
 		return "", fmt.Errorf("%w: no extractable text (scanned/image-only PDF)", ErrUnsupportedFormat)
 	}
 
+	appendLinks(&sb, extractPdfLinks(reader))
+
 	return sb.String(), nil
 }
 
-// extractDocxText pulls all visible text out of a .docx file's word/document.xml by
-// reading every <w:t> run, using only the standard library (docx is a zip of XML).
+func extractPdfLinks(reader *pdf.Reader) []string {
+	seen := make(map[string]bool)
+	var links []string
+
+	for i := 1; i <= reader.NumPage(); i++ {
+		annots := reader.Page(i).V.Key("Annots")
+		for j := 0; j < annots.Len(); j++ {
+			uri := annots.Index(j).Key("A").Key("URI").Text()
+			if uri == "" || seen[uri] {
+				continue
+			}
+
+			seen[uri] = true
+			links = append(links, uri)
+		}
+	}
+
+	return links
+}
+
+func appendLinks(sb *strings.Builder, links []string) {
+	if len(links) == 0 {
+		return
+	}
+
+	sb.WriteString("\n\nHyperlinks embedded in this document:\n")
+	for _, link := range links {
+		sb.WriteString("- ")
+		sb.WriteString(link)
+		sb.WriteString("\n")
+	}
+}
+
 func extractDocxText(content []byte) (string, error) {
 	reader, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
 	if err != nil {
@@ -291,5 +352,50 @@ func extractDocxText(content []byte) (string, error) {
 		}
 	}
 
+	appendLinks(&sb, extractDocxLinks(reader))
+
 	return sb.String(), nil
+}
+
+func extractDocxLinks(reader *zip.Reader) []string {
+	var relsFile *zip.File
+	for _, f := range reader.File {
+		if f.Name == "word/_rels/document.xml.rels" {
+			relsFile = f
+			break
+		}
+	}
+	if relsFile == nil {
+		return nil
+	}
+
+	rc, err := relsFile.Open()
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+
+	var rels struct {
+		Relationship []struct {
+			Type       string `xml:"Type,attr"`
+			Target     string `xml:"Target,attr"`
+			TargetMode string `xml:"TargetMode,attr"`
+		} `xml:"Relationship"`
+	}
+	if err := xml.NewDecoder(rc).Decode(&rels); err != nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var links []string
+	for _, rel := range rels.Relationship {
+		if rel.TargetMode != "External" || !strings.HasSuffix(rel.Type, "/hyperlink") || seen[rel.Target] {
+			continue
+		}
+
+		seen[rel.Target] = true
+		links = append(links, rel.Target)
+	}
+
+	return links
 }

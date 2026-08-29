@@ -21,6 +21,16 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if profileID, ok := profileIDFromContext(r.Context()); ok {
+		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
+
+		if err != nil {
+			log.Printf("search jobs: get active resume extraction: %v", err)
+		} else if found {
+			params.ResumeQuery = buildResumeSearchQuery(extraction)
+		}
+	}
+
 	result, err := database.SearchForJobs(r.Context(), params)
 
 	if err != nil {

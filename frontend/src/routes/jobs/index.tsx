@@ -16,7 +16,7 @@ export const Route = createFileRoute('/jobs/')({
 })
 
 function JobsPage() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, token } = useAuth()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 
@@ -31,7 +31,7 @@ function JobsPage() {
       limit: PAGE_SIZE,
       offset: ((search.page ?? 1) - 1) * PAGE_SIZE,
     },
-    { enabled: isAuthenticated },
+    { enabled: isAuthenticated, token },
   )
 
   function updateFilters(next: JobSearchState) {

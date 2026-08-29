@@ -145,10 +145,8 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-const resumeExtractionTimeout = 5 * time.Minute // local Ollama inference can be slow on CPU
+const resumeExtractionTimeout = 5 * time.Minute 
 
-// runResumeExtraction extracts structured fields from a resume in the background so the
-// upload/replace request doesn't block on the LLM call.
 func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), resumeExtractionTimeout)
 	defer cancel()
@@ -165,7 +163,10 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 			status = "unsupported"
 		}
 
-		if dbErr := database.SaveResumeExtractionFailure(ctx, resumeID, status, err.Error()); dbErr != nil {
+		saveCtx, saveCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer saveCancel()
+
+		if dbErr := database.SaveResumeExtractionFailure(saveCtx, resumeID, status, err.Error()); dbErr != nil {
 			log.Printf("resume extraction: save failure resume %d: %v", resumeID, dbErr)
 		}
 		return
@@ -234,8 +235,33 @@ func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "pending"})
 }
 
-// readResumeUpload reads a multipart request. A replacement may omit the file and
-// supply file_name to rename the existing resume.
+func handleActivateResume(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid resume id")
+		return
+	}
+
+	if err := database.SetActiveResume(r.Context(), profileID, resumeID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "resume not found")
+			return
+		}
+
+		log.Printf("activate resume: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to activate resume")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "activated"})
+}
+
 func readResumeUpload(w http.ResponseWriter, r *http.Request, requireFile bool) (string, string, []byte, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxResumeSize+(1<<20))
 	if err := r.ParseMultipartForm(maxResumeSize); err != nil {

@@ -4,7 +4,7 @@ import "net/http"
 
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", handleHealth)
-	mux.HandleFunc("GET /api/jobs", handleSearchJobs)
+	mux.HandleFunc("GET /api/jobs", withOptionalAuth(handleSearchJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", handleGetJob)
 	mux.HandleFunc("GET /api/tags", handleGetTags)
 	mux.HandleFunc("POST /api/profile/create", handleCreateProfile)
@@ -27,4 +27,5 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/profile/resumes/{id}", withAuth(handleDeleteResume))
 	mux.HandleFunc("GET /api/profile/resumes/{id}/extraction", withAuth(handleGetResumeExtraction))
 	mux.HandleFunc("POST /api/profile/resumes/{id}/extraction", withAuth(handleTriggerResumeExtraction))
+	mux.HandleFunc("POST /api/profile/resumes/{id}/activate", withAuth(handleActivateResume))
 }
