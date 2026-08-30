@@ -45,7 +45,7 @@ export default function ProfileView({ token }: ProfileViewProps) {
       <EducationSection token={token} education={profile.education ?? []} />
       <SkillsSection token={token} skills={profile.skills ?? []} />
       <WorkExperienceSection token={token} workExperience={profile.work_experience ?? []} />
-      <ResumesSection token={token} resumes={profile.resumes ?? []} />
+      <ResumesSection token={token} resumes={profile.resumes ?? []} profile={profile} />
     </div>
   )
 }

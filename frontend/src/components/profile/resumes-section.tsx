@@ -1,13 +1,15 @@
 import {
   downloadResume,
   useActivateResumeMutation,
+  useApplyResumeExtractionMutation,
   useDeleteResumeMutation,
   useResumeExtractionQuery,
   useTriggerResumeExtractionMutation,
   useUpdateResumeMutation,
   useUploadResumeMutation,
+  type ApplyResumeExtractionResult,
 } from '@/src/api/profile'
-import type { Resume } from '@/src/api/schemas'
+import type { Profile, Resume } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
@@ -19,7 +21,7 @@ import { useId, useState, type FormEvent } from 'react'
 
 const acceptedResumeTypes = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
-export function ResumesSection({ token, resumes }: { token: string; resumes: Resume[] }) {
+export function ResumesSection({ token, resumes, profile }: { token: string; resumes: Resume[]; profile: Profile }) {
   const uploadResume = useUploadResumeMutation(token)
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +40,7 @@ export function ResumesSection({ token, resumes }: { token: string; resumes: Res
       <p className="text-xs text-muted-foreground">Upload PDF, DOC, or DOCX files up to 10 MB. Your active resume is used to rank job search results by relevance.</p>
     </CardHeader>
     <CardContent className="space-y-3">
-      {resumes.length > 0 ? <ul className="space-y-2">{resumes.map((resume) => <ResumeEntry key={resume.id} token={token} resume={resume} />)}</ul> : <p className="text-sm text-muted-foreground">No resumes uploaded yet.</p>}
+      {resumes.length > 0 ? <ul className="space-y-2">{resumes.map((resume) => <ResumeEntry key={resume.id} token={token} resume={resume} profile={profile} />)}</ul> : <p className="text-sm text-muted-foreground">No resumes uploaded yet.</p>}
       <form onSubmit={handleUpload} className="flex flex-wrap items-center gap-2">
         <Label htmlFor={id} className="sr-only">Resume file</Label>
         <Input id={id} type="file" accept={acceptedResumeTypes} onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="max-w-sm" />
@@ -55,7 +57,7 @@ function splitFileName(fileName: string): [string, string] {
   return [fileName.slice(0, dot), fileName.slice(dot)]
 }
 
-function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
+function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume; profile: Profile }) {
   const updateResume = useUpdateResumeMutation(token)
   const deleteResume = useDeleteResumeMutation(token)
   const activateResume = useActivateResumeMutation(token)
@@ -115,14 +117,17 @@ function ResumeEntry({ token, resume }: { token: string; resume: Resume }) {
     </div>
     {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
     <div className="mt-3 border-t border-border pt-3">
-      <ResumeExtractionPanel token={token} resumeId={resume.id} />
+      <ResumeExtractionPanel token={token} resumeId={resume.id} profile={profile} />
     </div>
   </li>
 }
 
-function ResumeExtractionPanel({ token, resumeId }: { token: string; resumeId: number }) {
+function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; resumeId: number; profile: Profile }) {
   const { data, isLoading } = useResumeExtractionQuery(token, resumeId, { enabled: true })
   const retryExtraction = useTriggerResumeExtractionMutation(token)
+  const applyExtraction = useApplyResumeExtractionMutation(token)
+  const [applyResult, setApplyResult] = useState<ApplyResumeExtractionResult | null>(null)
+  const [applyError, setApplyError] = useState<string | null>(null)
 
   if (isLoading || !data || data.status === 'pending') {
     return <p className="text-sm text-muted-foreground">Extracting details...</p>
@@ -147,7 +152,30 @@ function ResumeExtractionPanel({ token, resumeId }: { token: string; resumeId: n
   const projects = data.projects ?? []
   const hasContactInfo = data.full_name || data.email || data.phone || data.linked_in || data.github || data.portfolio
 
+  function handleApply() {
+    setApplyError(null)
+    setApplyResult(null)
+    applyExtraction.mutate(
+      { profile, extraction: data! },
+      {
+        onSuccess: (result) => setApplyResult(result),
+        onError: (err) => setApplyError(err instanceof Error ? err.message : 'Unable to apply resume details to profile'),
+      },
+    )
+  }
+
   return <div className="space-y-3 text-sm">
+    <div className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={handleApply} disabled={applyExtraction.isPending}>
+        {applyExtraction.isPending ? 'Applying...' : 'Apply to profile'}
+      </Button>
+      {applyResult && <p className="text-xs text-muted-foreground">
+        {applyResult.updatedBasicInfo || applyResult.addedEducation || applyResult.addedSkills || applyResult.addedWorkExperience
+          ? `Added ${applyResult.addedEducation} education, ${applyResult.addedSkills} skill(s), ${applyResult.addedWorkExperience} work experience entr${applyResult.addedWorkExperience === 1 ? 'y' : 'ies'}${applyResult.updatedBasicInfo ? ', and updated basic info' : ''}.`
+          : 'Nothing new to add — profile already has this information.'}
+      </p>}
+      {applyError && <p role="alert" className="text-xs text-destructive">{applyError}</p>}
+    </div>
     {hasContactInfo && <div className="space-y-0.5">
       {data.full_name && <p><span className="text-muted-foreground">Name:</span> {data.full_name}</p>}
       {data.email && <p><span className="text-muted-foreground">Email:</span> {data.email}</p>}
