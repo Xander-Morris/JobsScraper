@@ -71,4 +71,10 @@ type Job struct {
 	PostedAt      time.Time     `json:"posted_at"`
 	URL           string        `json:"url"`
 	Description   string        `json:"description"`
+	// MatchScore is a text-relevance score (roughly 0-1) against the caller's active
+	// resume, nil when there's no active resume to compare against.
+	MatchScore *float64 `json:"match_score,omitempty"`
+	// Applied is whether the caller has marked this job as applied to. Always false
+	// for anonymous callers.
+	Applied bool `json:"applied"`
 }

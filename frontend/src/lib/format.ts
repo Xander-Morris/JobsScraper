@@ -21,6 +21,23 @@ export function formatWorkplaceType(type: string): string {
   }
 }
 
+// matchFitLabel turns a raw ts_rank-based match_score into a badge label. Raw
+// text-relevance scores aren't calibrated to a meaningful absolute scale, so when
+// `best` (the top score among a set of jobs) is available we bucket relative to
+// it instead of showing a misleading absolute percentage.
+export function matchFitLabel(score: number | null | undefined, best?: number): string | null {
+  if (score == null || score <= 0) return null
+
+  if (best && best > 0) {
+    const ratio = score / best
+    if (ratio >= 0.7) return 'Great fit'
+    if (ratio >= 0.4) return 'Good fit'
+    return null
+  }
+
+  return 'Matches your resume'
+}
+
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso)
   const diffMs = Date.now() - date.getTime()

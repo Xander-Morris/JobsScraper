@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,26 +12,37 @@ import (
 	"main/database"
 	"main/scraper"
 	"main/server"
+	"main/utils"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	if err := utils.RequireEnv("DATABASE_CONNECTION", "SECRET_KEY"); err != nil {
+		slog.Error("startup: env validation failed", "error", err)
+		os.Exit(1)
+	}
+
 	err := database.CreateTables()
 
 	if err != nil {
-		log.Fatalf("Could not create tables for database: %v", err)
+		slog.Error("startup: create tables failed", "error", err)
+		os.Exit(1)
 	}
 
 	defer database.CloseDb()
 
 	go scraper.StartScrapingJob()
+	go server.StartDigestScheduler()
 
 	srv := server.New(serverAddr())
 
 	go func() {
-		log.Printf("server listening on %s", srv.Addr)
+		slog.Info("server listening", "addr", srv.Addr)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -43,7 +54,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("server shutdown error: %v", err)
+		slog.Error("server shutdown error", "error", err)
 	}
 }
 

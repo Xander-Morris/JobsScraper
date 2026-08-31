@@ -16,7 +16,7 @@ export const Route = createFileRoute('/jobs/')({
 })
 
 function JobsPage() {
-  const { isAuthenticated, token } = useAuth()
+  const { isAuthenticated, isInitializing, token } = useAuth()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 
@@ -36,6 +36,17 @@ function JobsPage() {
 
   function updateFilters(next: JobSearchState) {
     navigate({ search: { ...next, page: 1 } })
+  }
+
+  const bestMatchScore = Math.max(0, ...(data?.jobs.map((job) => job.match_score ?? 0) ?? []))
+
+  if (isInitializing) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-8">
+        <h1 className="text-2xl font-semibold text-heading">Jobs</h1>
+        <Skeleton className="mt-6 h-24 w-full rounded-xl" />
+      </div>
+    )
   }
 
   if (!isAuthenticated) {
@@ -79,7 +90,7 @@ function JobsPage() {
           </p>
           <ul className="mt-2 space-y-2">
             {data.jobs.map((job) => (
-              <JobCard key={job.id} job={job} />
+              <JobCard key={job.id} job={job} bestMatchScore={bestMatchScore} />
             ))}
           </ul>
 

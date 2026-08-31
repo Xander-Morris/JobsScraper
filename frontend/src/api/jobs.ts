@@ -1,6 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { z } from 'zod'
 import { apiFetch } from './client'
 import { jobSchema, jobSearchResponseSchema, type Job, type JobSearchResponse } from './schemas'
+
+const statusResponseSchema = z.object({ status: z.string() })
 
 export interface JobSearchParams {
   q?: string
@@ -35,8 +38,10 @@ export function fetchJobs(params: JobSearchParams = {}, token?: string | null): 
   })
 }
 
-export function fetchJob(id: number): Promise<Job> {
-  return apiFetch(`/api/jobs/${id}`, jobSchema)
+export function fetchJob(id: number, token?: string | null): Promise<Job> {
+  return apiFetch(`/api/jobs/${id}`, jobSchema, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
 }
 
 export function useJobsQuery(
@@ -50,10 +55,43 @@ export function useJobsQuery(
   })
 }
 
-export function useJobQuery(id: number) {
+export function useJobQuery(id: number, token?: string | null) {
   return useQuery({
-    queryKey: ['jobs', id],
-    queryFn: () => fetchJob(id),
+    queryKey: ['jobs', id, token],
+    queryFn: () => fetchJob(id, token),
     enabled: Number.isFinite(id),
   })
+}
+
+export function markJobApplied(token: string, id: number) {
+  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export function unmarkJobApplied(token: string, id: number) {
+  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+function useJobAppliedMutation(mutationFn: (id: number) => Promise<{ status: string }>) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+}
+
+export function useMarkJobAppliedMutation(token: string | null) {
+  return useJobAppliedMutation((id: number) => markJobApplied(token!, id))
+}
+
+export function useUnmarkJobAppliedMutation(token: string | null) {
+  return useJobAppliedMutation((id: number) => unmarkJobApplied(token!, id))
 }

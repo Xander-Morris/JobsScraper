@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"log"
+	"log/slog"
 	"main/utils"
+	"os"
 	"sync"
 	"time"
 
@@ -39,10 +39,11 @@ func GetDb() (*sql.DB, error) {
 
 	err = db.PingContext(ctx)
 	if err != nil {
-		log.Fatalf("Failed to ping Supabase database: %v\n", err)
+		slog.Error("failed to ping database", "error", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Successfully connected to Supabase database!")
+	slog.Info("connected to database")
 	cachedDb = db
 
 	return cachedDb, nil

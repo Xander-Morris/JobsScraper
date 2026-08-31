@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,10 +22,12 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if profileID, ok := profileIDFromContext(r.Context()); ok {
+		params.ProfileID = profileID
+
 		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
 
 		if err != nil {
-			log.Printf("search jobs: get active resume extraction: %v", err)
+			slog.Error("search jobs: get active resume extraction", "error", err)
 		} else if found {
 			params.ResumeQuery = buildResumeSearchQuery(extraction)
 		}
@@ -34,7 +36,7 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 	result, err := database.SearchForJobs(r.Context(), params)
 
 	if err != nil {
-		log.Printf("search jobs: %v", err)
+		slog.Error("search jobs", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to search jobs")
 		return
 	}
@@ -59,7 +61,21 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := database.GetJobByID(r.Context(), id)
+	detailParams := database.JobDetailParams{}
+
+	if profileID, ok := profileIDFromContext(r.Context()); ok {
+		detailParams.ProfileID = profileID
+
+		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
+
+		if err != nil {
+			slog.Error("get job: get active resume extraction", "error", err)
+		} else if found {
+			detailParams.ResumeQuery = buildResumeSearchQuery(extraction)
+		}
+	}
+
+	job, err := database.GetJobByID(r.Context(), id, detailParams)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -67,12 +83,60 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("get job: %v", err)
+		slog.Error("get job", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get job")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, job)
+}
+
+func handleMarkJobApplied(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	if err := database.MarkJobApplied(r.Context(), profileID, jobID); err != nil {
+		slog.Error("mark job applied", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to mark job applied")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
+}
+
+func handleUnmarkJobApplied(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	if err := database.UnmarkJobApplied(r.Context(), profileID, jobID); err != nil {
+		slog.Error("unmark job applied", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to unmark job applied")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "not_applied"})
 }
 
 type jobSearchResponse struct {

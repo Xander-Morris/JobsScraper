@@ -1,7 +1,6 @@
 import type { ZodType } from 'zod'
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8090'
-const TOKEN_STORAGE_KEY = 'profile_token'
 const tokenRefreshedEvent = 'profile-token-refreshed'
 const sessionExpiredEvent = 'profile-session-expired'
 
@@ -35,7 +34,6 @@ async function refreshAccessToken(): Promise<string | null> {
       const body = (await res.json()) as { token?: unknown }
       if (typeof body.token !== 'string' || body.token === '') return null
 
-      localStorage.setItem(TOKEN_STORAGE_KEY, body.token)
       window.dispatchEvent(new CustomEvent<string>(tokenRefreshedEvent, { detail: body.token }))
       return body.token
     } catch {
@@ -87,4 +85,4 @@ export function apiFetch<T>(path: string, schema: ZodType<T>, init?: RequestInit
   return apiFetchInternal(path, schema, init, false)
 }
 
-export { sessionExpiredEvent, tokenRefreshedEvent }
+export { refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent }

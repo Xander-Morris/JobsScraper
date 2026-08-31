@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"fmt"
+	"log/slog"
 	"main/database"
 	"main/jobs"
 	"sync"
@@ -9,21 +10,29 @@ import (
 )
 
 func runScraper(sources []jobs.JobSource) {
-	fmt.Printf("\n--- Starting fetch cycle at %v ---\n", time.Now().Format(time.RFC3339))
+	slog.Info("scraper: starting fetch cycle")
 
 	var wg sync.WaitGroup
 	ch := make(chan []jobs.Job, len(sources))
 
 	for _, source := range sources {
 		wg.Go(func() {
+			sourceName := fmt.Sprintf("%T", source)
+
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("scraper: panic fetching jobs", "source", sourceName, "panic", r)
+				}
+			}()
+
 			sourceJobs, err := source.FetchJobs()
 
 			if err != nil {
-				fmt.Printf("Failed to fetch jobs from %T: %v\n", source, err)
+				slog.Error("scraper: fetch failed", "source", sourceName, "error", err)
 				return
 			}
 
-			fmt.Printf("Fetched %d jobs from %T\n", len(sourceJobs), source)
+			slog.Info("scraper: fetched jobs", "source", sourceName, "count", len(sourceJobs))
 			ch <- sourceJobs
 		})
 	}
@@ -47,13 +56,27 @@ func runScraper(sources []jobs.JobSource) {
 			}
 		}
 
-		fmt.Printf("Length after filter: %d\n", len(filtered))
+		slog.Debug("scraper: filtered jobs", "count", len(filtered))
 		fetchedJobs = append(fetchedJobs, filtered...)
 	}
 
 	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
-		fmt.Println(err)
+		slog.Error("scraper: write jobs to database", "error", err)
 	}
+}
+
+// runScraperSafely wraps runScraper with a panic recovery so one bad fetch
+// cycle logs and moves on instead of killing the scraper goroutine (and, since
+// nothing restarts it, silently ending all future scraping) for the rest of
+// the process's life.
+func runScraperSafely(sources []jobs.JobSource) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("scraper: panic during scrape cycle", "panic", r)
+		}
+	}()
+
+	runScraper(sources)
 }
 
 func StartScrapingJob() {
@@ -68,11 +91,11 @@ func StartScrapingJob() {
 		jobs.NewWeWorkRemotely(botAgent),
 	}
 
-	runScraper(sources)
+	runScraperSafely(sources)
 	ticker := time.NewTicker(12 * time.Hour)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		runScraper(sources)
+		runScraperSafely(sources)
 	}
 }

@@ -2,14 +2,6 @@ package database
 
 import "encoding/json"
 
-type Schema map[string]TableDefinition
-
-type TableDefinition struct {
-	Columns         []map[string]string
-	Indexes         []string
-	InsertStatement string
-}
-
 type JobType int
 
 const (
@@ -22,7 +14,7 @@ const (
 
 func ParseJobType(s string) (JobType, bool) {
 	switch s {
-	case "":
+	case "", "unknown":
 		return JobTypeUnknown, true
 	case "contract":
 		return JobTypeContract, true
@@ -68,221 +60,53 @@ func (j *JobType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-/*
-*
+// insertStatements holds the upsert SQL for tables written outside their own
+// dedicated files. Table DDL itself lives in migrations/ (see migrate.go).
+var insertStatements = map[string]string{
+	"jobs": `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT(url) DO UPDATE SET
+			title = excluded.title,
+			company = excluded.company,
+			location = excluded.location,
+			workplace_type = excluded.workplace_type,
+			salary_min = excluded.salary_min,
+			salary_max = excluded.salary_max,
+			posted_at = excluded.posted_at,
+			description = excluded.description
+		RETURNING id;`,
 
-	tableCreationOrder lists table names in dependency order (referenced tables
-	before the tables that REFERENCE them). Go randomizes map iteration order,
-	so CreateTables must not range over the tables map directly when creating
-	tables with foreign keys.
+	"tags": `INSERT INTO tags (tag) VALUES ($1) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
 
-*
-*/
-var tableCreationOrder = []string{
-	"jobs",
-	"tags",
-	"job_tags",
-	"profiles",
-	"profile_refresh_tokens",
-	"profiles_education",
-	"profiles_work_experience",
-	"profiles_work_experience_bullets",
-	"profiles_skills",
-	"profile_resumes",
-	"profile_resume_extractions",
-}
+	"job_tags": `INSERT INTO job_tags (job_id, tag_id) VALUES ($1, $2) ON CONFLICT (job_id, tag_id) DO NOTHING;`,
 
-var tables = Schema{
-	"jobs": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"title": "TEXT NOT NULL"},
-			{"company": "TEXT NOT NULL"},
-			{"location": "TEXT"},
-			{"workplace_type": "INTEGER NOT NULL DEFAULT 0"},
-			{"salary_min": "INTEGER"},
-			{"salary_max": "INTEGER"},
-			{"posted_at": "TEXT"},
-			{"url": "TEXT NOT NULL"},
-			{"description": "TEXT"},
-			{"search_vector": "tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))) STORED"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_url ON jobs(url);",
-			"CREATE INDEX IF NOT EXISTS idx_workplace_type ON jobs(workplace_type)",
-			"CREATE INDEX IF NOT EXISTS idx_salary_min ON jobs(salary_min)",
-			"CREATE INDEX IF NOT EXISTS idx_salary_max ON jobs(salary_max)",
-			"CREATE INDEX IF NOT EXISTS idx_jobs_search_vector ON jobs USING GIN(search_vector);",
-		},
-		InsertStatement: `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			ON CONFLICT(url) DO UPDATE SET
-				title = excluded.title,
-				company = excluded.company,
-				location = excluded.location,
-				workplace_type = excluded.workplace_type,
-				salary_min = excluded.salary_min,
-				salary_max = excluded.salary_max,
-				posted_at = excluded.posted_at,
-				description = excluded.description
-			RETURNING id;`,
-	},
-	"tags": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"tag": "TEXT NOT NULL"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_tag ON tags(tag);",
-		},
-		InsertStatement: `INSERT INTO tags (tag) VALUES ($1) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
-	},
-	"job_tags": TableDefinition{
-		Columns: []map[string]string{
-			{"job_id": "INTEGER REFERENCES jobs(id)"},
-			{"tag_id": "INTEGER REFERENCES tags(id)"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_job_tag_pair ON job_tags(job_id, tag_id);",
-		},
-		InsertStatement: `INSERT INTO job_tags (job_id, tag_id) VALUES ($1, $2) ON CONFLICT (job_id, tag_id) DO NOTHING;`,
-	},
-	"profiles": TableDefinition{
-		Columns: []map[string]string{
-			// email and password required at first, but rest can be filled in as they want to
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"email": "TEXT NOT NULL"},
-			{"password": "TEXT NOT NULL"},
+	"profiles": `INSERT INTO profiles (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id;`,
 
-			// to be filled in dynamically when they decide to on profile view
-			{"name": "TEXT"},
-			{"address": "TEXT"},
-			{"linked_in": "TEXT"},
-			{"github": "TEXT"},
-			{"portfolio": "TEXT"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_email ON profiles(email);",
-		},
-		InsertStatement: `INSERT INTO profiles (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id;`,
-	},
-	"profile_refresh_tokens": TableDefinition{
-		Columns: []map[string]string{
-			{"token_hash": "TEXT PRIMARY KEY"},
-			{"profile_id": "INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE"},
-			{"expires_at": "TIMESTAMPTZ NOT NULL"},
-			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
-		},
-		Indexes: []string{
-			"CREATE INDEX IF NOT EXISTS idx_profile_refresh_tokens_expires_at ON profile_refresh_tokens(expires_at);",
-		},
-	},
-	"profiles_education": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"profile_id": "INTEGER REFERENCES profiles(id)"},
-			{"school_name": "TEXT NOT NULL"},
-			{"major": "TEXT NOT NULL"},
-			{"degree": "TEXT NOT NULL"},
-			{"gpa": "DECIMAL(3,2)"},
-			{"start_date": "DATE"},
-			{"end_date": "DATE"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_education_unique ON profiles_education(profile_id, school_name, major, degree);",
-		},
-		InsertStatement: `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (profile_id, school_name, major, degree) DO UPDATE SET
-				gpa = excluded.gpa,
-				start_date = excluded.start_date,
-				end_date = excluded.end_date
-			RETURNING id;`,
-	},
-	"profiles_work_experience": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"profile_id": "INTEGER REFERENCES profiles(id)"},
-			{"company": "TEXT NOT NULL"},
-			{"job_title": "TEXT NOT NULL"},
-			{"job_type": "INTEGER NOT NULL DEFAULT 0"},
-			{"location": "TEXT"},
-			{"start_date": "DATE"},
-			{"end_date": "DATE"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_work_experience_unique ON profiles_work_experience(profile_id, company, job_title, start_date);",
-		},
-		InsertStatement: `INSERT INTO profiles_work_experience (profile_id, company, job_title, job_type, location, start_date, end_date)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (profile_id, company, job_title, start_date) DO UPDATE SET
-				job_type = excluded.job_type,
-				location = excluded.location,
-				end_date = excluded.end_date
-			RETURNING id;`,
-	},
-	"profiles_work_experience_bullets": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"work_experience_id": "INTEGER REFERENCES profiles_work_experience(id)"},
-			{"bullet": "TEXT NOT NULL"},
-			{"position": "INTEGER NOT NULL DEFAULT 0"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_work_experience_bullets_unique ON profiles_work_experience_bullets(work_experience_id, bullet);",
-		},
-		InsertStatement: `INSERT INTO profiles_work_experience_bullets (work_experience_id, bullet, position)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (work_experience_id, bullet) DO UPDATE SET
-				position = excluded.position
-			RETURNING id;`,
-	},
-	"profiles_skills": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"profile_id": "INTEGER REFERENCES profiles(id)"},
-			{"skill": "TEXT NOT NULL"},
-		},
-		Indexes: []string{
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_skills_unique ON profiles_skills(profile_id, skill);",
-		},
-		InsertStatement: `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id;`,
-	},
-	"profile_resumes": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"profile_id": "INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE"},
-			{"file_name": "TEXT NOT NULL"},
-			{"content_type": "TEXT NOT NULL"},
-			{"file_size": "INTEGER NOT NULL"},
-			{"content": "BYTEA NOT NULL"},
-			{"is_active": "BOOLEAN NOT NULL DEFAULT FALSE"},
-			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
-			{"updated_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
-		},
-		Indexes: []string{
-			"CREATE INDEX IF NOT EXISTS idx_profile_resumes_profile_id ON profile_resumes(profile_id);",
-		},
-	},
-	"profile_resume_extractions": TableDefinition{
-		Columns: []map[string]string{
-			{"id": "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"},
-			{"resume_id": "INTEGER NOT NULL UNIQUE REFERENCES profile_resumes(id) ON DELETE CASCADE"},
-			{"status": "TEXT NOT NULL DEFAULT 'pending'"},
-			{"full_name": "TEXT"},
-			{"email": "TEXT"},
-			{"phone": "TEXT"},
-			{"linked_in": "TEXT"},
-			{"github": "TEXT"},
-			{"portfolio": "TEXT"},
-			{"summary": "TEXT"},
-			{"skills": "JSONB"},
-			{"education": "JSONB"},
-			{"work_experience": "JSONB"},
-			{"projects": "JSONB"},
-			{"error": "TEXT"},
-			{"created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
-			{"updated_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
-		},
-	},
+	"profiles_education": `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (profile_id, school_name, major, degree) DO UPDATE SET
+			gpa = excluded.gpa,
+			start_date = excluded.start_date,
+			end_date = excluded.end_date
+		RETURNING id;`,
+
+	"profiles_work_experience": `INSERT INTO profiles_work_experience (profile_id, company, job_title, job_type, location, start_date, end_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (profile_id, company, job_title, start_date) DO UPDATE SET
+			job_type = excluded.job_type,
+			location = excluded.location,
+			end_date = excluded.end_date
+		RETURNING id;`,
+
+	"profiles_work_experience_bullets": `INSERT INTO profiles_work_experience_bullets (work_experience_id, bullet, position)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (work_experience_id, bullet) DO UPDATE SET
+			position = excluded.position
+		RETURNING id;`,
+
+	"profiles_skills": `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id;`,
+
+	"profile_job_applications": `INSERT INTO profile_job_applications (profile_id, job_id) VALUES ($1, $2)
+		ON CONFLICT (profile_id, job_id) DO UPDATE SET applied_at = NOW()
+		RETURNING id;`,
 }

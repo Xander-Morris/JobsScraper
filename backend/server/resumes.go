@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"main/database"
 	"main/llm"
 	"mime"
@@ -34,12 +34,12 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 
 	id, err := database.AddResume(r.Context(), profileID, fileName, contentType, content)
 	if err != nil {
-		log.Printf("upload resume: %v", err)
+		slog.Error("upload resume", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to upload resume")
 		return
 	}
 
-	go runResumeExtraction(id, fileName, contentType, content)
+	queueResumeExtraction(id, fileName, contentType, content)
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -68,7 +68,7 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = database.ReplaceResume(r.Context(), profileID, resumeID, fileName, contentType, content)
 		if err == nil {
-			go runResumeExtraction(resumeID, fileName, contentType, content)
+			queueResumeExtraction(resumeID, fileName, contentType, content)
 		}
 	}
 
@@ -78,7 +78,7 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("update resume: %v", err)
+		slog.Error("update resume", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update resume")
 		return
 	}
@@ -106,7 +106,7 @@ func handleDownloadResume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("download resume: %v", err)
+		slog.Error("download resume", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to download resume")
 		return
 	}
@@ -137,7 +137,7 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("delete resume: %v", err)
+		slog.Error("delete resume", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete resume")
 		return
 	}
@@ -145,14 +145,27 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-const resumeExtractionTimeout = 5 * time.Minute 
+const resumeExtractionTimeout = 5 * time.Minute
+
+const maxConcurrentResumeExtractions = 3
+
+var resumeExtractionSlots = make(chan struct{}, maxConcurrentResumeExtractions)
+
+func queueResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
+	go func() {
+		resumeExtractionSlots <- struct{}{}
+		defer func() { <-resumeExtractionSlots }()
+
+		runResumeExtraction(resumeID, fileName, contentType, content)
+	}()
+}
 
 func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), resumeExtractionTimeout)
 	defer cancel()
 
 	if err := database.UpsertResumeExtractionPending(ctx, resumeID); err != nil {
-		log.Printf("resume extraction: mark pending resume %d: %v", resumeID, err)
+		slog.Error("resume extraction: mark pending", "resume_id", resumeID, "error", err)
 		return
 	}
 
@@ -167,13 +180,13 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 		defer saveCancel()
 
 		if dbErr := database.SaveResumeExtractionFailure(saveCtx, resumeID, status, err.Error()); dbErr != nil {
-			log.Printf("resume extraction: save failure resume %d: %v", resumeID, dbErr)
+			slog.Error("resume extraction: save failure", "resume_id", resumeID, "error", dbErr)
 		}
 		return
 	}
 
 	if err := database.SaveResumeExtractionResult(ctx, resumeID, extracted); err != nil {
-		log.Printf("resume extraction: save result resume %d: %v", resumeID, err)
+		slog.Error("resume extraction: save result", "resume_id", resumeID, "error", err)
 	}
 }
 
@@ -197,7 +210,7 @@ func handleGetResumeExtraction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("get resume extraction: %v", err)
+		slog.Error("get resume extraction", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get resume extraction")
 		return
 	}
@@ -225,12 +238,12 @@ func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("trigger resume extraction: %v", err)
+		slog.Error("trigger resume extraction", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to trigger resume extraction")
 		return
 	}
 
-	go runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
+	queueResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "pending"})
 }
@@ -254,7 +267,7 @@ func handleActivateResume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("activate resume: %v", err)
+		slog.Error("activate resume", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to activate resume")
 		return
 	}

@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"main/utils"
 	"net/http"
 	"os"
@@ -106,7 +106,7 @@ func withLogging(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start))
+		slog.Info("http request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start))
 	})
 }
 
@@ -114,7 +114,7 @@ func withRecovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("panic handling %s %s: %v", r.Method, r.URL.Path, err)
+				slog.Error("panic handling request", "method", r.Method, "path", r.URL.Path, "panic", err)
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()

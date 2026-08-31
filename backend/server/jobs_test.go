@@ -33,7 +33,11 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags CASCADE;"); err != nil {
+	// schema_migrations is golang-migrate's version table — it must be dropped
+	// alongside the tables it tracks, or the next CreateTables() call sees the
+	// target version already applied and skips recreating what was just
+	// dropped here.
+	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags, schema_migrations CASCADE;"); err != nil {
 		panic(err)
 	}
 

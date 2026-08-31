@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"main/database"
 	"main/utils"
 	"net/http"
@@ -88,29 +88,35 @@ func createSession(w http.ResponseWriter, profileID int64) (string, error) {
 
 func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 	req := &database.ProfileRequest{}
-	err := json.NewDecoder(r.Body).Decode(&req)
 
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not login to profile!"})
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
 	id, hash, err := database.GetProfileByEmail(req.Email)
 
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not login to profile!"})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		slog.Error("login profile: get profile by email", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not log in")
 		return
 	}
 
-	if !database.CheckPasswordHash(req.Password, hash) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Incorrect password"})
+	found := err == nil
+	if !found {
+		hash = database.DummyPasswordHash
+	}
+
+	if !database.CheckPasswordHash(req.Password, hash) || !found {
+		writeError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	token, err := createSession(w, id)
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not create token!"})
+		slog.Error("login profile: create session", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not log in")
 		return
 	}
 
@@ -119,24 +125,30 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 
 func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 	req := &database.ProfileRequest{}
-	err := json.NewDecoder(r.Body).Decode(&req)
 
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Invalid request!"})
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
 
 	profileID, err := database.CreateProfile(req)
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not create profile!"})
+		if errors.Is(err, database.ErrInvalidProfile) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		slog.Error("create profile", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not create profile")
 		return
 	}
 
 	token, err := createSession(w, profileID)
 
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "Could not create token!"})
+		slog.Error("create profile: create session", "error", err)
+		writeError(w, http.StatusInternalServerError, "could not create profile")
 		return
 	}
 
@@ -153,7 +165,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 
 	newRefreshToken, err := database.NewRefreshToken()
 	if err != nil {
-		log.Printf("generate refresh token: %v", err)
+		slog.Error("generate refresh token", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not refresh session")
 		return
 	}
@@ -166,20 +178,20 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "refresh token missing or expired")
 			return
 		}
-		log.Printf("rotate refresh token: %v", err)
+		slog.Error("rotate refresh token", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not refresh session")
 		return
 	}
 
 	exists, err := database.ProfileExists(r.Context(), profileID)
 	if err != nil {
-		log.Printf("check refreshed profile: %v", err)
+		slog.Error("check refreshed profile", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not refresh session")
 		return
 	}
 	if !exists {
 		if err := database.DeleteRefreshToken(r.Context(), newRefreshToken); err != nil {
-			log.Printf("delete orphaned refresh token: %v", err)
+			slog.Error("delete orphaned refresh token", "error", err)
 		}
 		clearRefreshCookie(w)
 		writeError(w, http.StatusUnauthorized, "profile no longer exists")
@@ -199,7 +211,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 func handleLogoutProfile(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(refreshCookieName); err == nil && cookie.Value != "" {
 		if err := database.DeleteRefreshToken(r.Context(), cookie.Value); err != nil {
-			log.Printf("delete refresh token: %v", err)
+			slog.Error("delete refresh token", "error", err)
 		}
 	}
 	clearRefreshCookie(w)
@@ -222,7 +234,7 @@ func handleGetProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("get profile: %v", err)
+		slog.Error("get profile", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to get profile")
 		return
 	}
@@ -251,7 +263,7 @@ func handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("update profile: %v", err)
+		slog.Error("update profile", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update profile")
 		return
 	}
@@ -284,6 +296,41 @@ func handleAddEducation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
+func handleUpdateEducation(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid education id")
+		return
+	}
+
+	req := &database.AddEducationRequest{}
+
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	if err := database.UpdateEducation(r.Context(), profileID, id, req); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "education entry not found")
+			return
+		}
+
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
 func handleDeleteEducation(w http.ResponseWriter, r *http.Request) {
 	profileID, ok := profileIDFromContext(r.Context())
 
@@ -305,7 +352,7 @@ func handleDeleteEducation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("delete education: %v", err)
+		slog.Error("delete education", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete education entry")
 		return
 	}
@@ -359,7 +406,7 @@ func handleDeleteSkill(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("delete skill: %v", err)
+		slog.Error("delete skill", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete skill")
 		return
 	}
@@ -392,6 +439,41 @@ func handleAddWorkExperience(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
+func handleUpdateWorkExperience(w http.ResponseWriter, r *http.Request) {
+	profileID, ok := profileIDFromContext(r.Context())
+
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid work experience id")
+		return
+	}
+
+	req := &database.AddWorkExperienceRequest{}
+
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	if err := database.UpdateWorkExperience(r.Context(), profileID, id, req); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "work experience entry not found")
+			return
+		}
+
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
 func handleDeleteWorkExperience(w http.ResponseWriter, r *http.Request) {
 	profileID, ok := profileIDFromContext(r.Context())
 
@@ -413,7 +495,7 @@ func handleDeleteWorkExperience(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("delete work experience: %v", err)
+		slog.Error("delete work experience", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete work experience entry")
 		return
 	}
@@ -486,7 +568,7 @@ func handleDeleteWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("delete work experience bullet: %v", err)
+		slog.Error("delete work experience bullet", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete bullet")
 		return
 	}

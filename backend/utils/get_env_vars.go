@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,4 +60,25 @@ func GetEnv() map[string]string {
 	allEnvVariables = envList
 
 	return allEnvVariables
+}
+
+// RequireEnv checks that every given key is set to a non-empty value, returning
+// an error naming all missing keys at once. Meant to be called once at startup so
+// misconfiguration fails fast and loud instead of surfacing later as a mysterious
+// empty JWT secret or a nil DB connection string.
+func RequireEnv(keys ...string) error {
+	env := GetEnv()
+	var missing []string
+
+	for _, key := range keys {
+		if env[key] == "" {
+			missing = append(missing, key)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	return nil
 }

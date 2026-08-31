@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,17 +17,18 @@ import (
 const dateLayout = "2006-01-02"
 
 type Profile struct {
-	ID             int64                   `json:"id"`
-	Email          string                  `json:"email"`
-	Name           string                  `json:"name"`
-	Address        string                  `json:"address"`
-	LinkedIn       string                  `json:"linked_in"`
-	GitHub         string                  `json:"github"`
-	Portfolio      string                  `json:"portfolio"`
-	Education      []ProfileEducation      `json:"education"`
-	Skills         []ProfileSkill          `json:"skills"`
-	WorkExperience []ProfileWorkExperience `json:"work_experience"`
-	Resumes        []ProfileResume         `json:"resumes"`
+	ID                 int64                   `json:"id"`
+	Email              string                  `json:"email"`
+	Name               string                  `json:"name"`
+	Address            string                  `json:"address"`
+	LinkedIn           string                  `json:"linked_in"`
+	GitHub             string                  `json:"github"`
+	Portfolio          string                  `json:"portfolio"`
+	EmailNotifications bool                    `json:"email_notifications"`
+	Education          []ProfileEducation      `json:"education"`
+	Skills             []ProfileSkill          `json:"skills"`
+	WorkExperience     []ProfileWorkExperience `json:"work_experience"`
+	Resumes            []ProfileResume         `json:"resumes"`
 }
 
 type ProfileResume struct {
@@ -72,11 +74,12 @@ type ProfileWorkExperience struct {
 }
 
 type UpdateProfileRequest struct {
-	Name      string `json:"name"`
-	Address   string `json:"address"`
-	LinkedIn  string `json:"linked_in"`
-	GitHub    string `json:"github"`
-	Portfolio string `json:"portfolio"`
+	Name               string `json:"name"`
+	Address            string `json:"address"`
+	LinkedIn           string `json:"linked_in"`
+	GitHub             string `json:"github"`
+	Portfolio          string `json:"portfolio"`
+	EmailNotifications bool   `json:"email_notifications"`
 }
 
 type AddEducationRequest struct {
@@ -129,6 +132,45 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
+// Compared against on a lookup miss so login timing doesn't leak whether an email exists.
+var DummyPasswordHash = mustHashPassword("this is not anybody's real password")
+
+func mustHashPassword(password string) string {
+	hash, err := HashPassword(password)
+
+	if err != nil {
+		panic(fmt.Errorf("hash dummy password: %w", err))
+	}
+
+	return hash
+}
+
+var ErrInvalidProfile = errors.New("invalid profile request")
+var errEmailVerificationTimeout = errors.New("email verification timed out")
+
+const emailVerificationTimeout = 8 * time.Second
+
+func verifyEmail(email string) (*emailverifier.Result, error) {
+	type outcome struct {
+		result *emailverifier.Result
+		err    error
+	}
+
+	done := make(chan outcome, 1)
+
+	go func() {
+		result, err := verifier.Verify(email)
+		done <- outcome{result, err}
+	}()
+
+	select {
+	case o := <-done:
+		return o.result, o.err
+	case <-time.After(emailVerificationTimeout):
+		return nil, errEmailVerificationTimeout
+	}
+}
+
 func GetProfileByEmail(email string) (int64, string, error) {
 	db, err := GetDb()
 
@@ -147,17 +189,22 @@ func GetProfileByEmail(email string) (int64, string, error) {
 }
 
 func CreateProfile(req *ProfileRequest) (int64, error) {
-	// Basic validation of email and password first
 	if len(req.Email) == 0 || len(req.Password) == 0 {
-		return 0, fmt.Errorf("Email and password cannot be empty!")
+		return 0, fmt.Errorf("%w: email and password are required", ErrInvalidProfile)
+	}
+	if len(req.Password) < 8 {
+		return 0, fmt.Errorf("%w: password must be at least 8 characters", ErrInvalidProfile)
 	}
 
-	result, err := verifier.Verify(req.Email)
-	if err != nil {
-		return 0, err
-	}
-	if !result.Syntax.Valid || !result.HasMxRecords || result.Disposable {
-		return 0, fmt.Errorf("Email is invalid or undeliverable")
+	result, err := verifyEmail(req.Email)
+	if errors.Is(err, errEmailVerificationTimeout) {
+		if !verifier.ParseAddress(req.Email).Valid {
+			return 0, fmt.Errorf("%w: email is invalid or undeliverable", ErrInvalidProfile)
+		}
+	} else if err != nil {
+		return 0, fmt.Errorf("verify email: %w", err)
+	} else if !result.Syntax.Valid || !result.HasMxRecords || result.Disposable {
+		return 0, fmt.Errorf("%w: email is invalid or undeliverable", ErrInvalidProfile)
 	}
 
 	db, err := GetDb()
@@ -186,7 +233,11 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 
 	var profileID int64
 
-	if err := tx.QueryRow(tables["profiles"].InsertStatement, req.Email, hashedPassword).Scan(&profileID); err != nil {
+	if err := tx.QueryRow(insertStatements["profiles"], req.Email, hashedPassword).Scan(&profileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("%w: email already registered", ErrInvalidProfile)
+		}
+
 		return 0, err
 	}
 
@@ -221,9 +272,11 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	profile := &Profile{ID: id}
 
 	row := db.QueryRowContext(ctx, `SELECT email, COALESCE(name, ''), COALESCE(address, ''),
-		COALESCE(linked_in, ''), COALESCE(github, ''), COALESCE(portfolio, '') FROM profiles WHERE id = $1`, id)
+		COALESCE(linked_in, ''), COALESCE(github, ''), COALESCE(portfolio, ''), email_notifications_enabled
+		FROM profiles WHERE id = $1`, id)
 
-	if err := row.Scan(&profile.Email, &profile.Name, &profile.Address, &profile.LinkedIn, &profile.GitHub, &profile.Portfolio); err != nil {
+	if err := row.Scan(&profile.Email, &profile.Name, &profile.Address, &profile.LinkedIn, &profile.GitHub,
+		&profile.Portfolio, &profile.EmailNotifications); err != nil {
 		return nil, err
 	}
 
@@ -627,8 +680,9 @@ func UpdateProfile(ctx context.Context, id int64, req *UpdateProfileRequest) err
 		return err
 	}
 
-	result, err := db.ExecContext(ctx, `UPDATE profiles SET name = $1, address = $2, linked_in = $3, github = $4, portfolio = $5 WHERE id = $6`,
-		req.Name, req.Address, req.LinkedIn, req.GitHub, req.Portfolio, id)
+	result, err := db.ExecContext(ctx, `UPDATE profiles SET name = $1, address = $2, linked_in = $3, github = $4,
+		portfolio = $5, email_notifications_enabled = $6 WHERE id = $7`,
+		req.Name, req.Address, req.LinkedIn, req.GitHub, req.Portfolio, req.EmailNotifications, id)
 
 	if err != nil {
 		return err
@@ -713,7 +767,7 @@ func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest
 
 	var educationID int64
 
-	err = db.QueryRowContext(ctx, tables["profiles_education"].InsertStatement,
+	err = db.QueryRowContext(ctx, insertStatements["profiles_education"],
 		profileID, req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate).Scan(&educationID)
 
 	if err != nil {
@@ -721,6 +775,51 @@ func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest
 	}
 
 	return educationID, nil
+}
+
+func UpdateEducation(ctx context.Context, profileID, educationID int64, req *AddEducationRequest) error {
+	if req.SchoolName == "" || req.Major == "" || req.Degree == "" {
+		return fmt.Errorf("school_name, major, and degree are required")
+	}
+
+	startDate, err := parseOptionalDate(req.StartDate)
+
+	if err != nil {
+		return fmt.Errorf("invalid start_date: %w", err)
+	}
+
+	endDate, err := parseOptionalDate(req.EndDate)
+
+	if err != nil {
+		return fmt.Errorf("invalid end_date: %w", err)
+	}
+
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	result, err := db.ExecContext(ctx, `UPDATE profiles_education
+		SET school_name = $1, major = $2, degree = $3, gpa = $4, start_date = $5, end_date = $6
+		WHERE id = $7 AND profile_id = $8`,
+		req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate, educationID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 func DeleteEducation(ctx context.Context, profileID, educationID int64) error {
@@ -786,7 +885,7 @@ func AddSkill(ctx context.Context, profileID int64, req *AddSkillRequest) (int64
 
 	var skillID int64
 
-	err = db.QueryRowContext(ctx, tables["profiles_skills"].InsertStatement, profileID, req.Skill).Scan(&skillID)
+	err = db.QueryRowContext(ctx, insertStatements["profiles_skills"], profileID, req.Skill).Scan(&skillID)
 
 	if err != nil {
 		return 0, err
@@ -938,7 +1037,7 @@ func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperie
 
 	var workExperienceID int64
 
-	err = db.QueryRowContext(ctx, tables["profiles_work_experience"].InsertStatement,
+	err = db.QueryRowContext(ctx, insertStatements["profiles_work_experience"],
 		profileID, req.Company, req.JobTitle, int(jobType), location, startDate, endDate).Scan(&workExperienceID)
 
 	if err != nil {
@@ -946,6 +1045,63 @@ func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperie
 	}
 
 	return workExperienceID, nil
+}
+
+func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64, req *AddWorkExperienceRequest) error {
+	if req.Company == "" || req.JobTitle == "" {
+		return fmt.Errorf("company and job_title are required")
+	}
+
+	jobType, ok := ParseJobType(req.JobType)
+
+	if !ok {
+		return fmt.Errorf("invalid job_type: %s", req.JobType)
+	}
+
+	startDate, err := parseOptionalDate(req.StartDate)
+
+	if err != nil {
+		return fmt.Errorf("invalid start_date: %w", err)
+	}
+
+	endDate, err := parseOptionalDate(req.EndDate)
+
+	if err != nil {
+		return fmt.Errorf("invalid end_date: %w", err)
+	}
+
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	var location *string
+
+	if req.Location != "" {
+		location = &req.Location
+	}
+
+	result, err := db.ExecContext(ctx, `UPDATE profiles_work_experience
+		SET company = $1, job_title = $2, job_type = $3, location = $4, start_date = $5, end_date = $6
+		WHERE id = $7 AND profile_id = $8`,
+		req.Company, req.JobTitle, int(jobType), location, startDate, endDate, workExperienceID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 func DeleteWorkExperience(ctx context.Context, profileID, workExperienceID int64) error {
@@ -1002,7 +1158,7 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 
 	var bulletID int64
 
-	err = db.QueryRowContext(ctx, tables["profiles_work_experience_bullets"].InsertStatement,
+	err = db.QueryRowContext(ctx, insertStatements["profiles_work_experience_bullets"],
 		workExperienceID, req.Bullet, req.Position).Scan(&bulletID)
 
 	if err != nil {

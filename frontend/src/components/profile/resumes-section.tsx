@@ -1,8 +1,8 @@
 import {
-  downloadResume,
   useActivateResumeMutation,
   useApplyResumeExtractionMutation,
   useDeleteResumeMutation,
+  useDownloadResumeMutation,
   useResumeExtractionQuery,
   useTriggerResumeExtractionMutation,
   useUpdateResumeMutation,
@@ -24,14 +24,13 @@ const acceptedResumeTypes = '.pdf,.doc,.docx,application/pdf,application/msword,
 export function ResumesSection({ token, resumes, profile }: { token: string; resumes: Resume[]; profile: Profile }) {
   const uploadResume = useUploadResumeMutation(token)
   const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const id = useId()
+  const error = uploadResume.error instanceof Error ? uploadResume.error.message : null
 
   function handleUpload(e: FormEvent) {
     e.preventDefault()
     if (!file) return
-    setError(null)
-    uploadResume.mutate(file, { onSuccess: () => setFile(null), onError: (err) => setError(err instanceof Error ? err.message : 'Unable to upload resume') })
+    uploadResume.mutate(file, { onSuccess: () => setFile(null) })
   }
 
   return <Card>
@@ -61,38 +60,35 @@ function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume
   const updateResume = useUpdateResumeMutation(token)
   const deleteResume = useDeleteResumeMutation(token)
   const activateResume = useActivateResumeMutation(token)
+  const downloadResume = useDownloadResumeMutation(token)
   const [baseName, extension] = splitFileName(resume.file_name)
   const [fileName, setFileName] = useState(baseName)
-  const [error, setError] = useState<string | null>(null)
   const replaceId = useId()
   const newFileName = `${fileName.trim()}${extension}`
+  const error = [downloadResume.error, updateResume.error].map((e) => (e instanceof Error ? e.message : null)).find(Boolean) ?? null
 
-  async function handleDownload() {
-    setError(null)
-    try {
-      const file = await downloadResume(token, resume.id)
-      const url = URL.createObjectURL(file)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = resume.file_name
-      anchor.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to download resume')
-    }
+  function handleDownload() {
+    downloadResume.mutate(resume.id, {
+      onSuccess: (file) => {
+        const url = URL.createObjectURL(file)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = resume.file_name
+        anchor.click()
+        URL.revokeObjectURL(url)
+      },
+    })
   }
 
   function handleRename(e: FormEvent) {
     e.preventDefault()
     if (!fileName.trim() || newFileName === resume.file_name) return
-    setError(null)
-    updateResume.mutate({ id: resume.id, update: newFileName }, { onError: (err) => setError(err instanceof Error ? err.message : 'Unable to rename resume') })
+    updateResume.mutate({ id: resume.id, update: newFileName })
   }
 
   function handleReplace(file: File | null) {
     if (!file) return
-    setError(null)
-    updateResume.mutate({ id: resume.id, update: file }, { onError: (err) => setError(err instanceof Error ? err.message : 'Unable to replace resume') })
+    updateResume.mutate({ id: resume.id, update: file })
   }
 
   return <li className="rounded-lg border border-border p-3">
@@ -108,7 +104,7 @@ function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume
       {resume.is_active
         ? <span className={badgeVariants({ variant: 'default' })}>Active</span>
         : <Button type="button" variant="outline" size="sm" onClick={() => activateResume.mutate(resume.id)} disabled={activateResume.isPending}>Set active</Button>}
-      <Button type="button" variant="outline" size="sm" onClick={() => void handleDownload()}><DownloadIcon aria-hidden="true" /> Download</Button>
+      <Button type="button" variant="outline" size="sm" onClick={handleDownload} disabled={downloadResume.isPending}><DownloadIcon aria-hidden="true" /> Download</Button>
       <Button type="button" variant="destructive" size="sm" onClick={() => deleteResume.mutate(resume.id)} disabled={deleteResume.isPending}>Delete</Button>
     </div>
     <div className="mt-2 flex items-center gap-2">
@@ -126,8 +122,8 @@ function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; re
   const { data, isLoading } = useResumeExtractionQuery(token, resumeId, { enabled: true })
   const retryExtraction = useTriggerResumeExtractionMutation(token)
   const applyExtraction = useApplyResumeExtractionMutation(token)
-  const [applyResult, setApplyResult] = useState<ApplyResumeExtractionResult | null>(null)
-  const [applyError, setApplyError] = useState<string | null>(null)
+  const applyResult = applyExtraction.data ?? null
+  const applyError = applyExtraction.error instanceof Error ? applyExtraction.error.message : null
 
   if (isLoading || !data || data.status === 'pending') {
     return <p className="text-sm text-muted-foreground">Extracting details...</p>
@@ -153,15 +149,7 @@ function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; re
   const hasContactInfo = data.full_name || data.email || data.phone || data.linked_in || data.github || data.portfolio
 
   function handleApply() {
-    setApplyError(null)
-    setApplyResult(null)
-    applyExtraction.mutate(
-      { profile, extraction: data! },
-      {
-        onSuccess: (result) => setApplyResult(result),
-        onError: (err) => setApplyError(err instanceof Error ? err.message : 'Unable to apply resume details to profile'),
-      },
-    )
+    applyExtraction.mutate({ profile, extraction: data! })
   }
 
   return <div className="space-y-3 text-sm">
@@ -169,11 +157,7 @@ function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; re
       <Button type="button" variant="outline" size="sm" onClick={handleApply} disabled={applyExtraction.isPending}>
         {applyExtraction.isPending ? 'Applying...' : 'Apply to profile'}
       </Button>
-      {applyResult && <p className="text-xs text-muted-foreground">
-        {applyResult.updatedBasicInfo || applyResult.addedEducation || applyResult.addedSkills || applyResult.addedWorkExperience
-          ? `Added ${applyResult.addedEducation} education, ${applyResult.addedSkills} skill(s), ${applyResult.addedWorkExperience} work experience entr${applyResult.addedWorkExperience === 1 ? 'y' : 'ies'}${applyResult.updatedBasicInfo ? ', and updated basic info' : ''}.`
-          : 'Nothing new to add — profile already has this information.'}
-      </p>}
+      {applyResult && <p className="text-xs text-muted-foreground">{summarizeApplyResult(applyResult)}</p>}
       {applyError && <p role="alert" className="text-xs text-destructive">{applyError}</p>}
     </div>
     {hasContactInfo && <div className="space-y-0.5">
@@ -220,6 +204,18 @@ function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; re
     {!hasContactInfo && !data.summary && skills.length === 0 && education.length === 0 && workExperience.length === 0 && projects.length === 0 &&
       <p className="text-sm text-muted-foreground">No details were found in this resume.</p>}
   </div>
+}
+
+function summarizeApplyResult(result: ApplyResumeExtractionResult): string {
+  const parts: string[] = []
+  if (result.addedEducation) parts.push(`${result.addedEducation} education entr${result.addedEducation === 1 ? 'y' : 'ies'} added`)
+  if (result.updatedEducation) parts.push(`${result.updatedEducation} education entr${result.updatedEducation === 1 ? 'y' : 'ies'} updated`)
+  if (result.addedSkills) parts.push(`${result.addedSkills} skill${result.addedSkills === 1 ? '' : 's'} added`)
+  if (result.addedWorkExperience) parts.push(`${result.addedWorkExperience} work experience entr${result.addedWorkExperience === 1 ? 'y' : 'ies'} added`)
+  if (result.updatedWorkExperience) parts.push(`${result.updatedWorkExperience} work experience entr${result.updatedWorkExperience === 1 ? 'y' : 'ies'} updated`)
+  if (result.updatedBasicInfo) parts.push('basic info updated')
+
+  return parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing new to add, profile already has this information.'
 }
 
 function formatFileSize(bytes: number) {

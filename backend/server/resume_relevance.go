@@ -7,19 +7,10 @@ import (
 	"main/database"
 )
 
-// maxResumeQueryTerms caps how many OR-branches feed the resume relevance query,
-// keeping it from growing unbounded on resumes with very long skill lists.
 const maxResumeQueryTerms = 40
 
-// termSplitPattern breaks apart delimiter-separated skill/technology lists (e.g.
-// "Frameworks & Libraries: React, Zustand, Node.js") into individual terms, while
-// leaving multi-word phrases like "Machine Learning" intact.
 var termSplitPattern = regexp.MustCompile(`[,;:|/&]+|\band\b`)
 
-// buildResumeSearchQuery turns an active resume's extracted skills, job titles,
-// project technologies, and majors into a websearch_to_tsquery-style string
-// (terms joined by " OR ") for ranking job search relevance against a candidate's
-// resume, reusing the jobs table's existing full-text search infrastructure.
 func buildResumeSearchQuery(extraction database.ResumeExtraction) string {
 	var terms []string
 

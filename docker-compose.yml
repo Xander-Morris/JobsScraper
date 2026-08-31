@@ -1,0 +1,21 @@
+# No database service here on purpose — DATABASE_CONNECTION points at a
+# managed Postgres (Supabase), not a container. Add a postgres service yourself
+# if you move off that.
+services:
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8090}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

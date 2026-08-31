@@ -21,6 +21,7 @@ export interface UpdateProfileRequest {
   linked_in: string
   github: string
   portfolio: string
+  email_notifications: boolean
 }
 
 export interface AddEducationRequest {
@@ -53,8 +54,15 @@ export interface AddWorkExperienceBulletRequest {
 export interface ApplyResumeExtractionResult {
   updatedBasicInfo: boolean
   addedEducation: number
+  updatedEducation: number
   addedSkills: number
   addedWorkExperience: number
+  updatedWorkExperience: number
+}
+
+export interface ProfileCredentials {
+  email: string
+  password: string
 }
 
 function authHeaders(token: string): HeadersInit {
@@ -84,6 +92,18 @@ export function loginProfile(email: string, password: string): Promise<AuthRespo
   })
 }
 
+export function useCreateProfileMutation() {
+  return useMutation({
+    mutationFn: ({ email, password }: ProfileCredentials) => createProfile(email, password),
+  })
+}
+
+export function useLoginMutation() {
+  return useMutation({
+    mutationFn: ({ email, password }: ProfileCredentials) => loginProfile(email, password),
+  })
+}
+
 export function fetchProfile(token: string): Promise<Profile> {
   return apiFetch('/api/profile', profileSchema, { headers: authHeaders(token) })
 }
@@ -99,6 +119,14 @@ export function updateProfile(token: string, req: UpdateProfileRequest) {
 export function addEducation(token: string, req: AddEducationRequest) {
   return apiFetch('/api/profile/education', idResponseSchema, {
     method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(req),
+  })
+}
+
+export function updateEducation(token: string, id: number, req: AddEducationRequest) {
+  return apiFetch(`/api/profile/education/${id}`, statusResponseSchema, {
+    method: 'PUT',
     headers: jsonHeaders(token),
     body: JSON.stringify(req),
   })
@@ -129,6 +157,14 @@ export function deleteSkill(token: string, id: number) {
 export function addWorkExperience(token: string, req: AddWorkExperienceRequest) {
   return apiFetch('/api/profile/work-experience', idResponseSchema, {
     method: 'POST',
+    headers: jsonHeaders(token),
+    body: JSON.stringify(req),
+  })
+}
+
+export function updateWorkExperience(token: string, id: number, req: AddWorkExperienceRequest) {
+  return apiFetch(`/api/profile/work-experience/${id}`, statusResponseSchema, {
+    method: 'PUT',
     headers: jsonHeaders(token),
     body: JSON.stringify(req),
   })
@@ -253,6 +289,7 @@ export async function applyResumeExtractionToProfile(
       linked_in: nextLinkedIn,
       github: nextGithub,
       portfolio: nextPortfolio,
+      email_notifications: profile.email_notifications,
     })
   }
 
@@ -266,57 +303,109 @@ export async function applyResumeExtractionToProfile(
     addedSkills++
   }
 
-  const existingEducation = new Set(
-    (profile.education ?? []).map((e) => `${e.school_name.trim().toLowerCase()}|${e.degree.trim().toLowerCase()}`),
+  const educationByKey = new Map(
+    (profile.education ?? []).map((e) => [
+      `${e.school_name.trim().toLowerCase()}|${e.major.trim().toLowerCase()}|${e.degree.trim().toLowerCase()}`,
+      e,
+    ]),
   )
   let addedEducation = 0
+  let updatedEducation = 0
   for (const entry of extraction.education ?? []) {
     const schoolName = entry.school_name.trim()
-    if (!schoolName) continue
-    const key = `${schoolName.toLowerCase()}|${entry.degree.trim().toLowerCase()}`
-    if (existingEducation.has(key)) continue
-    existingEducation.add(key)
-    await addEducation(token, {
-      school_name: schoolName,
-      major: entry.major,
-      degree: entry.degree,
-      start_date: asDate(entry.start_date),
-      end_date: asDate(entry.end_date),
-    })
-    addedEducation++
+    const major = entry.major.trim()
+    const degree = entry.degree.trim()
+    if (!schoolName || !major || !degree) continue
+    const key = `${schoolName.toLowerCase()}|${major.toLowerCase()}|${degree.toLowerCase()}`
+    const existing = educationByKey.get(key)
+    const startDate = asDate(entry.start_date) ?? existing?.start_date ?? undefined
+    const endDate = asDate(entry.end_date) ?? existing?.end_date ?? undefined
+
+    if (existing) {
+      if (startDate === (existing.start_date ?? undefined) && endDate === (existing.end_date ?? undefined)) continue
+      await updateEducation(token, existing.id, {
+        school_name: schoolName,
+        major,
+        degree,
+        gpa: existing.gpa,
+        start_date: startDate,
+        end_date: endDate,
+      })
+      updatedEducation++
+    } else {
+      await addEducation(token, { school_name: schoolName, major, degree, start_date: startDate, end_date: endDate })
+      addedEducation++
+    }
   }
 
-  const existingWorkExperience = new Set(
-    (profile.work_experience ?? []).map((w) => `${w.company.trim().toLowerCase()}|${w.job_title.trim().toLowerCase()}`),
+  const workExperienceByKey = new Map(
+    (profile.work_experience ?? []).map((w) => [`${w.company.trim().toLowerCase()}|${w.job_title.trim().toLowerCase()}`, w]),
   )
   let addedWorkExperience = 0
+  let updatedWorkExperience = 0
   for (const entry of extraction.work_experience ?? []) {
     const company = entry.company.trim()
     const jobTitle = entry.job_title.trim()
     if (!company || !jobTitle) continue
     const key = `${company.toLowerCase()}|${jobTitle.toLowerCase()}`
-    if (existingWorkExperience.has(key)) continue
-    existingWorkExperience.add(key)
+    const existing = workExperienceByKey.get(key)
+    const extractedBullets = [...new Set((entry.bullets ?? []).map((b) => b.trim()).filter(Boolean))]
 
-    const { id } = await addWorkExperience(token, {
-      company,
-      job_title: jobTitle,
-      job_type: 'unknown',
-      location: entry.location,
-      start_date: asDate(entry.start_date),
-      end_date: asDate(entry.end_date),
-    })
+    if (existing) {
+      const location = entry.location.trim() || existing.location || ''
+      const startDate = asDate(entry.start_date) ?? existing.start_date ?? undefined
+      const endDate = asDate(entry.end_date) ?? existing.end_date ?? undefined
+      const fieldsChanged =
+        location !== (existing.location ?? '') ||
+        startDate !== (existing.start_date ?? undefined) ||
+        endDate !== (existing.end_date ?? undefined)
 
-    for (const raw of entry.bullets ?? []) {
-      const bullet = raw.trim()
-      if (!bullet) continue
-      await addWorkExperienceBullet(token, id, { bullet })
+      const existingBullets = existing.bullets ?? []
+      const existingBulletTexts = new Set(existingBullets.map((b) => b.bullet.trim()))
+      const extractedBulletTexts = new Set(extractedBullets)
+      const bulletsToAdd = extractedBullets.filter((b) => !existingBulletTexts.has(b))
+      const bulletsToRemove = existingBullets.filter((b) => !extractedBulletTexts.has(b.bullet.trim()))
+
+      if (!fieldsChanged && bulletsToAdd.length === 0 && bulletsToRemove.length === 0) continue
+
+      if (fieldsChanged) {
+        await updateWorkExperience(token, existing.id, {
+          company,
+          job_title: jobTitle,
+          job_type: existing.job_type,
+          location,
+          start_date: startDate,
+          end_date: endDate,
+        })
+      }
+
+      for (const bullet of bulletsToAdd) {
+        await addWorkExperienceBullet(token, existing.id, { bullet })
+      }
+      for (const bullet of bulletsToRemove) {
+        await deleteWorkExperienceBullet(token, existing.id, bullet.id)
+      }
+
+      updatedWorkExperience++
+    } else {
+      const { id } = await addWorkExperience(token, {
+        company,
+        job_title: jobTitle,
+        job_type: 'unknown',
+        location: entry.location,
+        start_date: asDate(entry.start_date),
+        end_date: asDate(entry.end_date),
+      })
+
+      for (const bullet of extractedBullets) {
+        await addWorkExperienceBullet(token, id, { bullet })
+      }
+
+      addedWorkExperience++
     }
-
-    addedWorkExperience++
   }
 
-  return { updatedBasicInfo, addedEducation, addedSkills, addedWorkExperience }
+  return { updatedBasicInfo, addedEducation, updatedEducation, addedSkills, addedWorkExperience, updatedWorkExperience }
 }
 
 export function useProfileQuery(token: string | null) {
@@ -396,6 +485,12 @@ export function useActivateResumeMutation(token: string | null) {
 
 export function useDeleteResumeMutation(token: string | null) {
   return useProfileMutation((id: number) => deleteResume(token!, id))
+}
+
+export function useDownloadResumeMutation(token: string | null) {
+  return useMutation({
+    mutationFn: (id: number) => downloadResume(token!, id),
+  })
 }
 
 export function useResumeExtractionQuery(token: string | null, resumeId: number, options: { enabled: boolean }) {

@@ -1,11 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { API_BASE_URL, sessionExpiredEvent, tokenRefreshedEvent } from '../api/client'
-
-const TOKEN_STORAGE_KEY = 'profile_token'
+import { API_BASE_URL, refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent } from '../api/client'
 
 interface ProfileAuthContextValue {
   token: string | null
   isAuthenticated: boolean
+  isInitializing: boolean
   sessionMessage: string | null
   login: (token: string) => void
   logout: (message?: string) => void
@@ -14,20 +13,36 @@ interface ProfileAuthContextValue {
 const ProfileAuthContext = createContext<ProfileAuthContextValue | undefined>(undefined)
 
 export function ProfileAuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY))
+  // Access token lives in memory only — the refresh token (httpOnly cookie) is
+  // what actually persists the session, so a reload re-derives it below rather
+  // than reading a copy of the access token back out of localStorage.
+  const [token, setToken] = useState<string | null>(null)
+  const [isInitializing, setIsInitializing] = useState(true)
   const [sessionMessage, setSessionMessage] = useState<string | null>(null)
 
   const login = useCallback((next: string) => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, next)
     setToken(next)
     setSessionMessage(null)
   }, [])
 
   const logout = useCallback((message?: string) => {
     void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
-    localStorage.removeItem(TOKEN_STORAGE_KEY)
     setToken(null)
     setSessionMessage(message ?? null)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    refreshAccessToken().then((next) => {
+      if (cancelled) return
+      if (next) setToken(next)
+      setIsInitializing(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -46,8 +61,8 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   }, [login, logout])
 
   const value = useMemo(
-    () => ({ token, isAuthenticated: token !== null, sessionMessage, login, logout }),
-    [token, sessionMessage, login, logout],
+    () => ({ token, isAuthenticated: token !== null, isInitializing, sessionMessage, login, logout }),
+    [token, isInitializing, sessionMessage, login, logout],
   )
 
   return <ProfileAuthContext.Provider value={value}>{children}</ProfileAuthContext.Provider>

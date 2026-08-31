@@ -34,9 +34,15 @@ func newTestDB(t *testing.T) {
 	// not to child tables themselves — every table with a FK into profiles must be
 	// listed explicitly or its rows outlive profiles' id sequence reset and collide
 	// with fresh test profiles that reuse the same ids.
+	// schema_migrations must be dropped too — it's golang-migrate's version
+	// table, and it survives this reset since it's not itself one of the
+	// tables migration 000001 creates. Left in place, CreateTables' next call
+	// would see the target version already applied and skip recreating
+	// everything else that was just dropped.
 	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
 		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
-		profile_resume_extractions, profile_resumes, profiles`
+		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
+		schema_migrations`
 
 	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)
@@ -79,7 +85,7 @@ func TestGetJobByID(t *testing.T) {
 		t.Fatalf("lookup seeded id: %v", err)
 	}
 
-	got, err := GetJobByID(context.Background(), id)
+	got, err := GetJobByID(context.Background(), id, JobDetailParams{})
 
 	if err != nil {
 		t.Fatalf("GetJobByID: %v", err)
@@ -125,7 +131,7 @@ func TestGetJobByIDNotFound(t *testing.T) {
 		t.Fatalf("init schema: %v", err)
 	}
 
-	_, err := GetJobByID(context.Background(), 999)
+	_, err := GetJobByID(context.Background(), 999, JobDetailParams{})
 
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("err = %v, want sql.ErrNoRows", err)

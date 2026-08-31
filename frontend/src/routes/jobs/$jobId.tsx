@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useJobQuery } from '../../api/jobs'
-import { formatRelativeDate, formatSalary, formatWorkplaceType } from '../../lib/format'
+import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
 import { Badge } from '../../components/ui/badge'
 import { buttonVariants } from '../../components/ui/button'
+import { JobApplyPanel } from '../../components/JobApplyPanel'
 import { Skeleton } from '../../components/ui/skeleton'
+import { useAuth } from '../../stores/profile-store'
 import { cn } from '../../lib/utils'
 
 export const Route = createFileRoute('/jobs/$jobId')({
@@ -12,7 +14,9 @@ export const Route = createFileRoute('/jobs/$jobId')({
 
 function JobDetailPage() {
   const { jobId } = Route.useParams()
-  const { data: job, isLoading, isError, error } = useJobQuery(Number(jobId))
+  const { isAuthenticated, token } = useAuth()
+  const { data: job, isLoading, isError, error } = useJobQuery(Number(jobId), token)
+  const fitLabel = job ? matchFitLabel(job.match_score) : null
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 text-left">
@@ -41,6 +45,8 @@ function JobDetailPage() {
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            {fitLabel && <Badge variant="default">{fitLabel}</Badge>}
+            {job.applied && <Badge variant="outline">Applied</Badge>}
             <Badge variant="secondary">{formatWorkplaceType(job.workplace_type)}</Badge>
             {formatSalary(job.salary_min, job.salary_max) && (
               <Badge variant="secondary">{formatSalary(job.salary_min, job.salary_max)}</Badge>
@@ -65,6 +71,8 @@ function JobDetailPage() {
           >
             View original posting →
           </a>
+
+          {isAuthenticated && token && <JobApplyPanel token={token} job={job} />}
         </article>
       )}
     </div>

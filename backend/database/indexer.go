@@ -22,6 +22,12 @@ type JobSearchParams struct {
 	// built from the caller's active resume, used to boost relevance ranking toward
 	// jobs matching their skills/experience. Empty when there's no active resume.
 	ResumeQuery   string
+	// ProfileID, when set, is used to annotate results with whether the caller has
+	// already marked each job applied. Zero for anonymous callers.
+	ProfileID int64
+	// PostedAfter, when set, restricts results to jobs posted after this time — used
+	// by the notification digest to only consider jobs new since the last run.
+	PostedAfter   *time.Time
 	Tags          []string
 	WorkplaceType jobs.WorkplaceType
 	MinSalary     int
@@ -29,6 +35,14 @@ type JobSearchParams struct {
 	Sort          SortOrder
 	Limit         int
 	Offset        int
+}
+
+// JobDetailParams carries the caller's profile context into GetJobByID so it can
+// annotate the job with a resume match score and applied status, the same way
+// SearchForJobs does for list results.
+type JobDetailParams struct {
+	ResumeQuery string
+	ProfileID   int64
 }
 
 const (
@@ -93,11 +107,23 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 		return nil, fmt.Errorf("fetch tags for jobs: %w", err)
 	}
 
+	var appliedMap map[int64]bool
+	if params.ProfileID != 0 {
+		appliedMap, err = AppliedJobIDs(ctx, params.ProfileID, jobIDs)
+		if err != nil {
+			return nil, fmt.Errorf("fetch applied jobs: %w", err)
+		}
+	}
+
 	for _, jobID := range jobOrder {
 		job := scannedRows[jobID]
 
 		if tags, ok := tagMap[jobID]; ok {
 			job.Tags = tags
+		}
+
+		if appliedMap[jobID] {
+			job.Applied = true
 		}
 
 		results = append(results, job)
@@ -106,18 +132,26 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	return &SearchResult{Jobs: results, Total: total}, nil
 }
 
-func GetJobByID(ctx context.Context, id int64) (*jobs.Job, error) {
+func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Job, error) {
 	db, err := GetDb()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	const query = `SELECT j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
-		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, '')
-		FROM jobs j WHERE j.id = $1`
+	matchScoreColumn := "NULL::real"
+	args := []any{id}
 
-	job, jobID, err := scanJobRow(db.QueryRowContext(ctx, query, id))
+	if params.ResumeQuery != "" {
+		args = append(args, params.ResumeQuery)
+		matchScoreColumn = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(args))
+	}
+
+	query := fmt.Sprintf(`SELECT j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
+		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, ''), %s AS match_score
+		FROM jobs j WHERE j.id = $1`, matchScoreColumn)
+
+	job, jobID, err := scanJobRow(db.QueryRowContext(ctx, query, args...))
 
 	if err != nil {
 		return nil, err
@@ -130,6 +164,16 @@ func GetJobByID(ctx context.Context, id int64) (*jobs.Job, error) {
 	}
 
 	job.Tags = tagMap[jobID]
+
+	if params.ProfileID != 0 {
+		applied, err := IsJobApplied(ctx, params.ProfileID, jobID)
+
+		if err != nil {
+			return nil, fmt.Errorf("check job applied: %w", err)
+		}
+
+		job.Applied = applied
+	}
 
 	return &job, nil
 }
@@ -168,6 +212,11 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 		conditions = append(conditions, fmt.Sprintf("j.salary_min <= $%d", len(args)))
 	}
 
+	if params.PostedAfter != nil {
+		args = append(args, *params.PostedAfter)
+		conditions = append(conditions, fmt.Sprintf("j.posted_at > $%d", len(args)))
+	}
+
 	if len(params.Tags) > 0 {
 		placeholders := make([]string, len(params.Tags))
 
@@ -194,29 +243,38 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	const jobColumns = `j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
 		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, '')`
 
-	query := fmt.Sprintf("SELECT %s %s", jobColumns, from)
-
-	args := make([]any, len(whereArgs), len(whereArgs)+4)
+	args := make([]any, len(whereArgs), len(whereArgs)+5)
 	copy(args, whereArgs)
 
 	rankable := params.Sort != SortDate
 	hasSearchQuery := params.SearchQuery != ""
 	hasResumeQuery := params.ResumeQuery != ""
 
+	// The match_score column is independent of sort order — it's shown to the caller
+	// as a fit signal even when they've chosen to sort by date instead of relevance.
+	matchScoreColumn := "NULL::real"
+	var resumeQueryArgIdx int
+	if hasResumeQuery {
+		args = append(args, params.ResumeQuery)
+		resumeQueryArgIdx = len(args)
+		matchScoreColumn = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", resumeQueryArgIdx)
+	}
+
+	query := fmt.Sprintf("SELECT %s, %s AS match_score %s", jobColumns, matchScoreColumn, from)
+
 	switch {
 	case rankable && hasSearchQuery && hasResumeQuery:
 		// Typed search stays the primary signal; the resume nudges ties toward jobs
 		// matching the candidate's skills/experience without overriding an explicit query.
-		args = append(args, params.SearchQuery, params.ResumeQuery)
+		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(
 			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * ts_rank(j.search_vector, websearch_to_tsquery('english', $%d))) DESC",
-			len(args)-1, len(args))
+			len(args), resumeQueryArgIdx)
 	case rankable && hasSearchQuery:
 		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, plainto_tsquery('english', $%d)) DESC", len(args))
 	case rankable && hasResumeQuery:
-		args = append(args, params.ResumeQuery)
-		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, websearch_to_tsquery('english', $%d)) DESC", len(args))
+		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, websearch_to_tsquery('english', $%d)) DESC", resumeQueryArgIdx)
 	default:
 		query += " ORDER BY j.posted_at DESC"
 	}
@@ -241,9 +299,10 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 	var jobID int64
 	var salaryMin, salaryMax sql.NullInt64
 	var postedAtRaw any
+	var matchScore sql.NullFloat64
 
 	err := row.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description)
+		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description, &matchScore)
 
 	if err != nil {
 		return jobs.Job{}, 0, err
@@ -259,6 +318,11 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 	if salaryMax.Valid {
 		max := int(salaryMax.Int64)
 		job.SalaryMax = &max
+	}
+
+	if matchScore.Valid {
+		score := matchScore.Float64
+		job.MatchScore = &score
 	}
 
 	switch v := postedAtRaw.(type) {
