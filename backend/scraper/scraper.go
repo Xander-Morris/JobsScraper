@@ -65,10 +65,6 @@ func runScraper(sources []jobs.JobSource) {
 	}
 }
 
-// runScraperSafely wraps runScraper with a panic recovery so one bad fetch
-// cycle logs and moves on instead of killing the scraper goroutine (and, since
-// nothing restarts it, silently ending all future scraping) for the rest of
-// the process's life.
 func runScraperSafely(sources []jobs.JobSource) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -92,7 +88,7 @@ func StartScrapingJob() {
 	}
 
 	runScraperSafely(sources)
-	ticker := time.NewTicker(12 * time.Hour)
+	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
 
 	for range ticker.C {

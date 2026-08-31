@@ -26,6 +26,7 @@ function JobsPage() {
       workplaceType: search.workplaceType,
       minSalary: search.minSalary,
       maxSalary: search.maxSalary,
+      datePosted: search.datePosted,
       tags: search.tags,
       sort: search.sort,
       limit: PAGE_SIZE,

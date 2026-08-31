@@ -115,6 +115,20 @@ func TestParseJobSearchParams(t *testing.T) {
 		},
 		{name: "invalid sort", url: "/api/jobs?sort=random", wantErr: true},
 		{
+			name: "valid date_posted",
+			url:  "/api/jobs?date_posted=week",
+			check: func(t *testing.T, params *database.JobSearchParams) {
+				if params.PostedAfter == nil {
+					t.Fatal("PostedAfter = nil, want non-nil")
+				}
+				wantAfter := time.Now().Add(-8 * 24 * time.Hour)
+				if params.PostedAfter.Before(wantAfter) {
+					t.Errorf("PostedAfter = %v, want after %v", params.PostedAfter, wantAfter)
+				}
+			},
+		},
+		{name: "invalid date_posted", url: "/api/jobs?date_posted=yesterday", wantErr: true},
+		{
 			name: "limit capped at max",
 			url:  "/api/jobs?limit=9999",
 			check: func(t *testing.T, params *database.JobSearchParams) {

@@ -8,10 +8,18 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"main/database"
 	"main/jobs"
 )
+
+var datePostedLookback = map[string]time.Duration{
+	"24h":   24 * time.Hour,
+	"3d":    3 * 24 * time.Hour,
+	"week":  7 * 24 * time.Hour,
+	"month": 30 * 24 * time.Hour,
+}
 
 func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 	params, err := parseJobSearchParams(r)
@@ -182,6 +190,17 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 		}
 
 		params.MaxSalary = maxSalary
+	}
+
+	if raw := query.Get("date_posted"); raw != "" {
+		lookback, ok := datePostedLookback[raw]
+
+		if !ok {
+			return nil, fmt.Errorf("invalid date_posted %q", raw)
+		}
+
+		cutoff := time.Now().Add(-lookback)
+		params.PostedAfter = &cutoff
 	}
 
 	if raw := query.Get("tags"); raw != "" {

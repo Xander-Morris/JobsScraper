@@ -9,7 +9,6 @@ export function Header() {
       <nav aria-label="Main" className="flex gap-5 text-sm">
         <Link
           to="/profile"
-          activeOptions={{ exact: true }}
           className="text-muted-foreground no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
         >
           Profile

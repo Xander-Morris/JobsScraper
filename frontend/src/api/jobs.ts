@@ -10,6 +10,7 @@ export interface JobSearchParams {
   workplaceType?: 'remote' | 'hybrid' | 'in_person'
   minSalary?: number
   maxSalary?: number
+  datePosted?: '24h' | '3d' | 'week' | 'month'
   tags?: string[]
   sort?: 'relevance' | 'date'
   limit?: number
@@ -23,6 +24,7 @@ function buildJobSearchQuery(params: JobSearchParams): string {
   if (params.workplaceType) search.set('workplace_type', params.workplaceType)
   if (params.minSalary !== undefined) search.set('min_salary', String(params.minSalary))
   if (params.maxSalary !== undefined) search.set('max_salary', String(params.maxSalary))
+  if (params.datePosted) search.set('date_posted', params.datePosted)
   if (params.tags?.length) search.set('tags', params.tags.join(','))
   if (params.sort) search.set('sort', params.sort)
   if (params.limit !== undefined) search.set('limit', String(params.limit))

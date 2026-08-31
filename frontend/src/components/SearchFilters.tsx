@@ -7,9 +7,14 @@ import { buttonVariants } from './ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { Slider } from './ui/slider'
 import { cn } from '../lib/utils'
 
 const MAX_TAG_MATCHES = 40
+
+const SALARY_MIN = 20000
+const SALARY_MAX = 500000
+const SALARY_STEP = 5000
 
 const WORKPLACE_TYPE_OPTIONS: { value: JobSearchState['workplaceType'] | ''; label: string }[] = [
   { value: '', label: 'Any workplace' },
@@ -20,6 +25,18 @@ const SORT_OPTIONS: { value: NonNullable<JobSearchState['sort']>; label: string 
   { value: 'relevance', label: 'Sort: relevance' },
   { value: 'date', label: 'Sort: newest' },
 ]
+
+const DATE_POSTED_OPTIONS: { value: JobSearchState['datePosted'] | ''; label: string }[] = [
+  { value: '', label: 'Any time' },
+  { value: '24h', label: 'Past 24 hours' },
+  { value: '3d', label: 'Past 3 days' },
+  { value: 'week', label: 'Past week' },
+  { value: 'month', label: 'Past month' },
+]
+
+function formatSalaryThousands(value: number): string {
+  return value >= 1000 ? `$${Math.round(value / 1000)}k` : `$${value}`
+}
 
 export function SearchFilters({
   search,
@@ -34,9 +51,15 @@ export function SearchFilters({
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const tagListId = useId()
 
+  const [salaryRange, setSalaryRange] = useState<number[]>([search.minSalary ?? SALARY_MIN, search.maxSalary ?? SALARY_MAX])
+
   useEffect(() => {
     setQ(search.q ?? '')
   }, [search.q])
+
+  useEffect(() => {
+    setSalaryRange([search.minSalary ?? SALARY_MIN, search.maxSalary ?? SALARY_MAX])
+  }, [search.minSalary, search.maxSalary])
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -45,6 +68,14 @@ export function SearchFilters({
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q])
+
+  function commitSalaryRange(next: number[]) {
+    onChange({
+      ...search,
+      minSalary: next[0] > SALARY_MIN ? next[0] : undefined,
+      maxSalary: next[1] < SALARY_MAX ? next[1] : undefined,
+    })
+  }
 
   const selectedTags = new Set(search.tags ?? [])
 
@@ -63,6 +94,7 @@ export function SearchFilters({
   const workplaceLabel =
     WORKPLACE_TYPE_OPTIONS.find((opt) => opt.value === (search.workplaceType ?? ''))?.label ?? 'Any workplace'
   const sortLabel = SORT_OPTIONS.find((opt) => opt.value === (search.sort ?? 'relevance'))?.label
+  const datePostedLabel = DATE_POSTED_OPTIONS.find((opt) => opt.value === (search.datePosted ?? ''))?.label ?? 'Any time'
 
   return (
     <div className="mt-6 space-y-3 text-left">
@@ -94,24 +126,22 @@ export function SearchFilters({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Input
-          type="number"
-          inputMode="numeric"
-          placeholder="Min salary"
-          aria-label="Minimum salary"
-          value={search.minSalary ?? ''}
-          onChange={(e) => onChange({ ...search, minSalary: e.target.value ? Number(e.target.value) : undefined })}
-          className="w-28"
-        />
-        <Input
-          type="number"
-          inputMode="numeric"
-          placeholder="Max salary"
-          aria-label="Maximum salary"
-          value={search.maxSalary ?? ''}
-          onChange={(e) => onChange({ ...search, maxSalary: e.target.value ? Number(e.target.value) : undefined })}
-          className="w-28"
-        />
+        <DropdownMenu>
+          <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+            {datePostedLabel}
+            <ChevronDownIcon className="opacity-50" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {DATE_POSTED_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.value || 'any'}
+                onClick={() => onChange({ ...search, datePosted: opt.value || undefined })}
+              >
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
@@ -126,6 +156,25 @@ export function SearchFilters({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      <div className="w-72 space-y-1.5">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Salary</span>
+          <span>
+            {formatSalaryThousands(salaryRange[0])} – {formatSalaryThousands(salaryRange[1])}
+            {salaryRange[1] >= SALARY_MAX ? '+' : ''}
+          </span>
+        </div>
+        <Slider
+          aria-label="Salary range"
+          min={SALARY_MIN}
+          max={SALARY_MAX}
+          step={SALARY_STEP}
+          value={salaryRange}
+          onValueChange={(next: number[]) => setSalaryRange(next)}
+          onValueCommitted={(next: number[]) => commitSalaryRange(next)}
+        />
       </div>
 
       {tags && tags.length > 0 && (
