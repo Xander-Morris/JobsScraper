@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"main/database"
@@ -89,7 +88,7 @@ func createSession(w http.ResponseWriter, profileID int64) (string, error) {
 func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 	req := &database.ProfileRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -126,7 +125,7 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 	req := &database.ProfileRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -252,7 +251,7 @@ func handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.UpdateProfileRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -281,7 +280,7 @@ func handleAddEducation(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddEducationRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -313,7 +312,7 @@ func handleUpdateEducation(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddEducationRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -370,7 +369,7 @@ func handleAddSkill(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddSkillRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -424,7 +423,7 @@ func handleAddWorkExperience(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddWorkExperienceRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -456,7 +455,7 @@ func handleUpdateWorkExperience(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddWorkExperienceRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
@@ -520,7 +519,7 @@ func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
 
 	req := &database.AddWorkExperienceBulletRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+	if err := decodeJSON(w, r, req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request")
 		return
 	}

@@ -5,8 +5,13 @@ services:
   backend:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
     ports:
       - "8090:8090"
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   frontend:
@@ -19,3 +24,29 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  # Serves resume extraction (see backend/llm/resume_extraction.go). qwen2.5:7b
+  # wants ~8GB RAM at minimum; on a constrained host, swap OLLAMA_MODEL below
+  # (and in backend/.env) for a smaller model, or point OLLAMA_BASE_URL at an
+  # Ollama instance running on separate GPU hardware instead of running it here.
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  # One-shot: waits for the ollama server above to accept connections, then pulls
+  # the model backend expects so the first real extraction request doesn't fail
+  # with "model not found". Exits once the pull succeeds; backend's depends_on
+  # blocks startup on that success so it never races an empty model cache.
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull qwen2.5:7b"]
+    restart: "no"
+
+volumes:
+  ollama_data:

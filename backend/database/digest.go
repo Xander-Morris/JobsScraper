@@ -55,3 +55,17 @@ func MarkDigestSent(ctx context.Context, profileID int64, sentAt time.Time) erro
 
 	return err
 }
+
+// DisableEmailDigest turns off the job-match digest for a profile — used by the
+// one-click unsubscribe link in digest emails.
+func DisableEmailDigest(ctx context.Context, profileID int64) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(ctx, `UPDATE profiles SET email_notifications_enabled = FALSE WHERE id = $1`, profileID)
+
+	return err
+}

@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"main/database"
@@ -75,7 +76,11 @@ func runScraperSafely(sources []jobs.JobSource) {
 	runScraper(sources)
 }
 
-func StartScrapingJob() {
+// StartScrapingJob runs a fetch cycle immediately, then every 10 minutes, until
+// ctx is cancelled. Meant to be launched in its own goroutine; on cancellation it
+// returns once any fetch cycle already in flight finishes, rather than abandoning
+// it mid-write against a database connection the caller may be about to close.
+func StartScrapingJob(ctx context.Context) {
 	botAgent := "MyCustomScraperBot/1.0"
 
 	sources := []jobs.JobSource{
@@ -91,7 +96,12 @@ func StartScrapingJob() {
 	ticker := time.NewTicker(time.Minute * 10)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		runScraperSafely(sources)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runScraperSafely(sources)
+		}
 	}
 }

@@ -2,14 +2,21 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"main/database"
 	"main/jobs"
 	"main/notify"
+	"main/utils"
 )
 
 const digestInterval = 24 * time.Hour
@@ -19,16 +26,22 @@ const digestFirstRunLookback = 24 * time.Hour
 const digestJobTimeout = 2 * time.Minute
 
 // StartDigestScheduler runs the job-match email digest once at startup, then once
-// per digestInterval. Meant to be launched in its own goroutine, mirroring
-// scraper.StartScrapingJob.
-func StartDigestScheduler() {
+// per digestInterval, until ctx is cancelled. Meant to be launched in its own
+// goroutine, mirroring scraper.StartScrapingJob — including waiting out a run
+// already in flight when ctx is cancelled, instead of abandoning it mid-send.
+func StartDigestScheduler(ctx context.Context) {
 	runDigestJobSafely()
 
 	ticker := time.NewTicker(digestInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		runDigestJobSafely()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runDigestJobSafely()
+		}
 	}
 }
 
@@ -114,7 +127,7 @@ func sendDigestForProfile(ctx context.Context, profile database.DigestProfile) e
 	sentAt := time.Now()
 
 	if len(matched) > 0 {
-		if err := notify.SendEmail(ctx, profile.Email, digestSubject(len(matched)), renderDigestEmail(matched)); err != nil {
+		if err := notify.SendEmail(ctx, profile.Email, digestSubject(len(matched)), renderDigestEmail(matched, profile.ProfileID)); err != nil {
 			return fmt.Errorf("send email: %w", err)
 		}
 	}
@@ -161,7 +174,7 @@ func digestSubject(count int) string {
 	return fmt.Sprintf("%d new jobs match your resume", count)
 }
 
-func renderDigestEmail(matched []jobs.Job) string {
+func renderDigestEmail(matched []jobs.Job, profileID int64) string {
 	var b strings.Builder
 
 	b.WriteString("New jobs that match your resume:\n\n")
@@ -170,5 +183,55 @@ func renderDigestEmail(matched []jobs.Job) string {
 		fmt.Fprintf(&b, "%s at %s\n%s\n\n", job.Title, job.Company, job.URL)
 	}
 
+	fmt.Fprintf(&b, "---\nDon't want these emails? Unsubscribe: %s\n", unsubscribeLink(profileID))
+
 	return b.String()
+}
+
+// unsubscribeToken is an HMAC over the profile ID, keyed on the same SECRET_KEY
+// used for access-token JWTs — lets the one-click link in a digest email prove
+// it was minted by us for that specific profile, without requiring the
+// recipient to be logged in to click it.
+func unsubscribeToken(profileID int64) string {
+	mac := hmac.New(sha256.New, []byte(utils.GetEnv()["SECRET_KEY"]))
+	mac.Write([]byte(strconv.FormatInt(profileID, 10)))
+
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func validUnsubscribeToken(profileID int64, token string) bool {
+	return hmac.Equal([]byte(unsubscribeToken(profileID)), []byte(token))
+}
+
+func unsubscribeLink(profileID int64) string {
+	base := strings.TrimSuffix(os.Getenv("PUBLIC_BACKEND_URL"), "/")
+	if base == "" {
+		base = "http://localhost:8090"
+	}
+
+	return fmt.Sprintf("%s/api/digest/unsubscribe?profile_id=%d&token=%s", base, profileID, unsubscribeToken(profileID))
+}
+
+func handleUnsubscribeDigest(w http.ResponseWriter, r *http.Request) {
+	profileID, err := strconv.ParseInt(r.URL.Query().Get("profile_id"), 10, 64)
+
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid unsubscribe link")
+		return
+	}
+
+	if !validUnsubscribeToken(profileID, r.URL.Query().Get("token")) {
+		writeError(w, http.StatusUnauthorized, "invalid unsubscribe link")
+		return
+	}
+
+	if err := database.DisableEmailDigest(r.Context(), profileID); err != nil {
+		slog.Error("unsubscribe digest", "profile_id", profileID, "error", err)
+		writeError(w, http.StatusInternalServerError, "could not unsubscribe")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("<!DOCTYPE html><html><body><p>You've been unsubscribed from job digest emails.</p></body></html>"))
 }

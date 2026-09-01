@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,8 +33,22 @@ func main() {
 
 	defer database.CloseDb()
 
-	go scraper.StartScrapingJob()
-	go server.StartDigestScheduler()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var backgroundJobs sync.WaitGroup
+
+	backgroundJobs.Add(1)
+	go func() {
+		defer backgroundJobs.Done()
+		scraper.StartScrapingJob(ctx)
+	}()
+
+	backgroundJobs.Add(1)
+	go func() {
+		defer backgroundJobs.Done()
+		server.StartDigestScheduler(ctx)
+	}()
 
 	srv := server.New(serverAddr())
 
@@ -46,8 +61,6 @@ func main() {
 		}
 	}()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -56,6 +69,11 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)
 	}
+
+	// Wait for any scrape/digest run already in flight to finish before the
+	// deferred CloseDb() above runs, so it doesn't close the pool out from
+	// under a write those goroutines are mid-way through.
+	backgroundJobs.Wait()
 }
 
 func serverAddr() string {
