@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiFetch } from './client'
-import { jobSchema, jobSearchResponseSchema, type Job, type JobSearchResponse } from './schemas'
+import {
+  generatedContentSchema,
+  jobSchema,
+  jobSearchResponseSchema,
+  type GeneratedContent,
+  type Job,
+  type JobSearchResponse,
+} from './schemas'
 
 const statusResponseSchema = z.object({ status: z.string() })
 
@@ -96,4 +103,17 @@ export function useMarkJobAppliedMutation(token: string | null) {
 
 export function useUnmarkJobAppliedMutation(token: string | null) {
   return useJobAppliedMutation((id: number) => unmarkJobApplied(token!, id))
+}
+
+export function generateApplicationContent(token: string, jobId: number): Promise<GeneratedContent> {
+  return apiFetch(`/api/jobs/${jobId}/generate`, generatedContentSchema, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export function useGenerateApplicationContentMutation(token: string | null) {
+  return useMutation({
+    mutationFn: (jobId: number) => generateApplicationContent(token!, jobId),
+  })
 }

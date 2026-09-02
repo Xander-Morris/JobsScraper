@@ -9,6 +9,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/pgvector/pgvector-go"
 )
 
 func newTestDB(t *testing.T) {
@@ -121,6 +123,121 @@ func TestGetJobByID(t *testing.T) {
 
 	if !slices.Equal(gotTags, wantTags) {
 		t.Errorf("Tags = %v, want %v", gotTags, wantTags)
+	}
+}
+
+// unitVector returns a 768-dim vector with a 1 at index and 0 elsewhere, so two
+// jobs given the same index are an exact semantic match (cosine similarity 1)
+// and two given different indices are orthogonal (similarity 0).
+func unitVector(index int) []float32 {
+	vec := make([]float32, 768)
+	vec[index] = 1
+
+	return vec
+}
+
+func setJobEmbedding(t *testing.T, jobID int64, vec []float32) {
+	t.Helper()
+
+	if _, err := cachedDb.Exec("UPDATE jobs SET embedding = $1 WHERE id = $2", pgvector.NewVector(vec), jobID); err != nil {
+		t.Fatalf("set job embedding: %v", err)
+	}
+}
+
+func jobIDByURL(t *testing.T, url string) int64 {
+	t.Helper()
+
+	var id int64
+	if err := cachedDb.QueryRow("SELECT id FROM jobs WHERE url = $1", url).Scan(&id); err != nil {
+		t.Fatalf("lookup job id: %v", err)
+	}
+
+	return id
+}
+
+func TestSearchForJobsResumeEmbedding(t *testing.T) {
+	newTestDB(t)
+
+	seed := []jobs.Job{
+		{Title: "Match", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/match", Description: "x"},
+		{Title: "Orthogonal", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/orthogonal", Description: "x"},
+		{Title: "Unembedded", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/unembedded", Description: "x"},
+	}
+
+	if err := WriteJobsToDatabase(seed); err != nil {
+		t.Fatalf("seed db: %v", err)
+	}
+
+	matchID := jobIDByURL(t, seed[0].URL)
+	orthogonalID := jobIDByURL(t, seed[1].URL)
+
+	resumeVec := unitVector(0)
+	setJobEmbedding(t, matchID, unitVector(0))
+	setJobEmbedding(t, orthogonalID, unitVector(1))
+	// third job's embedding stays NULL — not yet processed by the background embed step.
+
+	resumeEmbedding := pgvector.NewVector(resumeVec)
+
+	result, err := SearchForJobs(context.Background(), &JobSearchParams{
+		ResumeEmbedding: &resumeEmbedding,
+		Limit:           10,
+	})
+
+	if err != nil {
+		t.Fatalf("SearchForJobs: %v", err)
+	}
+
+	if len(result.Jobs) != 3 {
+		t.Fatalf("got %d jobs, want 3", len(result.Jobs))
+	}
+
+	if result.Jobs[0].ID != matchID {
+		t.Errorf("first result ID = %d, want %d (the semantic match)", result.Jobs[0].ID, matchID)
+	}
+
+	if result.Jobs[0].MatchScore == nil || *result.Jobs[0].MatchScore < 0.99 {
+		t.Errorf("match job MatchScore = %v, want ~1", result.Jobs[0].MatchScore)
+	}
+
+	for _, job := range result.Jobs {
+		if job.ID == orthogonalID {
+			if job.MatchScore == nil || *job.MatchScore > 0.01 {
+				t.Errorf("orthogonal job MatchScore = %v, want ~0", job.MatchScore)
+			}
+		}
+	}
+}
+
+func TestGetJobByIDResumeEmbedding(t *testing.T) {
+	newTestDB(t)
+
+	seed := jobs.Job{Title: "Match", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/match", Description: "x"}
+	unembedded := jobs.Job{Title: "Unembedded", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/unembedded", Description: "x"}
+
+	if err := WriteJobsToDatabase([]jobs.Job{seed, unembedded}); err != nil {
+		t.Fatalf("seed db: %v", err)
+	}
+
+	matchID := jobIDByURL(t, seed.URL)
+	unembeddedID := jobIDByURL(t, unembedded.URL)
+	setJobEmbedding(t, matchID, unitVector(0))
+
+	resumeEmbedding := pgvector.NewVector(unitVector(0))
+
+	got, err := GetJobByID(context.Background(), matchID, JobDetailParams{ResumeEmbedding: &resumeEmbedding})
+	if err != nil {
+		t.Fatalf("GetJobByID: %v", err)
+	}
+	if got.MatchScore == nil || *got.MatchScore < 0.99 {
+		t.Errorf("MatchScore = %v, want ~1", got.MatchScore)
+	}
+
+	gotUnembedded, err := GetJobByID(context.Background(), unembeddedID, JobDetailParams{ResumeEmbedding: &resumeEmbedding})
+	if err != nil {
+		t.Fatalf("GetJobByID: %v", err)
+	}
+	if gotUnembedded.MatchScore != nil {
+		t.Errorf("MatchScore = %v, want nil for a job with no embedding", *gotUnembedded.MatchScore)
 	}
 }
 

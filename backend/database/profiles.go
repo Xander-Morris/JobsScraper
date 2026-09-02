@@ -9,6 +9,7 @@ import (
 	"time"
 
 	emailverifier "github.com/AfterShip/email-verifier"
+	"github.com/pgvector/pgvector-go"
 	"golang.org/x/crypto/bcrypt"
 
 	"main/llm"
@@ -504,6 +505,11 @@ type ResumeExtraction struct {
 	Projects       []llm.ProjectEntry        `json:"projects"`
 	Error          string                    `json:"error"`
 	UpdatedAt      time.Time                 `json:"updated_at"`
+	// Embedding is the resume's semantic vector, used to rank job matches by
+	// meaning instead of keyword overlap. Nil until the background embedding
+	// step (kicked off after extraction completes) finishes — callers should
+	// fall back to keyword-based matching when it's nil, not treat it as an error.
+	Embedding *pgvector.Vector `json:"-"`
 }
 
 func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
@@ -577,6 +583,24 @@ func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, er
 	return err
 }
 
+// SaveResumeEmbedding stores the semantic vector for an already-completed resume
+// extraction. Called best-effort after extraction succeeds — a failure here
+// should be logged and swallowed by the caller, not surfaced as an extraction
+// failure, since the structured extraction itself is unaffected and search/digest
+// both fall back to keyword matching when no embedding is present.
+func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float32) error {
+	db, err := GetDb()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = db.ExecContext(ctx, `UPDATE profile_resume_extractions SET embedding = $1 WHERE resume_id = $2`,
+		pgvector.NewVector(embedding), resumeID)
+
+	return err
+}
+
 func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
 	db, err := GetDb()
 
@@ -587,16 +611,17 @@ func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (Resume
 	var extraction ResumeExtraction
 	var fullName, email, phone, linkedIn, github, portfolio, summary, errMsg sql.NullString
 	var skills, education, workExperience, projects sql.NullString
+	var embedding sql.Null[pgvector.Vector]
 
 	err = db.QueryRowContext(ctx, `SELECT e.resume_id, e.status, e.full_name, e.email, e.phone,
 			e.linked_in, e.github, e.portfolio, e.summary,
-			e.skills, e.education, e.work_experience, e.projects, e.error, e.updated_at
+			e.skills, e.education, e.work_experience, e.projects, e.error, e.updated_at, e.embedding
 		FROM profile_resume_extractions e
 		JOIN profile_resumes r ON r.id = e.resume_id
 		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID).Scan(
 		&extraction.ResumeID, &extraction.Status, &fullName, &email, &phone,
 		&linkedIn, &github, &portfolio, &summary,
-		&skills, &education, &workExperience, &projects, &errMsg, &extraction.UpdatedAt,
+		&skills, &education, &workExperience, &projects, &errMsg, &extraction.UpdatedAt, &embedding,
 	)
 
 	if err != nil {
@@ -631,6 +656,9 @@ func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (Resume
 		if err := json.Unmarshal([]byte(projects.String), &extraction.Projects); err != nil {
 			return ResumeExtraction{}, fmt.Errorf("decode projects: %w", err)
 		}
+	}
+	if embedding.Valid {
+		extraction.Embedding = &embedding.V
 	}
 
 	return extraction, nil

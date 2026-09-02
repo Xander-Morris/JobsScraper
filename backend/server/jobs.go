@@ -38,6 +38,7 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 			slog.Error("search jobs: get active resume extraction", "error", err)
 		} else if found {
 			params.ResumeQuery = buildResumeSearchQuery(extraction)
+			params.ResumeEmbedding = extraction.Embedding
 		}
 	}
 
@@ -80,6 +81,7 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 			slog.Error("get job: get active resume extraction", "error", err)
 		} else if found {
 			detailParams.ResumeQuery = buildResumeSearchQuery(extraction)
+			detailParams.ResumeEmbedding = extraction.Embedding
 		}
 	}
 

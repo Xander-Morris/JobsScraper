@@ -7,6 +7,8 @@ import (
 	"main/jobs"
 	"strings"
 	"time"
+
+	"github.com/pgvector/pgvector-go"
 )
 
 type SortOrder string
@@ -17,32 +19,27 @@ const (
 )
 
 type JobSearchParams struct {
-	SearchQuery   string
-	// ResumeQuery is a websearch_to_tsquery-style query string (terms OR'd together)
-	// built from the caller's active resume, used to boost relevance ranking toward
-	// jobs matching their skills/experience. Empty when there's no active resume.
-	ResumeQuery   string
-	// ProfileID, when set, is used to annotate results with whether the caller has
-	// already marked each job applied. Zero for anonymous callers.
-	ProfileID int64
-	// PostedAfter, when set, restricts results to jobs posted after this time — used
-	// by the notification digest to only consider jobs new since the last run.
-	PostedAfter   *time.Time
-	Tags          []string
-	WorkplaceType jobs.WorkplaceType
-	MinSalary     int
-	MaxSalary     int
-	Sort          SortOrder
-	Limit         int
-	Offset        int
+	SearchQuery string
+	// ResumeQuery is a fallback keyword score, used only when ResumeEmbedding is nil.
+	ResumeQuery string
+	// ResumeEmbedding, when set, scores jobs by cosine similarity to the active
+	// resume instead of ResumeQuery's keyword overlap.
+	ResumeEmbedding *pgvector.Vector
+	ProfileID       int64
+	PostedAfter     *time.Time
+	Tags            []string
+	WorkplaceType   jobs.WorkplaceType
+	MinSalary       int
+	MaxSalary       int
+	Sort            SortOrder
+	Limit           int
+	Offset          int
 }
 
-// JobDetailParams carries the caller's profile context into GetJobByID so it can
-// annotate the job with a resume match score and applied status, the same way
-// SearchForJobs does for list results.
 type JobDetailParams struct {
-	ResumeQuery string
-	ProfileID   int64
+	ResumeQuery     string
+	ResumeEmbedding *pgvector.Vector
+	ProfileID       int64
 }
 
 const (
@@ -142,7 +139,11 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	matchScoreColumn := "NULL::real"
 	args := []any{id}
 
-	if params.ResumeQuery != "" {
+	switch {
+	case params.ResumeEmbedding != nil:
+		args = append(args, *params.ResumeEmbedding)
+		matchScoreColumn = fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(args))
+	case params.ResumeQuery != "":
 		args = append(args, params.ResumeQuery)
 		matchScoreColumn = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(args))
 	}
@@ -248,33 +249,42 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 
 	rankable := params.Sort != SortDate
 	hasSearchQuery := params.SearchQuery != ""
-	hasResumeQuery := params.ResumeQuery != ""
 
-	// The match_score column is independent of sort order — it's shown to the caller
-	// as a fit signal even when they've chosen to sort by date instead of relevance.
+	// match_score is independent of sort order — shown as a fit signal even when
+	// sorting by date. resumeScoreExpr is reused below in ORDER BY when blending
+	// with a typed search query.
 	matchScoreColumn := "NULL::real"
-	var resumeQueryArgIdx int
-	if hasResumeQuery {
+	var resumeScoreExpr string
+
+	switch {
+	case params.ResumeEmbedding != nil:
+		args = append(args, *params.ResumeEmbedding)
+		resumeScoreExpr = fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(args))
+	case params.ResumeQuery != "":
 		args = append(args, params.ResumeQuery)
-		resumeQueryArgIdx = len(args)
-		matchScoreColumn = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", resumeQueryArgIdx)
+		resumeScoreExpr = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(args))
 	}
 
+	if resumeScoreExpr != "" {
+		matchScoreColumn = resumeScoreExpr
+	}
+
+	hasResumeScore := resumeScoreExpr != ""
 	query := fmt.Sprintf("SELECT %s, %s AS match_score %s", jobColumns, matchScoreColumn, from)
 
 	switch {
-	case rankable && hasSearchQuery && hasResumeQuery:
+	case rankable && hasSearchQuery && hasResumeScore:
 		// Typed search stays the primary signal; the resume nudges ties toward jobs
 		// matching the candidate's skills/experience without overriding an explicit query.
 		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(
-			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * ts_rank(j.search_vector, websearch_to_tsquery('english', $%d))) DESC",
-			len(args), resumeQueryArgIdx)
+			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * coalesce(%s, 0)) DESC",
+			len(args), resumeScoreExpr)
 	case rankable && hasSearchQuery:
 		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, plainto_tsquery('english', $%d)) DESC", len(args))
-	case rankable && hasResumeQuery:
-		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, websearch_to_tsquery('english', $%d)) DESC", resumeQueryArgIdx)
+	case rankable && hasResumeScore:
+		query += fmt.Sprintf(" ORDER BY coalesce(%s, 0) DESC", resumeScoreExpr)
 	default:
 		query += " ORDER BY j.posted_at DESC"
 	}

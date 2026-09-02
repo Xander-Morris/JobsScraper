@@ -36,8 +36,10 @@ services:
     restart: unless-stopped
 
   # One-shot: waits for the ollama server above to accept connections, then pulls
-  # the model backend expects so the first real extraction request doesn't fail
-  # with "model not found". Exits once the pull succeeds; backend's depends_on
+  # the models backend expects so the first real request doesn't fail with
+  # "model not found" — qwen2.5:7b for resume extraction/generation, and
+  # nomic-embed-text (much smaller, ~274MB) for resume/job embeddings used in
+  # semantic match scoring. Exits once both pulls succeed; backend's depends_on
   # blocks startup on that success so it never races an empty model cache.
   ollama-pull:
     image: ollama/ollama:latest
@@ -45,7 +47,7 @@ services:
       - ollama
     environment:
       OLLAMA_HOST: ollama:11434
-    entrypoint: ["sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull qwen2.5:7b"]
+    entrypoint: ["sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull qwen2.5:7b && ollama pull nomic-embed-text"]
     restart: "no"
 
 volumes:

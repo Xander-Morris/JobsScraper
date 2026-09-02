@@ -1,6 +1,6 @@
-import { CheckIcon, ClipboardIcon, DownloadIcon } from 'lucide-react'
+import { CheckIcon, ClipboardIcon, DownloadIcon, SparklesIcon } from 'lucide-react'
 import { useState } from 'react'
-import { useMarkJobAppliedMutation, useUnmarkJobAppliedMutation } from '../api/jobs'
+import { useGenerateApplicationContentMutation, useMarkJobAppliedMutation, useUnmarkJobAppliedMutation } from '../api/jobs'
 import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '../api/profile'
 import type { Job } from '../api/schemas'
 import { Button } from './ui/button'
@@ -15,8 +15,12 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
   const markApplied = useMarkJobAppliedMutation(token)
   const unmarkApplied = useUnmarkJobAppliedMutation(token)
   const downloadResume = useDownloadResumeMutation(token)
+  const generateContent = useGenerateApplicationContentMutation(token)
   const [copied, setCopied] = useState(false)
+  const [copiedBulletIndex, setCopiedBulletIndex] = useState<number | null>(null)
   const downloadError = downloadResume.error instanceof Error ? downloadResume.error.message : null
+  const generateError = generateContent.error instanceof Error ? generateContent.error.message : null
+  const resumeReady = extraction?.status === 'completed'
 
   if (profileLoading || !profile) return null
 
@@ -48,6 +52,12 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
         URL.revokeObjectURL(url)
       },
     })
+  }
+
+  async function handleCopyBullet(bullet: string, index: number) {
+    await navigator.clipboard.writeText(bullet)
+    setCopiedBulletIndex(index)
+    setTimeout(() => setCopiedBulletIndex(null), 2000)
   }
 
   return (
@@ -84,6 +94,18 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
             <span className="text-xs text-muted-foreground">No active resume set.</span>
           )}
 
+          {resumeReady ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => generateContent.mutate(job.id)}
+              disabled={generateContent.isPending}
+            >
+              <SparklesIcon aria-hidden="true" /> {generateContent.isPending ? 'Generating…' : 'Generate cover letter'}
+            </Button>
+          ) : null}
+
           {job.applied ? (
             <Button
               type="button"
@@ -111,6 +133,48 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
           <p role="alert" className="text-xs text-destructive">
             {downloadError}
           </p>
+        )}
+
+        {generateError && (
+          <p role="alert" className="text-xs text-destructive">
+            {generateError}
+          </p>
+        )}
+
+        {generateContent.data && (
+          <div className="space-y-4 border-t border-border pt-3">
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-heading">Cover letter</p>
+              <textarea
+                readOnly
+                value={generateContent.data.cover_letter}
+                rows={10}
+                className="w-full resize-y rounded-md border border-border bg-background p-2 text-xs"
+              />
+            </div>
+
+            {generateContent.data.tailored_bullets.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-heading">Tailored bullets</p>
+                <ul className="space-y-1.5">
+                  {generateContent.data.tailored_bullets.map((bullet, index) => (
+                    <li key={index} className="flex items-start justify-between gap-2 text-xs">
+                      <span>{bullet}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => void handleCopyBullet(bullet, index)}
+                        aria-label="Copy bullet"
+                      >
+                        {copiedBulletIndex === index ? <CheckIcon aria-hidden="true" /> : <ClipboardIcon aria-hidden="true" />}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

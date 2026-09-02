@@ -187,6 +187,34 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 
 	if err := database.SaveResumeExtractionResult(ctx, resumeID, extracted); err != nil {
 		slog.Error("resume extraction: save result", "resume_id", resumeID, "error", err)
+		return
+	}
+
+	embedResumeExtraction(ctx, resumeID, extracted)
+}
+
+// embedResumeExtraction generates and stores a semantic embedding for a
+// just-completed resume extraction. Best-effort: a failure here is logged and
+// swallowed rather than flipping the extraction back to failed — the structured
+// extraction already succeeded independently, and job search/the digest email
+// both fall back to keyword matching when no embedding is present.
+func embedResumeExtraction(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) {
+	text := llm.EmbeddingText(llm.ResumeProfile{
+		FullName:       extracted.FullName,
+		Summary:        extracted.Summary,
+		Skills:         extracted.Skills,
+		WorkExperience: extracted.WorkExperience,
+		Projects:       extracted.Projects,
+	})
+
+	embeddings, err := llm.EmbedTexts(ctx, []string{text})
+	if err != nil {
+		slog.Error("resume extraction: embed", "resume_id", resumeID, "error", err)
+		return
+	}
+
+	if err := database.SaveResumeEmbedding(ctx, resumeID, embeddings[0]); err != nil {
+		slog.Error("resume extraction: save embedding", "resume_id", resumeID, "error", err)
 	}
 }
 

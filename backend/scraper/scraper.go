@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// embedJobsTimeout bounds how long a single scrape cycle will spend catching up
+// on embeddings for newly-scraped jobs before giving up and letting the next
+// cycle pick up where it left off.
+const embedJobsTimeout = 2 * time.Minute
+
 func runScraper(sources []jobs.JobSource) {
 	slog.Info("scraper: starting fetch cycle")
 
@@ -63,6 +68,14 @@ func runScraper(sources []jobs.JobSource) {
 
 	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
 		slog.Error("scraper: write jobs to database", "error", err)
+		return
+	}
+
+	embedCtx, cancel := context.WithTimeout(context.Background(), embedJobsTimeout)
+	defer cancel()
+
+	if err := database.EmbedPendingJobs(embedCtx); err != nil {
+		slog.Error("scraper: embed pending jobs", "error", err)
 	}
 }
 

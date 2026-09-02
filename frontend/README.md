@@ -1,32 +1,52 @@
-# React + TypeScript + Vite
+# frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite single page app for CrawlerAndIndexer. Browse and filter jobs, manage your profile, upload a resume, and see which listings are a good match.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + TypeScript
+- Vite for the dev server and build
+- TanStack Router for routing (file-based, see `src/routes/`)
+- TanStack Query for all server data fetching, no manual `fetch` + `useState` in components
+- Tailwind v4 + shadcn-style components in `src/components/ui/`
+- Zod for validating API responses in `src/api/schemas.ts`
 
-## React Compiler
+## Running locally
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Needs Node 22+.
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Dev server runs on `localhost:5173`. `.env` just needs `VITE_API_URL` pointing at your backend, defaults to `http://localhost:8090` which matches the backend's default port.
+
+Make sure the backend is actually running too, this app doesn't do anything useful against a dead API.
+
+## Scripts
+
+```bash
+npm run dev           # dev server with HMR
+npm run build          # type check + production build to dist/
+npm run lint            # oxlint
+npm run lint:fix       # oxlint --fix
+npm run format          # prettier --write
+npm run format:check   # prettier --check
+npm run preview         # serve the production build locally
+```
+
+CI runs `lint` and `build` on every push and PR. There's no test suite wired up yet, if you add one, hook it into `.github/workflows/ci.yml` alongside those.
+
+## Env vars
+
+Just one: `VITE_API_URL`. Vite inlines this into the JS bundle at build time, it's not something you can change at runtime after the app is built. That matters for Docker specifically, see below.
+
+## Docker
+
+```bash
+docker build --build-arg VITE_API_URL=https://api.yourdomain.com -t crawlerandindexer-frontend .
+```
+
+Because `VITE_API_URL` gets baked into the bundle during `npm run build`, you have to pass it as a build arg pointing at wherever the backend will actually be reachable, not as a runtime environment variable on the container. The image itself is just nginx serving the static build, `nginx.conf` handles the SPA fallback routing so refreshing on a deep link like `/jobs/123` doesn't 404.
