@@ -19,6 +19,8 @@ import (
 
 const maxResumeSize = 10 << 20 // 10 MiB
 
+const resumeUploadReadTimeout = 2 * time.Minute
+
 func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 	profileID, ok := profileIDFromContext(r.Context())
 	if !ok {
@@ -304,6 +306,12 @@ func handleActivateResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func readResumeUpload(w http.ResponseWriter, r *http.Request, requireFile bool) (string, string, []byte, error) {
+	// A 10 MiB body does not fit in the server's 15s ReadTimeout on a slow
+	// uplink, so give the upload its own read window.
+	if err := http.NewResponseController(w).SetReadDeadline(time.Now().Add(resumeUploadReadTimeout)); err != nil {
+		slog.Error("resume upload: extend read deadline", "error", err)
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxResumeSize+(1<<20))
 	if err := r.ParseMultipartForm(maxResumeSize); err != nil {
 		return "", "", nil, fmt.Errorf("resume upload must be 10 MB or smaller")

@@ -14,14 +14,25 @@ import (
 
 	"main/database"
 	"main/jobs"
+	"main/utils"
 )
 
 func TestMain(m *testing.M) {
-	connString := os.Getenv("TEST_DATABASE_CONNECTION")
+	connString := testDBConnString()
 
 	if connString == "" {
-		fmt.Println("TEST_DATABASE_CONNECTION not set; skipping tests that require a live Postgres database")
-		os.Exit(0)
+		fmt.Println("TEST_DATABASE_CONNECTION not set; running only the tests that need no database")
+
+		// Backstop: pin the package to an unreachable database so a DB-backed
+		// test missing its requireTestDB guard fails loudly instead of falling
+		// back, via GetDb and backend/.env, to the real database.
+		unreachable, err := sql.Open("pgx", "postgres://unreachable.invalid:5432/none")
+		if err != nil {
+			panic(err)
+		}
+
+		database.SetDB(unreachable)
+		os.Exit(m.Run())
 	}
 
 	db, err := sql.Open("pgx", connString)
@@ -33,20 +44,44 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	// schema_migrations is golang-migrate's version table — it must be dropped
-	// alongside the tables it tracks, or the next CreateTables() call sees the
-	// target version already applied and skips recreating what was just
-	// dropped here.
-	if _, err := db.Exec("DROP TABLE IF EXISTS job_tags, jobs, tags, schema_migrations CASCADE;"); err != nil {
+	// Same list, for the same reasons, as database.newTestDB: CASCADE does not
+	// reach child tables, so everything with a FK into profiles is named here or
+	// its rows outlive the id sequence reset — which is what made a second local
+	// run of these tests collide on an already-registered email.
+	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
+		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
+		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
+		schema_migrations`
+
+	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
 		panic(err)
 	}
 
 	database.SetDB(db)
 
+	if err := database.CreateTables(); err != nil {
+		panic(err)
+	}
+
 	code := m.Run()
 
 	db.Close()
 	os.Exit(code)
+}
+
+// testDBConnString reads through utils.GetEnv, not os.Getenv, so a value in
+// backend/.env counts — matching database.newTestDB, and letting these tests run
+// locally rather than only in CI.
+func testDBConnString() string {
+	return utils.GetEnv()["TEST_DATABASE_CONNECTION"]
+}
+
+func requireTestDB(t *testing.T) {
+	t.Helper()
+
+	if testDBConnString() == "" {
+		t.Skip("TEST_DATABASE_CONNECTION not set; skipping test that requires a live Postgres database")
+	}
 }
 
 func TestParseJobSearchParams(t *testing.T) {
@@ -176,6 +211,7 @@ func TestParseJobSearchParams(t *testing.T) {
 
 func seedJob(t *testing.T, url string) int64 {
 	t.Helper()
+	requireTestDB(t)
 
 	job := jobs.Job{
 		Title:    "Backend Engineer",
@@ -232,6 +268,8 @@ func TestHandleGetJob(t *testing.T) {
 }
 
 func TestHandleGetJobNotFound(t *testing.T) {
+	requireTestDB(t)
+
 	r := httptest.NewRequest("GET", "/api/jobs/999999999", nil)
 	r.SetPathValue("id", "999999999")
 	rec := httptest.NewRecorder()

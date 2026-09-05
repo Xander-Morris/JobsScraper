@@ -51,6 +51,12 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ollama on CPU routinely runs past the server's 30s WriteTimeout, which
+	// would kill the response mid-generation.
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(generationTimeout + 30*time.Second)); err != nil {
+		slog.Error("generate application content: extend write deadline", "error", err)
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), generationTimeout)
 	defer cancel()
 

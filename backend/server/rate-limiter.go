@@ -60,10 +60,21 @@ func (l *ipLimiter) cleanupLoop() {
 	}
 }
 
-var globalLimiter = newIPLimiter(1, 3)
+// Sized for a single-page-app screen load, which fans out to several endpoints
+// at once and then polls resume extraction status, while still capping scripted
+// abuse.
+var globalLimiter = newIPLimiter(10, 20)
 
 var authLimiter = newIPLimiter(rate.Every(20*time.Second), 5)
 
+// llmLimiter guards the endpoints that hand work to Ollama. Each one occupies a
+// CPU-bound model for up to a couple of minutes, so globalLimiter is far too
+// loose to stop one caller from pinning the host.
+var llmLimiter = newIPLimiter(rate.Every(10*time.Second), 3)
+
+// clientIP trusts the first X-Forwarded-For entry because Caddy replaces the
+// header with the real remote address before proxying (see Caddyfile). Exposing
+// the backend directly to the internet would make these limits spoofable.
 func clientIP(r *http.Request) (string, error) {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		if ip := strings.TrimSpace(strings.Split(fwd, ",")[0]); ip != "" {
@@ -94,7 +105,7 @@ func limit(next http.Handler) http.Handler {
 	})
 }
 
-func limitAuth(next http.HandlerFunc) http.HandlerFunc {
+func limitWith(l *ipLimiter, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip, err := clientIP(r)
 		if err != nil {
@@ -103,11 +114,19 @@ func limitAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		if !authLimiter.allow(ip) {
+		if !l.allow(ip) {
 			writeError(w, http.StatusTooManyRequests, "too many attempts, please try again later")
 			return
 		}
 
 		next(w, r)
 	}
+}
+
+func limitAuth(next http.HandlerFunc) http.HandlerFunc {
+	return limitWith(authLimiter, next)
+}
+
+func limitLLM(next http.HandlerFunc) http.HandlerFunc {
+	return limitWith(llmLimiter, next)
 }

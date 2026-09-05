@@ -26,8 +26,10 @@ Resume extraction and cover letter generation need a local Ollama server running
 ## Tests
 
 ```bash
-go test ./...
+go test -p 1 ./...
 ```
+
+`-p 1` matters: the `database` and `server` packages share one test database and each resets its tables at startup, so run in parallel they wipe each other mid-test.
 
 Tests that touch the database use `TEST_DATABASE_CONNECTION` instead of `DATABASE_CONNECTION`. Make sure that's set to a **different** database than your real one, the test suite drops and recreates tables on it. If `TEST_DATABASE_CONNECTION` isn't set, DB-backed tests skip themselves rather than fail.
 

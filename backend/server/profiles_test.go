@@ -9,6 +9,8 @@ import (
 )
 
 func TestHandleCreateProfile(t *testing.T) {
+	requireTestDB(t)
+
 	creds := map[string]string{
 		"email":    "test@example.com",
 		"password": "securepassword123",
