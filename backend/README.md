@@ -8,9 +8,11 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `database/` — Postgres access, migrations, schema
 - `scraper/` — runs the job source fetchers on a 10 minute ticker
 - `jobs/` — one file per job source (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely)
-- `llm/` — resume text extraction via Ollama
+- `llm/` — resume text extraction, generation, and embeddings via the Gemini API
 - `notify/` — Resend email client for the digest
 - `utils/` — env loading and a couple of small helpers
+- `api/` — Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
+- `coldstart/` — one-time startup work (env validation, migrations) shared by the entrypoints under `api/`
 
 ## Running locally
 
@@ -21,7 +23,7 @@ You need Go 1.26+ and a Postgres database.
 
 The server listens on `:8090` by default (override with `PORT`). Tables are created/migrated automatically on startup, so there's no separate migration step to run by hand.
 
-Resume extraction and cover letter generation need a local Ollama server running with `qwen2.5:7b` pulled, and semantic job matching needs `nomic-embed-text` pulled too. If you're not testing those features you can skip setting it up, they'll just fail (or silently fall back to keyword matching, for search) until Ollama is reachable. Easiest way to get it running is `docker compose up ollama ollama-pull` from the repo root.
+Resume extraction, cover letter generation, and semantic job matching need `GEMINI_API_KEY` set (a free key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). If you're not testing those features you can skip it, they'll just fail (or silently fall back to keyword matching, for search) until it's set.
 
 ## Tests
 
@@ -49,8 +51,10 @@ Full list with comments is in `.env.example`. The short version:
 | `RESEND_FROM_ADDRESS` | optional | defaults to Resend's shared sandbox address |
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
 | `TEST_DATABASE_CONNECTION` | dev only | separate DB for `go test` |
-| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | optional | defaults point at `localhost:11434` and `qwen2.5:7b` |
-| `OLLAMA_EMBED_MODEL` | optional | embedding model for semantic resume/job matching, defaults to `nomic-embed-text` |
+| `GEMINI_API_KEY` | recommended | resume extraction/generation and embeddings no-op or fail without it |
+| `GEMINI_MODEL` | optional | defaults to `gemini-2.5-flash` |
+| `GEMINI_EMBED_MODEL` | optional | defaults to `text-embedding-004`; must stay 768-dim to match the `vector(768)` columns |
+| `CRON_SECRET` | Vercel only | authenticates Vercel Cron Jobs hitting `api/cron/*`; unused by the self-hosted binary |
 
 ## API
 
@@ -60,7 +64,7 @@ Auth is a short-lived JWT access token plus a longer-lived refresh token in an h
 
 ## Background jobs
 
-Two loops start alongside the HTTP server and run for the life of the process:
+Two loops start alongside the HTTP server and run for the life of the process (self-hosted only — on Vercel, `api/cron/scrape.go` and `api/cron/digest.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
 
 - **Scraper** — fetches all job sources immediately on boot, then every 10 minutes
 - **Digest scheduler** — sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on
@@ -73,4 +77,4 @@ Both recover from panics per-run so one bad fetch or one bad email doesn't take 
 docker build -t crawlerandindexer-backend .
 ```
 
-Multi-stage build, final image is Alpine with just the compiled binary. See the repo root README and `docker-compose.yml` for running it alongside the frontend and Ollama.
+Multi-stage build, final image is Alpine with just the compiled binary. See the repo root README and `docker-compose.yml` for running it alongside the frontend, or the "Fully on Vercel" section for the serverless path.

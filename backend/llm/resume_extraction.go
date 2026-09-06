@@ -8,16 +8,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"net/http"
-	"os"
 	"strings"
 
 	"github.com/ledongthuc/pdf"
-)
-
-const (
-	defaultOllamaBaseURL = "http://localhost:11434"
-	defaultOllamaModel   = "qwen2.5:7b"
 )
 
 var ErrUnsupportedFormat = fmt.Errorf("resume format is not supported for extraction")
@@ -60,71 +53,18 @@ type ExtractedResume struct {
 	Projects       []ProjectEntry        `json:"projects"`
 }
 
-func ollamaBaseURL() string {
-	if url := os.Getenv("OLLAMA_BASE_URL"); url != "" {
-		return strings.TrimSuffix(url, "/")
-	}
-
-	return defaultOllamaBaseURL
-}
-
-func ollamaModel() string {
-	if model := os.Getenv("OLLAMA_MODEL"); model != "" {
-		return model
-	}
-
-	return defaultOllamaModel
-}
-
 func ExtractResumeFields(ctx context.Context, fileName, contentType string, content []byte) (*ExtractedResume, error) {
 	text, err := extractResumeText(contentType, content)
 	if err != nil {
 		return nil, err
 	}
 
-	reqBody := map[string]any{
-		"model": ollamaModel(),
-		"messages": []any{
-			map[string]any{
-				"role":    "user",
-				"content": extractionPrompt + "\n\nResume text:\n" + text,
-			},
-		},
-		"format": resumeSchema(),
-		"stream": false,
-		"options": map[string]any{
-			"num_ctx":     16384,
-			"temperature": 0,
-		},
-	}
-
-	payload, err := json.Marshal(reqBody)
+	respText, err := callGeminiChat(ctx, extractionPrompt+"\n\nResume text:\n"+text, resumeSchema())
 	if err != nil {
-		return nil, fmt.Errorf("encode request: %w", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ollamaBaseURL()+"/api/chat", bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("content-type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("call ollama (is `ollama serve` running at %s?): %w", ollamaBaseURL(), err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read ollama response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return parseExtractionResponse(respBody)
+	return parseExtractionResponse(respText)
 }
 
 func extractResumeText(contentType string, content []byte) (string, error) {
@@ -223,24 +163,9 @@ func resumeSchema() map[string]any {
 	}
 }
 
-type chatResponse struct {
-	Message struct {
-		Content string `json:"content"`
-	} `json:"message"`
-}
-
-func parseExtractionResponse(body []byte) (*ExtractedResume, error) {
-	var parsed chatResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("decode ollama response: %w", err)
-	}
-
-	if strings.TrimSpace(parsed.Message.Content) == "" {
-		return nil, fmt.Errorf("ollama returned an empty response")
-	}
-
+func parseExtractionResponse(text string) (*ExtractedResume, error) {
 	var extracted ExtractedResume
-	if err := json.Unmarshal([]byte(parsed.Message.Content), &extracted); err != nil {
+	if err := json.Unmarshal([]byte(text), &extracted); err != nil {
 		return nil, fmt.Errorf("decode extracted fields: %w", err)
 	}
 

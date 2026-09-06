@@ -13,7 +13,10 @@ import (
 	"main/llm"
 )
 
-const generationTimeout = 2 * time.Minute
+// generationTimeout is kept comfortably under a serverless function's max
+// duration (e.g. 60s on Vercel Hobby) so a slow Gemini response ends in a clean
+// error instead of the platform hard-killing the function mid-request.
+const generationTimeout = 45 * time.Second
 
 func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
 	profileID, ok := profileIDFromContext(r.Context())
@@ -51,9 +54,9 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ollama on CPU routinely runs past the server's 30s WriteTimeout, which
+	// A slow LLM response can run past the server's 30s WriteTimeout, which
 	// would kill the response mid-generation.
-	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(generationTimeout + 30*time.Second)); err != nil {
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(generationTimeout + 15*time.Second)); err != nil {
 		slog.Error("generate application content: extend write deadline", "error", err)
 	}
 

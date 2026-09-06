@@ -41,7 +41,7 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueResumeExtraction(id, fileName, contentType, content)
+	runResumeExtraction(id, fileName, contentType, content)
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -70,7 +70,7 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = database.ReplaceResume(r.Context(), profileID, resumeID, fileName, contentType, content)
 		if err == nil {
-			queueResumeExtraction(resumeID, fileName, contentType, content)
+			runResumeExtraction(resumeID, fileName, contentType, content)
 		}
 	}
 
@@ -147,20 +147,11 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-const resumeExtractionTimeout = 5 * time.Minute
-
-const maxConcurrentResumeExtractions = 3
-
-var resumeExtractionSlots = make(chan struct{}, maxConcurrentResumeExtractions)
-
-func queueResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
-	go func() {
-		resumeExtractionSlots <- struct{}{}
-		defer func() { <-resumeExtractionSlots }()
-
-		runResumeExtraction(resumeID, fileName, contentType, content)
-	}()
-}
+// resumeExtractionTimeout bounds a single extraction call, not the HTTP request
+// it runs inside — kept comfortably under a serverless function's max duration
+// (e.g. 60s on Vercel Hobby) since extraction now runs synchronously in-request
+// rather than in a detached background goroutine.
+const resumeExtractionTimeout = 45 * time.Second
 
 func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), resumeExtractionTimeout)
@@ -273,7 +264,7 @@ func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queueResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
+	runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "pending"})
 }

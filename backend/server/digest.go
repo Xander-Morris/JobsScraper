@@ -45,6 +45,14 @@ func StartDigestScheduler(ctx context.Context) {
 	}
 }
 
+// RunDigestCycle runs a single digest pass across all opted-in profiles. Meant
+// for a scheduler with no long-lived process of its own (e.g. a Vercel Cron Job
+// hitting an endpoint that calls this once per invocation), as an alternative to
+// StartDigestScheduler's in-process ticker loop.
+func RunDigestCycle() {
+	runDigestJobSafely()
+}
+
 // runDigestJobSafely wraps runDigestJob with a panic recovery so one bad run
 // logs and moves on instead of killing the scheduler goroutine (and, since
 // nothing restarts it, silently ending all future digests) for the rest of

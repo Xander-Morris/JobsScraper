@@ -4,13 +4,8 @@ services:
   backend:
     build: ./backend
     env_file: ./backend/.env
-    environment:
-      OLLAMA_BASE_URL: http://ollama:11434
     expose:
       - "8090"
-    depends_on:
-      ollama-pull:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/api/health"]
       interval: 30s
@@ -18,33 +13,6 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: https://${BACKEND_DOMAIN}
-    expose:
-      - "80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-
-  ollama-pull:
-    image: ollama/ollama:latest
-    depends_on:
-      - ollama
-    environment:
-      OLLAMA_HOST: ollama:11434
-    entrypoint: ["sh", "-c", "until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull qwen2.5:7b && ollama pull nomic-embed-text"]
-    restart: "no"
 
   caddy:
     image: caddy:2-alpine
@@ -56,15 +24,12 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     environment:
-      FRONTEND_DOMAIN: ${FRONTEND_DOMAIN}
       BACKEND_DOMAIN: ${BACKEND_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     depends_on:
-      - frontend
       - backend
     restart: unless-stopped
 
 volumes:
-  ollama_data:
   caddy_data:
   caddy_config:

@@ -1,12 +1,9 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 )
 
@@ -37,49 +34,14 @@ const generationPrompt = "Using the candidate's resume information and the job p
 	"numbers where available, rewritten to emphasize relevance to this job's requirements — do not fabricate new ones."
 
 func GenerateApplicationContent(ctx context.Context, profile ResumeProfile, job JobPosting) (*GeneratedContent, error) {
-	reqBody := map[string]any{
-		"model": ollamaModel(),
-		"messages": []any{
-			map[string]any{
-				"role":    "user",
-				"content": generationPrompt + "\n\n" + formatResumeProfile(profile) + "\n\n" + formatJobPosting(job),
-			},
-		},
-		"format": generationSchema(),
-		"stream": false,
-		"options": map[string]any{
-			"num_ctx":     16384,
-			"temperature": 0,
-		},
-	}
+	prompt := generationPrompt + "\n\n" + formatResumeProfile(profile) + "\n\n" + formatJobPosting(job)
 
-	payload, err := json.Marshal(reqBody)
+	respText, err := callGeminiChat(ctx, prompt, generationSchema())
 	if err != nil {
-		return nil, fmt.Errorf("encode request: %w", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ollamaBaseURL()+"/api/chat", bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("content-type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("call ollama (is `ollama serve` running at %s?): %w", ollamaBaseURL(), err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read ollama response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return parseGenerationResponse(respBody)
+	return parseGenerationResponse(respText)
 }
 
 // EmbeddingText renders a resume profile as the same compact, information-dense
@@ -153,18 +115,9 @@ func generationSchema() map[string]any {
 	}
 }
 
-func parseGenerationResponse(body []byte) (*GeneratedContent, error) {
-	var parsed chatResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("decode ollama response: %w", err)
-	}
-
-	if strings.TrimSpace(parsed.Message.Content) == "" {
-		return nil, fmt.Errorf("ollama returned an empty response")
-	}
-
+func parseGenerationResponse(text string) (*GeneratedContent, error) {
 	var generated GeneratedContent
-	if err := json.Unmarshal([]byte(parsed.Message.Content), &generated); err != nil {
+	if err := json.Unmarshal([]byte(text), &generated); err != nil {
 		return nil, fmt.Errorf("decode generated content: %w", err)
 	}
 
