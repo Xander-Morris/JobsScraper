@@ -14,5 +14,5 @@ func EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 		return nil, nil
 	}
 
-	return callGeminiEmbed(ctx, texts)
+	return callJinaEmbed(ctx, texts)
 }

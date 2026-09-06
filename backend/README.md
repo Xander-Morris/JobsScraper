@@ -8,7 +8,7 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `database/` — Postgres access, migrations, schema
 - `scraper/` — runs the job source fetchers on a 10 minute ticker
 - `jobs/` — one file per job source (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely)
-- `llm/` — resume text extraction, generation, and embeddings via the Gemini API
+- `llm/` — resume text extraction and generation via Groq, embeddings via Jina AI
 - `notify/` — Resend email client for the digest
 - `utils/` — env loading and a couple of small helpers
 - `api/` — Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
@@ -23,7 +23,7 @@ You need Go 1.26+ and a Postgres database.
 
 The server listens on `:8090` by default (override with `PORT`). Tables are created/migrated automatically on startup, so there's no separate migration step to run by hand.
 
-Resume extraction, cover letter generation, and semantic job matching need `GEMINI_API_KEY` set (a free key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). If you're not testing those features you can skip it, they'll just fail (or silently fall back to keyword matching, for search) until it's set.
+Resume extraction and cover letter generation need `GROQ_API_KEY` set (a free key from [console.groq.com/keys](https://console.groq.com/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
 
 ## Tests
 
@@ -51,9 +51,10 @@ Full list with comments is in `.env.example`. The short version:
 | `RESEND_FROM_ADDRESS` | optional | defaults to Resend's shared sandbox address |
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
 | `TEST_DATABASE_CONNECTION` | dev only | separate DB for `go test` |
-| `GEMINI_API_KEY` | recommended | resume extraction/generation and embeddings no-op or fail without it |
-| `GEMINI_MODEL` | optional | defaults to `gemini-2.5-flash` |
-| `GEMINI_EMBED_MODEL` | optional | defaults to `text-embedding-004`; must stay 768-dim to match the `vector(768)` columns |
+| `GROQ_API_KEY` | recommended | resume extraction/generation fail without it |
+| `GROQ_MODEL` | optional | defaults to `llama-3.3-70b-versatile` |
+| `JINA_API_KEY` | recommended | embeddings fail without it (search/digest fall back to keyword matching) |
+| `JINA_EMBED_MODEL` | optional | defaults to `jina-embeddings-v2-base-en`; must stay 768-dim to match the `vector(768)` columns |
 | `CRON_SECRET` | Vercel only | authenticates Vercel Cron Jobs hitting `api/cron/*`; unused by the self-hosted binary |
 
 ## API

@@ -36,7 +36,7 @@ const generationPrompt = "Using the candidate's resume information and the job p
 func GenerateApplicationContent(ctx context.Context, profile ResumeProfile, job JobPosting) (*GeneratedContent, error) {
 	prompt := generationPrompt + "\n\n" + formatResumeProfile(profile) + "\n\n" + formatJobPosting(job)
 
-	respText, err := callGeminiChat(ctx, prompt, generationSchema())
+	respText, err := callGroqChat(ctx, prompt, generationSchema())
 	if err != nil {
 		return nil, err
 	}
