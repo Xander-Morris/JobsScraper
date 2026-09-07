@@ -1,4 +1,5 @@
 {
+  "framework": null,
   "functions": {
     "api/index.go": { "maxDuration": 60 },
     "api/cron/scrape.go": { "maxDuration": 60 },
