@@ -59,7 +59,7 @@ func ExtractResumeFields(ctx context.Context, fileName, contentType string, cont
 		return nil, err
 	}
 
-	respText, err := callGroqChat(ctx, extractionPrompt+"\n\nResume text:\n"+text, resumeSchema())
+	respText, err := callOpenRouterChat(ctx, extractionPrompt+"\n\nResume text:\n"+text, resumeSchema())
 	if err != nil {
 		return nil, err
 	}
