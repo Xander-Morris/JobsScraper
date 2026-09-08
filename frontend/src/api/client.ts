@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod'
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8090'
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8090').replace(/\/+$/, '')
 const tokenRefreshedEvent = 'profile-token-refreshed'
 const sessionExpiredEvent = 'profile-session-expired'
 
