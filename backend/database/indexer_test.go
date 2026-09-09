@@ -33,10 +33,10 @@ func newTestDB(t *testing.T) {
 	}
 
 	// DROP TABLE ... CASCADE only cascades to dependent objects (e.g. FK constraints),
-	// not to child tables themselves — every table with a FK into profiles must be
+	// not to child tables themselves. Every table with a FK into profiles must be
 	// listed explicitly or its rows outlive profiles' id sequence reset and collide
 	// with fresh test profiles that reuse the same ids.
-	// schema_migrations must be dropped too — it's golang-migrate's version
+	// schema_migrations must be dropped too. It's golang-migrate's version
 	// table, and it survives this reset since it's not itself one of the
 	// tables migration 000001 creates. Left in place, CreateTables' next call
 	// would see the target version already applied and skip recreating
@@ -174,7 +174,7 @@ func TestSearchForJobsResumeEmbedding(t *testing.T) {
 	resumeVec := unitVector(0)
 	setJobEmbedding(t, matchID, unitVector(0))
 	setJobEmbedding(t, orthogonalID, unitVector(1))
-	// third job's embedding stays NULL — not yet processed by the background embed step.
+	// third job's embedding stays NULL, not yet processed by the background embed step.
 
 	resumeEmbedding := pgvector.NewVector(resumeVec)
 

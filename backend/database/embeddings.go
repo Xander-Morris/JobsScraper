@@ -13,7 +13,7 @@ import (
 const embedJobsBatchSize = 50
 
 // EmbedPendingJobs embeds every job whose embedding is still NULL, in batches,
-// until none are left. Only ever processes a job once — descriptions are
+// until none are left. Only ever processes a job once, since descriptions are
 // effectively static once posted, so re-scraping the same job again later won't
 // re-embed it. Best-effort: callers should log and continue on error rather than
 // fail the scrape cycle over it, since an unreachable Ollama isn't a hard

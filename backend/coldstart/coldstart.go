@@ -37,8 +37,8 @@ func Ensure() {
 
 // AuthorizedCron reports whether a request carries the CRON_SECRET this
 // deployment expects. Vercel Cron Jobs send "Authorization: Bearer
-// $CRON_SECRET" automatically when CRON_SECRET is set as a project env var —
-// this stops anyone else from hitting a cron endpoint's public URL directly.
+// $CRON_SECRET" automatically when CRON_SECRET is set as a project env var.
+// This stops anyone else from hitting a cron endpoint's public URL directly.
 func AuthorizedCron(r *http.Request) bool {
 	secret := os.Getenv("CRON_SECRET")
 

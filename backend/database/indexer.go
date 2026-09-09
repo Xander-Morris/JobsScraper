@@ -250,7 +250,7 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	rankable := params.Sort != SortDate
 	hasSearchQuery := params.SearchQuery != ""
 
-	// match_score is independent of sort order — shown as a fit signal even when
+	// match_score is independent of sort order, shown as a fit signal even when
 	// sorting by date. resumeScoreExpr is reused below in ORDER BY when blending
 	// with a typed search query.
 	matchScoreColumn := "NULL::real"

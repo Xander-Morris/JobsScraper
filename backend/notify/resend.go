@@ -24,7 +24,7 @@ type resendEmailRequest struct {
 }
 
 // SendEmail sends a plain-text email via the Resend API. If RESEND_API_KEY isn't
-// configured, it logs and no-ops rather than failing — lets the rest of the
+// configured, it logs and no-ops rather than failing. Lets the rest of the
 // notification pipeline (matching, digest bookkeeping) run and be tested before a
 // real sending credential is wired up.
 func SendEmail(ctx context.Context, to, subject, body string) error {

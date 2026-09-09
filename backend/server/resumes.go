@@ -148,7 +148,7 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 }
 
 // resumeExtractionTimeout bounds a single extraction call, not the HTTP request
-// it runs inside — kept comfortably under a serverless function's max duration
+// it runs inside. Kept comfortably under a serverless function's max duration
 // (e.g. 60s on Vercel Hobby) since extraction now runs synchronously in-request
 // rather than in a detached background goroutine.
 const resumeExtractionTimeout = 45 * time.Second
@@ -188,7 +188,7 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 
 // embedResumeExtraction generates and stores a semantic embedding for a
 // just-completed resume extraction. Best-effort: a failure here is logged and
-// swallowed rather than flipping the extraction back to failed — the structured
+// swallowed rather than flipping the extraction back to failed. The structured
 // extraction already succeeded independently, and job search/the digest email
 // both fall back to keyword matching when no embedding is present.
 func embedResumeExtraction(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) {

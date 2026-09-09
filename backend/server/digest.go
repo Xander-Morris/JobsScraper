@@ -27,7 +27,7 @@ const digestJobTimeout = 2 * time.Minute
 
 // StartDigestScheduler runs the job-match email digest once at startup, then once
 // per digestInterval, until ctx is cancelled. Meant to be launched in its own
-// goroutine, mirroring scraper.StartScrapingJob — including waiting out a run
+// goroutine, mirroring scraper.StartScrapingJob, including waiting out a run
 // already in flight when ctx is cancelled, instead of abandoning it mid-send.
 func StartDigestScheduler(ctx context.Context) {
 	runDigestJobSafely()
@@ -84,7 +84,7 @@ func runDigestJob() {
 }
 
 // sendDigestForProfileSafely isolates one profile's digest from the rest of the
-// batch — a panic building/sending one profile's email shouldn't skip every
+// batch. A panic building/sending one profile's email shouldn't skip every
 // other profile in this run.
 func sendDigestForProfileSafely(ctx context.Context, profile database.DigestProfile) {
 	defer func() {
@@ -149,7 +149,7 @@ func sendDigestForProfile(ctx context.Context, profile database.DigestProfile) e
 }
 
 // goodFitJobs keeps jobs whose match score is at least digestGoodFitRatio of the
-// best score in this batch — the same relative-tiering the "Good fit" badge uses
+// best score in this batch, the same relative-tiering the "Good fit" badge uses
 // client-side, since a raw ts_rank score isn't calibrated to an absolute scale.
 func goodFitJobs(candidates []jobs.Job) []jobs.Job {
 	var best float64
@@ -198,7 +198,7 @@ func renderDigestEmail(matched []jobs.Job, profileID int64) string {
 }
 
 // unsubscribeToken is an HMAC over the profile ID, keyed on the same SECRET_KEY
-// used for access-token JWTs — lets the one-click link in a digest email prove
+// used for access-token JWTs. Lets the one-click link in a digest email prove
 // it was minted by us for that specific profile, without requiring the
 // recipient to be logged in to click it.
 func unsubscribeToken(profileID int64) string {

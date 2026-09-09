@@ -1,6 +1,6 @@
 // Package handler is the Vercel serverless entrypoint that serves the whole
 // API through the same handler chain server.New uses for the self-hosted
-// binary — see vercel.json's rewrite, which sends every /api/* request here.
+// binary. See vercel.json's rewrite, which sends every /api/* request here.
 package handler
 
 import (

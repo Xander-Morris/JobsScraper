@@ -12,11 +12,11 @@ import (
 )
 
 // defaultOpenRouterModel is a free-tier model (":free" suffix, no cost, rate
-// limited), verified against the actual resumeSchema() shape — takes ~20-30s
+// limited), verified against the actual resumeSchema() shape. Takes ~20-30s
 // for a full resume extraction, comfortably under resumeExtractionTimeout.
 // OpenRouter's lineup of free models turns over often (some go paid-only,
-// others get upstream-rate-limited across all free users sharing that slot)
-// — if this one stops working, pick a current one from
+// others get upstream-rate-limited across all free users sharing that slot).
+// If this one stops working, pick a current one from
 // https://openrouter.ai/api/v1/models (filter for pricing.prompt == "0") and
 // set OPENROUTER_MODEL instead of changing this default.
 const defaultOpenRouterModel = "minimax/minimax-m2.7:free"
@@ -65,7 +65,7 @@ type openRouterChatResponse struct {
 // callOpenRouterChat sends a single-turn prompt to OpenRouter's OpenAI-compatible
 // chat completions endpoint, constrained to valid JSON via response_format
 // (json_object mode guarantees syntactically valid JSON, not adherence to a
-// specific shape — so schema is rendered into the prompt itself as the actual
+// specific shape, so schema is rendered into the prompt itself as the actual
 // constraint on field names/types, same approach as the Groq client this
 // replaced).
 func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]any) (string, error) {

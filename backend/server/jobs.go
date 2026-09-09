@@ -1,14 +1,18 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pgvector/pgvector-go"
 
 	"main/database"
 	"main/jobs"
@@ -31,15 +35,7 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 
 	if profileID, ok := profileIDFromContext(r.Context()); ok {
 		params.ProfileID = profileID
-
-		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
-
-		if err != nil {
-			slog.Error("search jobs: get active resume extraction", "error", err)
-		} else if found {
-			params.ResumeQuery = buildResumeSearchQuery(extraction)
-			params.ResumeEmbedding = extraction.Embedding
-		}
+		params.ResumeQuery, params.ResumeEmbedding = activeResumeSearchContext(r.Context(), profileID, "search jobs")
 	}
 
 	result, err := database.SearchForJobs(r.Context(), params)
@@ -74,15 +70,7 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 
 	if profileID, ok := profileIDFromContext(r.Context()); ok {
 		detailParams.ProfileID = profileID
-
-		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
-
-		if err != nil {
-			slog.Error("get job: get active resume extraction", "error", err)
-		} else if found {
-			detailParams.ResumeQuery = buildResumeSearchQuery(extraction)
-			detailParams.ResumeEmbedding = extraction.Embedding
-		}
+		detailParams.ResumeQuery, detailParams.ResumeEmbedding = activeResumeSearchContext(r.Context(), profileID, "get job")
 	}
 
 	job, err := database.GetJobByID(r.Context(), id, detailParams)
@@ -156,6 +144,25 @@ type jobSearchResponse struct {
 	Offset int        `json:"offset"`
 }
 
+// activeResumeSearchContext looks up the profile's active resume and turns it into
+// the query/embedding pair job search and job detail use to rank by fit. A missing
+// or unextracted resume isn't an error; it just means no resume-based ranking.
+// logLabel identifies the caller in the error log (e.g. "search jobs", "get job").
+func activeResumeSearchContext(ctx context.Context, profileID int64, logLabel string) (query string, embedding *pgvector.Vector) {
+	extraction, found, err := database.GetActiveResumeExtraction(ctx, profileID)
+
+	if err != nil {
+		slog.Error(logLabel+": get active resume extraction", "error", err)
+		return "", nil
+	}
+
+	if !found {
+		return "", nil
+	}
+
+	return buildResumeSearchQuery(extraction), extraction.Embedding
+}
+
 func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 	query := r.URL.Query()
 
@@ -164,21 +171,49 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 		Limit:       database.DefaultSearchLimit,
 	}
 
-	if raw := query.Get("workplace_type"); raw != "" {
-		workplaceType, ok := jobs.ParseWorkplaceType(raw)
-
-		if !ok {
-			return nil, fmt.Errorf("invalid workplace_type %q", raw)
-		}
-
-		params.WorkplaceType = workplaceType
+	setters := []func(*database.JobSearchParams, url.Values) error{
+		setWorkplaceTypeParam,
+		setSalaryRangeParams,
+		setDatePostedParam,
+		setTagsParam,
+		setSortParam,
+		setLimitParam,
+		setOffsetParam,
 	}
 
+	for _, set := range setters {
+		if err := set(params, query); err != nil {
+			return nil, err
+		}
+	}
+
+	return params, nil
+}
+
+func setWorkplaceTypeParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("workplace_type")
+
+	if raw == "" {
+		return nil
+	}
+
+	workplaceType, ok := jobs.ParseWorkplaceType(raw)
+
+	if !ok {
+		return fmt.Errorf("invalid workplace_type %q", raw)
+	}
+
+	params.WorkplaceType = workplaceType
+
+	return nil
+}
+
+func setSalaryRangeParams(params *database.JobSearchParams, query url.Values) error {
 	if raw := query.Get("min_salary"); raw != "" {
 		minSalary, err := strconv.Atoi(raw)
 
 		if err != nil || minSalary < 0 {
-			return nil, fmt.Errorf("invalid min_salary %q", raw)
+			return fmt.Errorf("invalid min_salary %q", raw)
 		}
 
 		params.MinSalary = minSalary
@@ -188,61 +223,101 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 		maxSalary, err := strconv.Atoi(raw)
 
 		if err != nil || maxSalary < params.MinSalary {
-			return nil, fmt.Errorf("invalid max_salary %q", raw)
+			return fmt.Errorf("invalid max_salary %q", raw)
 		}
 
 		params.MaxSalary = maxSalary
 	}
 
-	if raw := query.Get("date_posted"); raw != "" {
-		lookback, ok := datePostedLookback[raw]
+	return nil
+}
 
-		if !ok {
-			return nil, fmt.Errorf("invalid date_posted %q", raw)
-		}
+func setDatePostedParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("date_posted")
 
-		cutoff := time.Now().Add(-lookback)
-		params.PostedAfter = &cutoff
+	if raw == "" {
+		return nil
 	}
 
-	if raw := query.Get("tags"); raw != "" {
-		for tag := range strings.SplitSeq(raw, ",") {
-			if trimmed := strings.TrimSpace(tag); trimmed != "" {
-				params.Tags = append(params.Tags, trimmed)
-			}
+	lookback, ok := datePostedLookback[raw]
+
+	if !ok {
+		return fmt.Errorf("invalid date_posted %q", raw)
+	}
+
+	cutoff := time.Now().Add(-lookback)
+	params.PostedAfter = &cutoff
+
+	return nil
+}
+
+func setTagsParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("tags")
+
+	if raw == "" {
+		return nil
+	}
+
+	for tag := range strings.SplitSeq(raw, ",") {
+		if trimmed := strings.TrimSpace(tag); trimmed != "" {
+			params.Tags = append(params.Tags, trimmed)
 		}
 	}
 
-	if raw := query.Get("sort"); raw != "" {
-		switch database.SortOrder(raw) {
-		case database.SortDate:
-			params.Sort = database.SortDate
-		case database.SortRelevance:
-			params.Sort = database.SortRelevance
-		default:
-			return nil, fmt.Errorf("invalid sort %q", raw)
-		}
+	return nil
+}
+
+func setSortParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("sort")
+
+	if raw == "" {
+		return nil
 	}
 
-	if raw := query.Get("limit"); raw != "" {
-		limit, err := strconv.Atoi(raw)
-
-		if err != nil || limit <= 0 {
-			return nil, fmt.Errorf("invalid limit %q", raw)
-		}
-
-		params.Limit = min(limit, database.MaxSearchLimit)
+	switch database.SortOrder(raw) {
+	case database.SortDate:
+		params.Sort = database.SortDate
+	case database.SortRelevance:
+		params.Sort = database.SortRelevance
+	default:
+		return fmt.Errorf("invalid sort %q", raw)
 	}
 
-	if raw := query.Get("offset"); raw != "" {
-		offset, err := strconv.Atoi(raw)
+	return nil
+}
 
-		if err != nil || offset < 0 {
-			return nil, fmt.Errorf("invalid offset %q", raw)
-		}
+func setLimitParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("limit")
 
-		params.Offset = offset
+	if raw == "" {
+		return nil
 	}
 
-	return params, nil
+	limit, err := strconv.Atoi(raw)
+
+	if err != nil || limit <= 0 {
+		return fmt.Errorf("invalid limit %q", raw)
+	}
+
+	params.Limit = min(limit, database.MaxSearchLimit)
+
+	return nil
+}
+
+func setOffsetParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("offset")
+
+	if raw == "" {
+		return nil
+	}
+
+	offset, err := strconv.Atoi(raw)
+
+	if err != nil || offset < 0 {
+		return fmt.Errorf("invalid offset %q", raw)
+	}
+
+	params.Offset = offset
+
+	return nil
 }

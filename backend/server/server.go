@@ -21,8 +21,8 @@ func New(addr string) *http.Server {
 	return &http.Server{
 		Addr:    addr,
 		Handler: Handler(),
-		// Deliberately tight. The two endpoints that legitimately need longer —
-		// resume upload (large body) and LLM generation (slow response) — extend
+		// Deliberately tight. The two endpoints that legitimately need longer,
+		// resume upload (large body) and LLM generation (slow response), extend
 		// their own deadline via http.ResponseController instead of loosening
 		// the limit for all 30-odd handlers.
 		ReadTimeout:  time.Second * 15,
