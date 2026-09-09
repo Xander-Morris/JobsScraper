@@ -1,6 +1,6 @@
 # CrawlerAndIndexer
 
-**Live demo:** _not deployed yet_
+**Live demo:** [jobs-scraper-vvcj.vercel.app](https://jobs-scraper-vvcj.vercel.app/)
 
 A job board that crawls remote job listings from a handful of public sources (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely), indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site.
 
