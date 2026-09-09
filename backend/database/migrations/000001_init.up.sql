@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 	search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))) STORED
 );
 
--- Carried over from the old ad-hoc migration list — guards against an
+-- Carried over from the old ad-hoc migration list. Guards against an
 -- existing database where posted_at predates the TIMESTAMPTZ column type.
 DO $$
 BEGIN

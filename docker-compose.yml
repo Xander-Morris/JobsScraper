@@ -1,4 +1,4 @@
-# No database service here on purpose — DATABASE_CONNECTION points at a
+# No database service here on purpose. DATABASE_CONNECTION points at a
 # managed Postgres (Supabase), not a container. Add a postgres service yourself
 # if you move off that.
 services:

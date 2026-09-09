@@ -4,15 +4,15 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 
 ## Layout
 
-- `server/` — HTTP handlers, routing, auth middleware, rate limiting
-- `database/` — Postgres access, migrations, schema
-- `scraper/` — runs the job source fetchers on a 10 minute ticker
-- `jobs/` — one file per job source (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely)
-- `llm/` — resume text extraction and generation via OpenRouter, embeddings via Jina AI
-- `notify/` — Resend email client for the digest
-- `utils/` — env loading and a couple of small helpers
-- `api/` — Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
-- `coldstart/` — one-time startup work (env validation, migrations) shared by the entrypoints under `api/`
+- `server/`: HTTP handlers, routing, auth middleware, rate limiting
+- `database/`: Postgres access, migrations, schema
+- `scraper/`: runs the job source fetchers on a 10 minute ticker
+- `jobs/`: one file per job source (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely)
+- `llm/`: resume text extraction and generation via OpenRouter, embeddings via Jina AI
+- `notify/`: Resend email client for the digest
+- `utils/`: env loading and a couple of small helpers
+- `api/`: Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
+- `coldstart/`: one-time startup work (env validation, migrations) shared by the entrypoints under `api/`
 
 ## Running locally
 
@@ -65,10 +65,10 @@ Auth is a short-lived JWT access token plus a longer-lived refresh token in an h
 
 ## Background jobs
 
-Two loops start alongside the HTTP server and run for the life of the process (self-hosted only — on Vercel, `api/cron/scrape.go` and `api/cron/digest.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
+Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel, `api/cron/scrape.go` and `api/cron/digest.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
 
-- **Scraper** — fetches all job sources immediately on boot, then every 10 minutes
-- **Digest scheduler** — sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on
+- **Scraper**: fetches all job sources immediately on boot, then every 10 minutes
+- **Digest scheduler**: sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on
 
 Both recover from panics per-run so one bad fetch or one bad email doesn't take down the whole loop.
 
