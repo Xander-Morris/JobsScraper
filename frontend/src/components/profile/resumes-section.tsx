@@ -1,13 +1,12 @@
+import { useApplyResumeExtractionMutation, type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
 import {
   useActivateResumeMutation,
-  useApplyResumeExtractionMutation,
   useDeleteResumeMutation,
   useDownloadResumeMutation,
   useResumeExtractionQuery,
   useTriggerResumeExtractionMutation,
   useUpdateResumeMutation,
   useUploadResumeMutation,
-  type ApplyResumeExtractionResult,
 } from '@/src/api/profile'
 import type { Profile, Resume } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
