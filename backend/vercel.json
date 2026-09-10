@@ -2,8 +2,8 @@
   "framework": null,
   "functions": {
     "api/index.go": { "maxDuration": 60 },
-    "api/cron/scrape.go": { "maxDuration": 60 },
-    "api/cron/digest.go": { "maxDuration": 60 }
+    "api/cron/scrape/index.go": { "maxDuration": 60 },
+    "api/cron/digest/index.go": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/scrape", "schedule": "0 3 * * *" },

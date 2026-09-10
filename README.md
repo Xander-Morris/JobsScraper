@@ -57,7 +57,7 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 1. Import the repo, set the project's root directory to `backend/`
 2. Set env vars: `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` (frontend and backend are on different Vercel domains), `CRON_SECRET` (any random string; Vercel sends it back as a header to authenticate the two cron endpoints below), and `ALLOWED_ORIGIN` (set once you have the frontend's URL from the next step)
 3. Deploy. Every `/api/*` request routes through the single `api/index.go` function (see the `rewrites` entry in `vercel.json`), running the same handler chain as the self-hosted binary
-4. `vercel.json` already wires up two Vercel Cron Jobs: a daily job re-scrape (`api/cron/scrape.go`) and a daily digest send (`api/cron/digest.go`), replacing the self-hosted binary's in-process ticker loops (which have nowhere to live in a serverless deployment). Vercel's free (Hobby) plan caps cron at once/day, so the job board refreshes daily instead of every 10 minutes like the self-hosted version. Vercel Pro allows more frequent schedules if you need that back
+4. `vercel.json` already wires up two Vercel Cron Jobs: a daily job re-scrape (`api/cron/scrape/index.go`) and a daily digest send (`api/cron/digest/index.go`), replacing the self-hosted binary's in-process ticker loops (which have nowhere to live in a serverless deployment). Vercel's free (Hobby) plan caps cron at once/day, so the job board refreshes daily instead of every 10 minutes like the self-hosted version. Vercel Pro allows more frequent schedules if you need that back
 
 **Frontend** (project root: `frontend/`):
 

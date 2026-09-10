@@ -23,9 +23,9 @@ func TestMain(m *testing.M) {
 	if connString == "" {
 		fmt.Println("TEST_DATABASE_CONNECTION not set; running only the tests that need no database")
 
-		// Backstop: pin the package to an unreachable database so a DB-backed
-		// test missing its requireTestDB guard fails loudly instead of falling
-		// back, via GetDb and backend/.env, to the real database.
+		// Backstop: point the package at an unreachable database, so a
+		// DB-backed test missing its requireTestDB guard fails loudly instead
+		// of quietly hitting the real database via GetDb/backend/.env.
 		unreachable, err := sql.Open("pgx", "postgres://unreachable.invalid:5432/none")
 		if err != nil {
 			panic(err)
@@ -44,10 +44,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	// Same list, for the same reasons, as database.newTestDB: CASCADE does not
-	// reach child tables, so everything with a FK into profiles is named here or
-	// its rows outlive the id sequence reset, which is what made a second local
-	// run of these tests collide on an already-registered email.
+	// Same list as database.newTestDB, same reason: CASCADE doesn't reach
+	// child tables, so anything with an FK into profiles needs naming here —
+	// otherwise its rows outlive the id sequence reset and a second local
+	// test run collides on an already-registered email.
 	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
 		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
 		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
@@ -70,8 +70,8 @@ func TestMain(m *testing.M) {
 }
 
 // testDBConnString reads through utils.GetEnv, not os.Getenv, so a value in
-// backend/.env counts, matching database.newTestDB, and letting these tests run
-// locally rather than only in CI.
+// backend/.env counts — matches database.newTestDB, lets these tests run
+// locally and not just in CI.
 func testDBConnString() string {
 	return utils.GetEnv()["TEST_DATABASE_CONNECTION"]
 }

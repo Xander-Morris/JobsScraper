@@ -6,10 +6,10 @@ import (
 	"net/http"
 )
 
-// maxJSONBodySize caps request bodies decoded as JSON. None of these payloads
-// (profile fields, education/work-experience entries) legitimately approach this,
-// so it's purely a guard against an oversized body tying up memory before the
-// per-IP rate limiter would otherwise catch a repeat offender.
+// maxJSONBodySize caps request bodies decoded as JSON. Nothing we decode
+// (profile fields, education/work-experience entries) gets anywhere close —
+// this just stops an oversized body from tying up memory before the rate
+// limiter catches the repeat offender.
 const maxJSONBodySize = 1 << 20 // 1 MiB
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {

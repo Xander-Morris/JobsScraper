@@ -1,7 +1,6 @@
 // Package handler is a Vercel Cron Job entrypoint: one digest pass per
-// invocation, replacing server.StartDigestScheduler's in-process ticker loop,
-// which has nowhere to live in a serverless deployment. See vercel.json's
-// "crons" entry for the schedule.
+// invocation. Replaces server.StartDigestScheduler's ticker loop, which has
+// nowhere to live in serverless. See vercel.json's "crons" entry for the schedule.
 package handler
 
 import (

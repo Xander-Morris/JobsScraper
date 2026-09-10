@@ -68,9 +68,9 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// withOptionalAuth attaches profileID to the request context when a valid bearer
-// token is present, but never rejects the request. For endpoints (like job
-// search) that behave sensibly both for anonymous and authenticated callers.
+// withOptionalAuth attaches profileID to the context when a valid bearer token
+// is present, but never rejects the request. For endpoints like job search
+// that work fine for both anonymous and authenticated callers.
 func withOptionalAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if tokenString, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && tokenString != "" {

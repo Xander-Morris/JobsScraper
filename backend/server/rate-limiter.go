@@ -60,21 +60,20 @@ func (l *ipLimiter) cleanupLoop() {
 	}
 }
 
-// Sized for a single-page-app screen load, which fans out to several endpoints
-// at once and then polls resume extraction status, while still capping scripted
-// abuse.
+// Sized for one SPA screen load — fans out to several endpoints, then polls
+// resume extraction status — while still capping scripted abuse.
 var globalLimiter = newIPLimiter(10, 20)
 
 var authLimiter = newIPLimiter(rate.Every(20*time.Second), 5)
 
-// llmLimiter guards the endpoints that hand work to Ollama. Each one occupies a
-// CPU-bound model for up to a couple of minutes, so globalLimiter is far too
-// loose to stop one caller from pinning the host.
+// llmLimiter guards the endpoints that call out to OpenRouter/Jina. Each one
+// can take up to a couple minutes, so globalLimiter alone won't stop one
+// caller from hammering them.
 var llmLimiter = newIPLimiter(rate.Every(10*time.Second), 3)
 
-// clientIP trusts the first X-Forwarded-For entry because Caddy replaces the
-// header with the real remote address before proxying (see Caddyfile). Exposing
-// the backend directly to the internet would make these limits spoofable.
+// clientIP trusts the first X-Forwarded-For entry since Caddy overwrites it
+// with the real remote address before proxying (see Caddyfile). Don't expose
+// the backend directly to the internet — that'd make these limits spoofable.
 func clientIP(r *http.Request) (string, error) {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		if ip := strings.TrimSpace(strings.Split(fwd, ",")[0]); ip != "" {

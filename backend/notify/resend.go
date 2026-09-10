@@ -23,10 +23,9 @@ type resendEmailRequest struct {
 	Text    string   `json:"text"`
 }
 
-// SendEmail sends a plain-text email via the Resend API. If RESEND_API_KEY isn't
-// configured, it logs and no-ops rather than failing. Lets the rest of the
-// notification pipeline (matching, digest bookkeeping) run and be tested before a
-// real sending credential is wired up.
+// SendEmail sends a plain-text email via the Resend API. No-ops (with a log
+// line) if RESEND_API_KEY isn't set, so the rest of the digest pipeline still
+// runs and can be tested before a real sending credential exists.
 func SendEmail(ctx context.Context, to, subject, body string) error {
 	env := utils.GetEnv()
 	apiKey := env["RESEND_API_KEY"]

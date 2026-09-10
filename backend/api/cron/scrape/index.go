@@ -1,7 +1,6 @@
 // Package handler is a Vercel Cron Job entrypoint: one scrape cycle per
-// invocation, replacing scraper.StartScrapingJob's in-process ticker loop,
-// which has nowhere to live in a serverless deployment. See vercel.json's
-// "crons" entry for the schedule.
+// invocation. Replaces scraper.StartScrapingJob's ticker loop, which has
+// nowhere to live in serverless. See vercel.json's "crons" entry for the schedule.
 package handler
 
 import (

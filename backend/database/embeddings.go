@@ -12,13 +12,11 @@ import (
 
 const embedJobsBatchSize = 50
 
-// EmbedPendingJobs embeds every job whose embedding is still NULL, in batches,
-// until none are left. Only ever processes a job once, since descriptions are
-// effectively static once posted, so re-scraping the same job again later won't
-// re-embed it. Best-effort: callers should log and continue on error rather than
-// fail the scrape cycle over it, since an unreachable Ollama isn't a hard
-// requirement for scraping to keep working (search/digest fall back to keyword
-// matching for any job without an embedding).
+// EmbedPendingJobs embeds every job with a NULL embedding, in batches, until
+// none are left. Each job only gets embedded once — descriptions don't change
+// after posting, so re-scraping won't re-trigger it. Best-effort: log and move
+// on if this fails, don't fail the scrape cycle over it. Search/digest just
+// fall back to keyword matching for jobs with no embedding.
 func EmbedPendingJobs(ctx context.Context) error {
 	for {
 		n, err := embedNextJobBatch(ctx)

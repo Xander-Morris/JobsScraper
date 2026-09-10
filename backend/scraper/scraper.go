@@ -10,9 +10,8 @@ import (
 	"time"
 )
 
-// embedJobsTimeout bounds how long a single scrape cycle will spend catching up
-// on embeddings for newly-scraped jobs before giving up and letting the next
-// cycle pick up where it left off.
+// embedJobsTimeout caps how long one cycle spends embedding new jobs before
+// giving up and letting the next cycle pick it back up.
 const embedJobsTimeout = 2 * time.Minute
 
 func runScraper(sources []jobs.JobSource) {
@@ -102,18 +101,16 @@ func allSources() []jobs.JobSource {
 	}
 }
 
-// RunScrapeCycle runs a single fetch-all-sources-and-write cycle. Meant for a
-// scheduler with no long-lived process of its own (e.g. a Vercel Cron Job hitting
-// an endpoint that calls this once per invocation), as an alternative to
-// StartScrapingJob's in-process ticker loop.
+// RunScrapeCycle runs one fetch-all-sources-and-write pass. For a scheduler
+// with no long-lived process of its own (a Vercel Cron Job hitting an
+// endpoint per invocation), instead of StartScrapingJob's ticker loop.
 func RunScrapeCycle() {
 	runScraperSafely(allSources())
 }
 
-// StartScrapingJob runs a fetch cycle immediately, then every 10 minutes, until
-// ctx is cancelled. Meant to be launched in its own goroutine; on cancellation it
-// returns once any fetch cycle already in flight finishes, rather than abandoning
-// it mid-write against a database connection the caller may be about to close.
+// StartScrapingJob fetches immediately, then every 10 minutes, until ctx is
+// cancelled. Run it in its own goroutine. On cancel it finishes any in-flight
+// cycle first instead of abandoning a write mid-flight.
 func StartScrapingJob(ctx context.Context) {
 	sources := allSources()
 

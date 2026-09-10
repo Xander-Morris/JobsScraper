@@ -25,10 +25,10 @@ const digestGoodFitRatio = 0.4
 const digestFirstRunLookback = 24 * time.Hour
 const digestJobTimeout = 2 * time.Minute
 
-// StartDigestScheduler runs the job-match email digest once at startup, then once
-// per digestInterval, until ctx is cancelled. Meant to be launched in its own
-// goroutine, mirroring scraper.StartScrapingJob, including waiting out a run
-// already in flight when ctx is cancelled, instead of abandoning it mid-send.
+// StartDigestScheduler sends the job-match digest once at startup, then once
+// per digestInterval, until ctx is cancelled. Run it in its own goroutine,
+// mirroring scraper.StartScrapingJob — on cancel it waits out an in-flight
+// run instead of abandoning it mid-send.
 func StartDigestScheduler(ctx context.Context) {
 	runDigestJobSafely()
 
@@ -45,18 +45,16 @@ func StartDigestScheduler(ctx context.Context) {
 	}
 }
 
-// RunDigestCycle runs a single digest pass across all opted-in profiles. Meant
-// for a scheduler with no long-lived process of its own (e.g. a Vercel Cron Job
-// hitting an endpoint that calls this once per invocation), as an alternative to
-// StartDigestScheduler's in-process ticker loop.
+// RunDigestCycle runs one digest pass across all opted-in profiles. For a
+// scheduler with no long-lived process of its own (a Vercel Cron Job hitting
+// an endpoint per invocation), instead of StartDigestScheduler's ticker loop.
 func RunDigestCycle() {
 	runDigestJobSafely()
 }
 
-// runDigestJobSafely wraps runDigestJob with a panic recovery so one bad run
-// logs and moves on instead of killing the scheduler goroutine (and, since
-// nothing restarts it, silently ending all future digests) for the rest of
-// the process's life.
+// runDigestJobSafely wraps runDigestJob with panic recovery so one bad run
+// logs and moves on, instead of killing the scheduler goroutine and silently
+// ending all future digests for the rest of the process's life.
 func runDigestJobSafely() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -148,9 +146,9 @@ func sendDigestForProfile(ctx context.Context, profile database.DigestProfile) e
 	return nil
 }
 
-// goodFitJobs keeps jobs whose match score is at least digestGoodFitRatio of the
-// best score in this batch, the same relative-tiering the "Good fit" badge uses
-// client-side, since a raw ts_rank score isn't calibrated to an absolute scale.
+// goodFitJobs keeps jobs scoring at least digestGoodFitRatio of the batch's
+// best score — same relative tiering the "Good fit" badge uses client-side,
+// since a raw ts_rank score isn't on any fixed scale.
 func goodFitJobs(candidates []jobs.Job) []jobs.Job {
 	var best float64
 
@@ -197,10 +195,9 @@ func renderDigestEmail(matched []jobs.Job, profileID int64) string {
 	return b.String()
 }
 
-// unsubscribeToken is an HMAC over the profile ID, keyed on the same SECRET_KEY
-// used for access-token JWTs. Lets the one-click link in a digest email prove
-// it was minted by us for that specific profile, without requiring the
-// recipient to be logged in to click it.
+// unsubscribeToken is an HMAC over the profile ID, keyed on the same
+// SECRET_KEY as access-token JWTs. Lets the one-click unsubscribe link prove
+// we minted it for this profile, without the recipient needing to log in.
 func unsubscribeToken(profileID int64) string {
 	mac := hmac.New(sha256.New, []byte(utils.GetEnv()["SECRET_KEY"]))
 	mac.Write([]byte(strconv.FormatInt(profileID, 10)))

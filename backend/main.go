@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"main/database"
 	"main/scraper"
@@ -36,19 +38,17 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var backgroundJobs sync.WaitGroup
+	g, ctx := errgroup.WithContext(ctx)
 
-	backgroundJobs.Add(1)
-	go func() {
-		defer backgroundJobs.Done()
+	g.Go(func() error {
 		scraper.StartScrapingJob(ctx)
-	}()
+		return nil
+	})
 
-	backgroundJobs.Add(1)
-	go func() {
-		defer backgroundJobs.Done()
+	g.Go(func() error {
 		server.StartDigestScheduler(ctx)
-	}()
+		return nil
+	})
 
 	srv := server.New(serverAddr())
 
@@ -70,10 +70,11 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 
-	// Wait for any scrape/digest run already in flight to finish before the
-	// deferred CloseDb() above runs, so it doesn't close the pool out from
-	// under a write those goroutines are mid-way through.
-	backgroundJobs.Wait()
+	// wait for any scrape/digest run in flight to finish before the deferred
+	// CloseDb above runs, so it's not yanking the pool out from under a write
+	if err := g.Wait(); err != nil {
+		log.Printf("background service error: %v", err)
+	}
 }
 
 func serverAddr() string {

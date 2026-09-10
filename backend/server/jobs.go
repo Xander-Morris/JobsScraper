@@ -144,10 +144,10 @@ type jobSearchResponse struct {
 	Offset int        `json:"offset"`
 }
 
-// activeResumeSearchContext looks up the profile's active resume and turns it into
-// the query/embedding pair job search and job detail use to rank by fit. A missing
-// or unextracted resume isn't an error; it just means no resume-based ranking.
-// logLabel identifies the caller in the error log (e.g. "search jobs", "get job").
+// activeResumeSearchContext turns the profile's active resume into the
+// query/embedding pair job search and job detail rank by. No active or
+// unextracted resume just means no resume-based ranking, not an error.
+// logLabel identifies the caller in the error log ("search jobs", "get job").
 func activeResumeSearchContext(ctx context.Context, profileID int64, logLabel string) (query string, embedding *pgvector.Vector) {
 	extraction, found, err := database.GetActiveResumeExtraction(ctx, profileID)
 

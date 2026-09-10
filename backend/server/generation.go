@@ -13,9 +13,9 @@ import (
 	"main/llm"
 )
 
-// generationTimeout is kept comfortably under a serverless function's max
-// duration (e.g. 60s on Vercel Hobby) so a slow Gemini response ends in a clean
-// error instead of the platform hard-killing the function mid-request.
+// generationTimeout stays under a serverless function's max duration (60s on
+// Vercel Hobby) so a slow OpenRouter response ends in a clean error instead of
+// the platform hard-killing the function mid-request.
 const generationTimeout = 45 * time.Second
 
 func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {

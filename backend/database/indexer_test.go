@@ -32,15 +32,13 @@ func newTestDB(t *testing.T) {
 		t.Fatalf("ping test db: %v", err)
 	}
 
-	// DROP TABLE ... CASCADE only cascades to dependent objects (e.g. FK constraints),
-	// not to child tables themselves. Every table with a FK into profiles must be
-	// listed explicitly or its rows outlive profiles' id sequence reset and collide
-	// with fresh test profiles that reuse the same ids.
-	// schema_migrations must be dropped too. It's golang-migrate's version
-	// table, and it survives this reset since it's not itself one of the
-	// tables migration 000001 creates. Left in place, CreateTables' next call
-	// would see the target version already applied and skip recreating
-	// everything else that was just dropped.
+	// CASCADE only cascades to dependent objects like FK constraints, not to
+	// child tables themselves — every table with an FK into profiles has to be
+	// listed here, or its rows outlive the id sequence reset and collide with
+	// fresh test profiles reusing the same ids.
+	// schema_migrations needs dropping too, since it survives the reset
+	// otherwise. Left in place, CreateTables' next call sees the target
+	// version already applied and skips recreating everything just dropped.
 	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
 		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
 		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,

@@ -4,11 +4,9 @@ import (
 	"context"
 )
 
-// EmbedTexts embeds a batch of texts in a single Jina request, returning one
-// vector per input text in the same order. Callers should treat a failure here
-// as non-fatal. Embeddings are a best-effort enhancement to resume/job matching,
-// not a hard dependency (search and digest both fall back to keyword matching
-// when an embedding isn't available).
+// EmbedTexts embeds a batch of texts in one Jina request, one vector per input
+// in the same order. Treat failures as non-fatal — search and digest fall back
+// to keyword matching when there's no embedding.
 func EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil

@@ -22,8 +22,8 @@ type JobSearchParams struct {
 	SearchQuery string
 	// ResumeQuery is a fallback keyword score, used only when ResumeEmbedding is nil.
 	ResumeQuery string
-	// ResumeEmbedding, when set, scores jobs by cosine similarity to the active
-	// resume instead of ResumeQuery's keyword overlap.
+	// ResumeEmbedding, when set, scores jobs by cosine similarity instead of
+	// ResumeQuery's keyword overlap.
 	ResumeEmbedding *pgvector.Vector
 	ProfileID       int64
 	PostedAfter     *time.Time
@@ -250,9 +250,8 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	rankable := params.Sort != SortDate
 	hasSearchQuery := params.SearchQuery != ""
 
-	// match_score is independent of sort order, shown as a fit signal even when
-	// sorting by date. resumeScoreExpr is reused below in ORDER BY when blending
-	// with a typed search query.
+	// match_score shows as a fit signal even when sorting by date. resumeScoreExpr
+	// gets reused below in ORDER BY when blending with a typed search query.
 	matchScoreColumn := "NULL::real"
 	var resumeScoreExpr string
 
@@ -274,8 +273,8 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 
 	switch {
 	case rankable && hasSearchQuery && hasResumeScore:
-		// Typed search stays the primary signal; the resume nudges ties toward jobs
-		// matching the candidate's skills/experience without overriding an explicit query.
+		// Typed search stays primary; resume score just nudges ties toward a
+		// good skill match, doesn't override an explicit query.
 		args = append(args, params.SearchQuery)
 		query += fmt.Sprintf(
 			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * coalesce(%s, 0)) DESC",

@@ -1,8 +1,7 @@
-// Package coldstart holds the one-time process startup work (env validation,
-// table creation) shared by every serverless entrypoint under backend/api/.
-// main.go does this inline at the top of main() since it's a single long-lived
-// process; each Vercel function is its own process that can cold-start
-// independently, so the same setup needs to run per-entrypoint instead.
+// Package coldstart holds the one-time startup work (env validation, table
+// creation) shared by every serverless entrypoint under backend/api/. main.go
+// does this inline since it's one long-lived process. Each Vercel function is
+// its own process and cold-starts independently, so it needs this per-entrypoint.
 package coldstart
 
 import (
@@ -17,8 +16,8 @@ import (
 
 var once sync.Once
 
-// Ensure runs startup validation and migrations exactly once per warm
-// container. Safe to call at the top of every request/invocation.
+// Ensure runs startup validation and migrations once per warm container.
+// Safe to call at the top of every request.
 func Ensure() {
 	once.Do(func() {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -35,10 +34,9 @@ func Ensure() {
 	})
 }
 
-// AuthorizedCron reports whether a request carries the CRON_SECRET this
-// deployment expects. Vercel Cron Jobs send "Authorization: Bearer
-// $CRON_SECRET" automatically when CRON_SECRET is set as a project env var.
-// This stops anyone else from hitting a cron endpoint's public URL directly.
+// AuthorizedCron checks the request carries our CRON_SECRET. Vercel sends
+// "Authorization: Bearer $CRON_SECRET" automatically once that env var is
+// set, which keeps randoms from hitting the cron endpoint directly.
 func AuthorizedCron(r *http.Request) bool {
 	secret := os.Getenv("CRON_SECRET")
 

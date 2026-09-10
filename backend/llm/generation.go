@@ -44,10 +44,9 @@ func GenerateApplicationContent(ctx context.Context, profile ResumeProfile, job 
 	return parseGenerationResponse(respText)
 }
 
-// EmbeddingText renders a resume profile as the same compact, information-dense
-// plain text GenerateApplicationContent feeds to the LLM. It's a good representation
-// to embed, since it's already a summary of everything that's actually in the
-// resume.
+// EmbeddingText renders a resume profile as the same compact plain text
+// GenerateApplicationContent feeds the LLM — already a dense summary of the
+// resume, so it's good material to embed too.
 func EmbeddingText(profile ResumeProfile) string {
 	return formatResumeProfile(profile)
 }

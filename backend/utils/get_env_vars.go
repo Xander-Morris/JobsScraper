@@ -62,10 +62,10 @@ func GetEnv() map[string]string {
 	return allEnvVariables
 }
 
-// RequireEnv checks that every given key is set to a non-empty value, returning
-// an error naming all missing keys at once. Meant to be called once at startup so
-// misconfiguration fails fast and loud instead of surfacing later as a mysterious
-// empty JWT secret or a nil DB connection string.
+// RequireEnv checks every given key is set to a non-empty value, and returns
+// an error naming all the missing ones at once. Call it once at startup so
+// misconfiguration fails loud instead of surfacing later as a mystery empty
+// JWT secret or nil DB connection string.
 func RequireEnv(keys ...string) error {
 	env := GetEnv()
 	var missing []string

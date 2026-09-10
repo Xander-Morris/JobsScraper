@@ -38,10 +38,9 @@ type ResumeExtraction struct {
 	Projects       []llm.ProjectEntry        `json:"projects"`
 	Error          string                    `json:"error"`
 	UpdatedAt      time.Time                 `json:"updated_at"`
-	// Embedding is the resume's semantic vector, used to rank job matches by
-	// meaning instead of keyword overlap. Nil until the background embedding
-	// step (kicked off after extraction completes) finishes. Callers should
-	// fall back to keyword-based matching when it's nil, not treat it as an error.
+	// Embedding ranks job matches by meaning instead of keyword overlap. Nil
+	// until the background embedding step finishes after extraction — fall
+	// back to keyword matching, don't treat nil as an error.
 	Embedding *pgvector.Vector `json:"-"`
 }
 
@@ -76,9 +75,8 @@ func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) 
 	return resumes, rows.Err()
 }
 
-// AddResume marks the new resume active if the profile has no active resume yet
-// (i.e. this is their first resume), so relevance sorting has something to work
-// with immediately without requiring an extra manual step.
+// AddResume marks the new resume active if it's the profile's first, so
+// relevance sorting has something to work with right away.
 func AddResume(ctx context.Context, profileID int64, fileName, contentType string, content []byte) (int64, error) {
 	db, err := GetDb()
 
@@ -94,8 +92,8 @@ func AddResume(ctx context.Context, profileID int64, fileName, contentType strin
 	return id, err
 }
 
-// SetActiveResume marks resumeID as the profile's one active resume, used as the
-// relevance signal for job search, and unmarks any previously active resume.
+// SetActiveResume makes resumeID the profile's one active resume (the relevance
+// signal for job search) and unmarks whichever one was active before.
 func SetActiveResume(ctx context.Context, profileID, resumeID int64) error {
 	db, err := GetDb()
 
@@ -289,11 +287,10 @@ func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, er
 	return err
 }
 
-// SaveResumeEmbedding stores the semantic vector for an already-completed resume
-// extraction. Called best-effort after extraction succeeds. A failure here
-// should be logged and swallowed by the caller, not surfaced as an extraction
-// failure, since the structured extraction itself is unaffected and search/digest
-// both fall back to keyword matching when no embedding is present.
+// SaveResumeEmbedding stores the semantic vector for an already-completed
+// extraction. Best-effort — caller should log and swallow failures here rather
+// than treat them as extraction failures, since search/digest just fall back
+// to keyword matching without an embedding.
 func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float32) error {
 	db, err := GetDb()
 

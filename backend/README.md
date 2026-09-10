@@ -65,7 +65,7 @@ Auth is a short-lived JWT access token plus a longer-lived refresh token in an h
 
 ## Background jobs
 
-Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel, `api/cron/scrape.go` and `api/cron/digest.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
+Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel, `api/cron/scrape/index.go` and `api/cron/digest/index.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
 
 - **Scraper**: fetches all job sources immediately on boot, then every 10 minutes
 - **Digest scheduler**: sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on
