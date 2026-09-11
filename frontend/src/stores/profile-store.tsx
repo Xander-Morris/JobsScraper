@@ -62,7 +62,7 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({ token, isAuthenticated: token !== null, isInitializing, sessionMessage, login, logout }),
-    [token, isInitializing, sessionMessage, login, logout],
+    [token, isInitializing, sessionMessage, login, logout]
   )
 
   return <ProfileAuthContext.Provider value={value}>{children}</ProfileAuthContext.Provider>

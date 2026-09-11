@@ -4,13 +4,13 @@ import {
   CornerDownLeftIcon,
   DownloadIcon,
   ExternalLinkIcon,
-  SparklesIcon,
+  SparklesIcon
 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   useGenerateApplicationContentMutation,
   useMarkJobAppliedMutation,
-  useUnmarkJobAppliedMutation,
+  useUnmarkJobAppliedMutation
 } from '../api/jobs'
 import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '../api/profile'
 import type { GeneratedContent, Job, Resume } from '../api/schemas'
@@ -31,7 +31,12 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'job'
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'job'
+  )
 }
 
 // useCopied wraps the clipboard write plus the short-lived "Copied!" flag so
@@ -116,7 +121,7 @@ function ContactSection({ fields }: { fields: ContactField[] }) {
 
 function ResumeSection({
   activeResume,
-  downloadResume,
+  downloadResume
 }: {
   activeResume: Resume | null
   downloadResume: ReturnType<typeof useDownloadResumeMutation>
@@ -124,7 +129,7 @@ function ResumeSection({
   function handleDownload() {
     if (!activeResume) return
     downloadResume.mutate(activeResume.id, {
-      onSuccess: (file) => downloadBlob(file, activeResume.file_name),
+      onSuccess: (file) => downloadBlob(file, activeResume.file_name)
     })
   }
 
@@ -194,7 +199,7 @@ function CoverLetterSection({
   job,
   data,
   onRegenerate,
-  isPending,
+  isPending
 }: {
   job: Job
   data: GeneratedContent
@@ -233,7 +238,7 @@ function CoverLetterSection({
           onClick={() =>
             downloadBlob(
               new Blob([draft], { type: 'text/plain;charset=utf-8' }),
-              `${slugify(job.company)}-${slugify(job.title)}-cover-letter.txt`,
+              `${slugify(job.company)}-${slugify(job.title)}-cover-letter.txt`
             )
           }
         >
@@ -278,13 +283,7 @@ function BulletCopyButton({ bullet }: { bullet: string }) {
   const { copied, copy } = useCopied()
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      onClick={() => void copy(bullet)}
-      aria-label="Copy bullet"
-    >
+    <Button type="button" variant="ghost" size="icon-xs" onClick={() => void copy(bullet)} aria-label="Copy bullet">
       {copied ? <CheckIcon aria-hidden="true" /> : <ClipboardIcon aria-hidden="true" />}
     </Button>
   )
@@ -316,7 +315,7 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
   const { data: profile, isLoading: profileLoading } = useProfileQuery(token)
   const activeResume = profile?.resumes?.find((resume) => resume.is_active) ?? null
   const { data: extraction } = useResumeExtractionQuery(token, activeResume?.id ?? 0, {
-    enabled: activeResume != null,
+    enabled: activeResume != null
   })
   const markApplied = useMarkJobAppliedMutation(token)
   const downloadResume = useDownloadResumeMutation(token)
@@ -334,7 +333,7 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
     { label: 'Phone', value: extraction?.phone },
     { label: 'LinkedIn', value: profile.linked_in },
     { label: 'GitHub', value: profile.github },
-    { label: 'Portfolio', value: profile.portfolio },
+    { label: 'Portfolio', value: profile.portfolio }
   ].filter((field): field is ContactField => !!field.value)
 
   // Opening the posting is the moment the application actually starts, so the
@@ -348,9 +347,7 @@ export function JobApplyPanel({ token, job }: { token: string; job: Job }) {
     <Card>
       <CardHeader>
         <h2 className="text-sm font-semibold text-heading">Apply assist</h2>
-        <p className="text-xs text-muted-foreground">
-          Everything {job.company}&rsquo;s form asks for, one click away.
-        </p>
+        <p className="text-xs text-muted-foreground">Everything {job.company}&rsquo;s form asks for, one click away.</p>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <Button type="button" variant="default" className="w-full" onClick={openAndTrack}>

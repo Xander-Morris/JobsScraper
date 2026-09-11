@@ -10,7 +10,7 @@ import { useAuth } from '../../stores/profile-store'
 import { cn } from '../../lib/utils'
 
 export const Route = createFileRoute('/jobs/$jobId')({
-  component: JobDetailPage,
+  component: JobDetailPage
 })
 
 function JobDetailPage() {
@@ -74,7 +74,7 @@ function JobDetailPage() {
           <div
             className={cn(
               'mt-8 grid items-start gap-8',
-              isAuthenticated && token && 'lg:grid-cols-[minmax(0,1fr)_22rem]',
+              isAuthenticated && token && 'lg:grid-cols-[minmax(0,1fr)_22rem]'
             )}
           >
             {isAuthenticated && token && (

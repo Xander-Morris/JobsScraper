@@ -18,12 +18,12 @@ const SALARY_STEP = 5000
 
 const WORKPLACE_TYPE_OPTIONS: { value: JobSearchState['workplaceType'] | ''; label: string }[] = [
   { value: '', label: 'Any workplace' },
-  { value: 'remote', label: 'Remote' },
+  { value: 'remote', label: 'Remote' }
 ]
 
 const SORT_OPTIONS: { value: NonNullable<JobSearchState['sort']>; label: string }[] = [
   { value: 'relevance', label: 'Sort: relevance' },
-  { value: 'date', label: 'Sort: newest' },
+  { value: 'date', label: 'Sort: newest' }
 ]
 
 const DATE_POSTED_OPTIONS: { value: JobSearchState['datePosted'] | ''; label: string }[] = [
@@ -31,7 +31,7 @@ const DATE_POSTED_OPTIONS: { value: JobSearchState['datePosted'] | ''; label: st
   { value: '24h', label: 'Past 24 hours' },
   { value: '3d', label: 'Past 3 days' },
   { value: 'week', label: 'Past week' },
-  { value: 'month', label: 'Past month' },
+  { value: 'month', label: 'Past month' }
 ]
 
 function formatSalaryThousands(value: number): string {
@@ -40,7 +40,7 @@ function formatSalaryThousands(value: number): string {
 
 function WorkplaceTypeFilter({
   value,
-  onChange,
+  onChange
 }: {
   value: JobSearchState['workplaceType']
   onChange: (value: JobSearchState['workplaceType']) => void
@@ -69,7 +69,7 @@ function WorkplaceTypeFilter({
 
 function DatePostedFilter({
   value,
-  onChange,
+  onChange
 }: {
   value: JobSearchState['datePosted']
   onChange: (value: JobSearchState['datePosted']) => void
@@ -95,7 +95,7 @@ function DatePostedFilter({
 
 function SortFilter({
   value,
-  onChange,
+  onChange
 }: {
   value: JobSearchState['sort']
   onChange: (value: NonNullable<JobSearchState['sort']>) => void
@@ -122,7 +122,7 @@ function SortFilter({
 function SalaryRangeFilter({
   minSalary,
   maxSalary,
-  onCommit,
+  onCommit
 }: {
   minSalary: number | undefined
   maxSalary: number | undefined
@@ -163,7 +163,7 @@ function SalaryRangeFilter({
 function TagFilter({
   tags,
   selectedTags,
-  onToggle,
+  onToggle
 }: {
   tags: string[]
   selectedTags: Set<string>
@@ -241,7 +241,7 @@ function TagFilter({
                     onClick={() => onToggle(tag)}
                     className={cn(
                       badgeVariants({ variant: selectedTags.has(tag) ? 'default' : 'secondary' }),
-                      !selectedTags.has(tag) && 'text-muted-foreground hover:text-heading',
+                      !selectedTags.has(tag) && 'text-muted-foreground hover:text-heading'
                     )}
                   >
                     {tag}
@@ -263,7 +263,7 @@ function TagFilter({
 
 export function SearchFilters({
   search,
-  onChange,
+  onChange
 }: {
   search: JobSearchState
   onChange: (next: JobSearchState) => void

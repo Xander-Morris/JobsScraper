@@ -21,7 +21,7 @@ export interface SkillMatch {
 export function matchSkills(
   tags: string[],
   description: string,
-  resumeSkills: string[] | null | undefined,
+  resumeSkills: string[] | null | undefined
 ): SkillMatch {
   const skills = (resumeSkills ?? []).filter((skill) => skill.trim().length > 0)
   if (skills.length === 0) return { matched: [], missing: [] }
