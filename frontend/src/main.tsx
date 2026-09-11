@@ -10,7 +10,17 @@ import { initTheme } from './lib/theme'
 
 initTheme()
 
-const queryClient = new QueryClient()
+// Without a staleTime, every remount and window refocus refetches from
+// scratch even when nothing changed - e.g. tabbing back to the jobs list.
+// Mutations invalidate their own queries explicitly, so writes still show up
+// immediately regardless of this.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000
+    }
+  }
+})
 
 const router = createRouter({ routeTree })
 
@@ -28,5 +38,5 @@ createRoot(document.getElementById('root')!).render(
       </ProfileAuthProvider>
       <ReactQueryDevtools />
     </QueryClientProvider>
-  </StrictMode>,
+  </StrictMode>
 )

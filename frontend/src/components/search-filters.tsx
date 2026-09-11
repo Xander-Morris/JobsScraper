@@ -1,14 +1,14 @@
-import { useEffect, useId, useState } from 'react'
 import { ChevronDownIcon, XIcon } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
 import { useTagsQuery } from '../api/tags'
-import type { JobSearchState } from '../lib/jobSearch'
+import type { JobSearchState } from '../lib/job-search'
+import { cn } from '../lib/utils'
 import { badgeVariants } from './ui/badge'
 import { buttonVariants } from './ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Slider } from './ui/slider'
-import { cn } from '../lib/utils'
 
 const MAX_TAG_MATCHES = 40
 
@@ -280,7 +280,6 @@ export function SearchFilters({
       if (q !== (search.q ?? '')) onChange({ ...search, q: q || undefined })
     }, 300)
     return () => clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q])
 
   const selectedTags = new Set(search.tags ?? [])

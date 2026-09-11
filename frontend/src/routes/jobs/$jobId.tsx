@@ -1,13 +1,12 @@
+import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ExternalLinkIcon } from 'lucide-react'
 import { useJobQuery } from '../../api/jobs'
-import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
+import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
 import { Badge } from '../../components/ui/badge'
-import { buttonVariants } from '../../components/ui/button'
-import { JobApplyPanel, JobAppliedToggle } from '../../components/JobApplyPanel'
 import { Skeleton } from '../../components/ui/skeleton'
-import { useAuth } from '../../stores/profile-store'
+import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
 import { cn } from '../../lib/utils'
+import { useAuth } from '../../stores/profile-store'
 
 export const Route = createFileRoute('/jobs/$jobId')({
   component: JobDetailPage
@@ -46,7 +45,7 @@ function JobDetailPage() {
               {job.company} · {job.location}
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <div className="mt-4 flex flex-wrap items-center gap-1.5 pb-2">
               {fitLabel && <Badge variant="default">{fitLabel}</Badge>}
               {job.applied && <Badge variant="outline">Applied</Badge>}
               <Badge variant="secondary">{formatWorkplaceType(job.workplace_type)}</Badge>
@@ -61,14 +60,7 @@ function JobDetailPage() {
               ))}
             </div>
 
-            {/* The posting link and applied state sit above the description,
-                both are actions you want before reading, not after. */}
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <a href={job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: 'default' }))}>
-                <ExternalLinkIcon aria-hidden="true" /> View original posting
-              </a>
-              {isAuthenticated && token && <JobAppliedToggle token={token} job={job} />}
-            </div>
+            <OpenAndToggle job={job}/>
           </header>
 
           <div

@@ -41,7 +41,15 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runResumeExtraction(id, fileName, contentType, content)
+	// Extraction itself runs in a follow-up POST .../extraction request the
+	// frontend fires right after this one succeeds, not inline here. That
+	// request already exists as the manual "Retry" action; reusing it means
+	// upload responds in the time it takes to write the file, not the ~10-30s
+	// the LLM call takes. See runResumeExtraction for why it can't just be a
+	// detached goroutine instead.
+	if err := database.UpsertResumeExtractionPending(r.Context(), id); err != nil {
+		slog.Error("upload resume: mark extraction pending", "resume_id", id, "error", err)
+	}
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -70,7 +78,11 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = database.ReplaceResume(r.Context(), profileID, resumeID, fileName, contentType, content)
 		if err == nil {
-			runResumeExtraction(resumeID, fileName, contentType, content)
+			// Same split as upload: mark pending and return, let the frontend's
+			// follow-up trigger request do the actual extraction.
+			if pendingErr := database.UpsertResumeExtractionPending(r.Context(), resumeID); pendingErr != nil {
+				slog.Error("update resume: mark extraction pending", "resume_id", resumeID, "error", pendingErr)
+			}
 		}
 	}
 
@@ -149,8 +161,8 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
 
 // resumeExtractionTimeout bounds one extraction call, not the HTTP request it
 // runs inside. Kept under a serverless function's max duration (60s on Vercel
-// Hobby) since extraction now runs synchronously in-request, not in a
-// detached goroutine.
+// Hobby) since runResumeExtraction runs synchronously in whatever request
+// calls it, not in a detached goroutine that could outlive the response.
 const resumeExtractionTimeout = 45 * time.Second
 
 func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {

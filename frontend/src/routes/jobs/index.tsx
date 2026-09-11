@@ -1,18 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useJobsQuery } from '../../api/jobs'
 import { AuthForms } from '../../components/auth/AuthForms'
-import { JobCard } from '../../components/JobCard'
-import { Pagination } from '../../components/Pagination'
-import { SearchFilters } from '../../components/SearchFilters'
+import { JobCard } from '../../components/jobs/job-card'
+import { Pagination } from '../../components/pagination'
+import { SearchFilters } from '../../components/search-filters'
 import { Skeleton } from '../../components/ui/skeleton'
-import { jobSearchSchema, type JobSearchState } from '../../lib/jobSearch'
+import { jobSearchSchema, type JobSearchState } from '../../lib/job-search'
 import { useAuth } from '../../stores/profile-store'
 
 const PAGE_SIZE = 20
 
 export const Route = createFileRoute('/jobs/')({
   validateSearch: jobSearchSchema,
-  component: JobsPage,
+  component: JobsPage
 })
 
 function JobsPage() {
@@ -30,9 +30,9 @@ function JobsPage() {
       tags: search.tags,
       sort: search.sort,
       limit: PAGE_SIZE,
-      offset: ((search.page ?? 1) - 1) * PAGE_SIZE,
+      offset: ((search.page ?? 1) - 1) * PAGE_SIZE
     },
-    { enabled: isAuthenticated, token },
+    { enabled: isAuthenticated, token }
   )
 
   function updateFilters(next: JobSearchState) {

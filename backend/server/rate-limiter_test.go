@@ -9,9 +9,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// The limiter was built but never wired into the handler chain for a while,
-// so every limit silently did nothing. Testing through New() instead of
-// calling limit() directly is what would've caught that.
 func TestNewEnforcesGlobalRateLimit(t *testing.T) {
 	original := globalLimiter
 	globalLimiter = newIPLimiter(rate.Every(time.Hour), 2)

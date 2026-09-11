@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
-import type { Job } from '../api/schemas'
-import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../lib/format'
-import { Badge } from './ui/badge'
-import { Card, CardContent } from './ui/card'
+import type { Job } from '../../api/schemas'
+import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
+import { Badge } from '../ui/badge'
+import { Card, CardContent } from '../ui/card'
 
 export function JobCard({ job, bestMatchScore }: { job: Job; bestMatchScore?: number }) {
   const salary = formatSalary(job.salary_min, job.salary_max)

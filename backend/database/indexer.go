@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"main/jobs"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
@@ -53,19 +54,13 @@ type SearchResult struct {
 }
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	db, err := GetDb() 
+	db, err := GetDb()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	from, whereArgs := buildJobSearchFromWhere(params)
-	total, err := countJobSearchResults(ctx, db, from, whereArgs)
-
-	if err != nil {
-		return nil, fmt.Errorf("count jobs: %w", err)
-	}
-
 	query, args := buildJobSearchSelect(params, from, whereArgs)
 	rows, err := db.QueryContext(ctx, query, args...)
 
@@ -78,14 +73,16 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	var results []jobs.Job
 	scannedRows := make(map[int64]jobs.Job)
 	var jobOrder []int64
+	total := 0
 
 	for rows.Next() {
-		job, jobID, err := scanJobRow(rows)
+		job, jobID, rowTotal, err := scanJobSearchRow(rows)
 
 		if err != nil {
 			return nil, fmt.Errorf("scan job row: %w", err)
 		}
 
+		total = rowTotal
 		scannedRows[jobID] = job
 		jobOrder = append(jobOrder, jobID)
 	}
@@ -94,22 +91,47 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 		return nil, fmt.Errorf("iterate job rows: %w", err)
 	}
 
+	// total comes from a COUNT(*) OVER() on the SELECT, which counts rows
+	// before LIMIT/OFFSET trims them - readable off any row that survived
+	// the trim, but there is none to read it from when OFFSET lands past the
+	// end of the result set. Only then is a separate COUNT query worth it.
+	if len(jobOrder) == 0 && params.Offset > 0 {
+		total, err = countJobSearchResults(ctx, db, from, whereArgs)
+
+		if err != nil {
+			return nil, fmt.Errorf("count jobs: %w", err)
+		}
+	}
+
 	jobIDs := make([]int64, 0, len(scannedRows))
 	for jobID := range scannedRows {
 		jobIDs = append(jobIDs, jobID)
 	}
 
-	tagMap, err := fetchTagsForJobs(ctx, db, jobIDs)
-	if err != nil {
-		return nil, fmt.Errorf("fetch tags for jobs: %w", err)
+	// Tags and applied status don't depend on each other, so fetch them over
+	// separate connections instead of paying for both round trips in sequence.
+	var tagMap map[int64][]string
+	var appliedMap map[int64]bool
+	var tagErr, appliedErr error
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		tagMap, tagErr = fetchTagsForJobs(ctx, db, jobIDs)
+	})
+
+	if params.ProfileID != 0 {
+		wg.Go(func() {
+			appliedMap, appliedErr = AppliedJobIDs(ctx, params.ProfileID, jobIDs)
+		})
 	}
 
-	var appliedMap map[int64]bool
-	if params.ProfileID != 0 {
-		appliedMap, err = AppliedJobIDs(ctx, params.ProfileID, jobIDs)
-		if err != nil {
-			return nil, fmt.Errorf("fetch applied jobs: %w", err)
-		}
+	wg.Wait()
+
+	if tagErr != nil {
+		return nil, fmt.Errorf("fetch tags for jobs: %w", tagErr)
+	}
+	if appliedErr != nil {
+		return nil, fmt.Errorf("fetch applied jobs: %w", appliedErr)
 	}
 
 	for _, jobID := range jobOrder {
@@ -158,23 +180,32 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 		return nil, err
 	}
 
-	tagMap, err := fetchTagsForJobs(ctx, db, []int64{jobID})
+	var tagMap map[int64][]string
+	var applied bool
+	var tagErr, appliedErr error
+	var wg sync.WaitGroup
 
-	if err != nil {
-		return nil, fmt.Errorf("fetch tags for job: %w", err)
+	wg.Go(func() {
+		tagMap, tagErr = fetchTagsForJobs(ctx, db, []int64{jobID})
+	})
+
+	if params.ProfileID != 0 {
+		wg.Go(func() {
+			applied, appliedErr = IsJobApplied(ctx, params.ProfileID, jobID)
+		})
+	}
+
+	wg.Wait()
+
+	if tagErr != nil {
+		return nil, fmt.Errorf("fetch tags for job: %w", tagErr)
+	}
+	if appliedErr != nil {
+		return nil, fmt.Errorf("check job applied: %w", appliedErr)
 	}
 
 	job.Tags = tagMap[jobID]
-
-	if params.ProfileID != 0 {
-		applied, err := IsJobApplied(ctx, params.ProfileID, jobID)
-
-		if err != nil {
-			return nil, fmt.Errorf("check job applied: %w", err)
-		}
-
-		job.Applied = applied
-	}
+	job.Applied = applied
 
 	return &job, nil
 }
@@ -269,7 +300,9 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	}
 
 	hasResumeScore := resumeScoreExpr != ""
-	query := fmt.Sprintf("SELECT %s, %s AS match_score %s", jobColumns, matchScoreColumn, from)
+	// total_count rides along on every row via a window function so the
+	// caller can skip a separate COUNT(*) query in the common case.
+	query := fmt.Sprintf("SELECT %s, %s AS match_score, COUNT(*) OVER() AS total_count %s", jobColumns, matchScoreColumn, from)
 
 	switch {
 	case rankable && hasSearchQuery && hasResumeScore:
@@ -317,6 +350,34 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 		return jobs.Job{}, 0, err
 	}
 
+	job = finishJobRow(job, jobID, salaryMin, salaryMax, postedAtRaw, matchScore)
+
+	return job, jobID, nil
+}
+
+// scanJobSearchRow is scanJobRow plus the total_count column
+// buildJobSearchSelect adds via COUNT(*) OVER().
+func scanJobSearchRow(row rowScanner) (jobs.Job, int64, int, error) {
+	var job jobs.Job
+	var jobID int64
+	var salaryMin, salaryMax sql.NullInt64
+	var postedAtRaw any
+	var matchScore sql.NullFloat64
+	var total int
+
+	err := row.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
+		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description, &matchScore, &total)
+
+	if err != nil {
+		return jobs.Job{}, 0, 0, err
+	}
+
+	job = finishJobRow(job, jobID, salaryMin, salaryMax, postedAtRaw, matchScore)
+
+	return job, jobID, total, nil
+}
+
+func finishJobRow(job jobs.Job, jobID int64, salaryMin, salaryMax sql.NullInt64, postedAtRaw any, matchScore sql.NullFloat64) jobs.Job {
 	job.ID = jobID
 
 	if salaryMin.Valid {
@@ -347,12 +408,12 @@ func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
 		}
 	}
 
-	return job, jobID, nil
+	return job
 }
 
 func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
 	db, err := GetDb()
-	var res []string 
+	var res []string
 
 	if err != nil {
 		return res, err
@@ -362,12 +423,12 @@ func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
 	rows, err := db.QueryContext(ctx, query)
 
 	if err != nil {
-		return nil, err	
+		return nil, err
 	}
 
 	for rows.Next() {
 		var tag string
-		
+
 		if err := rows.Scan(&tag); err != nil {
 			return res, err
 		}
@@ -379,7 +440,7 @@ func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
 		res = append(res, tag)
 	}
 
-	return res, nil 
+	return res, nil
 }
 
 func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int64][]string, error) {
@@ -412,7 +473,7 @@ func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int6
 	for rows.Next() {
 		var jobID int64
 		var tag string
-		
+
 		if err := rows.Scan(&jobID, &tag); err != nil {
 			return nil, err
 		}

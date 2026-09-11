@@ -23,6 +23,7 @@ const acceptedResumeTypes =
 
 export function ResumesSection({ token, resumes, profile }: { token: string; resumes: Resume[]; profile: Profile }) {
   const uploadResume = useUploadResumeMutation(token)
+  const triggerExtraction = useTriggerResumeExtractionMutation(token)
   const [file, setFile] = useState<File | null>(null)
   const id = useId()
   const error = uploadResume.error instanceof Error ? uploadResume.error.message : null
@@ -30,7 +31,14 @@ export function ResumesSection({ token, resumes, profile }: { token: string; res
   function handleUpload(e: FormEvent) {
     e.preventDefault()
     if (!file) return
-    uploadResume.mutate(file, { onSuccess: () => setFile(null) })
+    // Upload just saves the file now; kick off extraction as its own request
+    // right after so the upload response doesn't wait on the LLM call.
+    uploadResume.mutate(file, {
+      onSuccess: ({ id }) => {
+        setFile(null)
+        triggerExtraction.mutate(id)
+      }
+    })
   }
 
   return (
@@ -85,6 +93,7 @@ function splitFileName(fileName: string): [string, string] {
 
 function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume; profile: Profile }) {
   const updateResume = useUpdateResumeMutation(token)
+  const triggerExtraction = useTriggerResumeExtractionMutation(token)
   const deleteResume = useDeleteResumeMutation(token)
   const activateResume = useActivateResumeMutation(token)
   const downloadResume = useDownloadResumeMutation(token)
@@ -116,7 +125,7 @@ function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume
 
   function handleReplace(file: File | null) {
     if (!file) return
-    updateResume.mutate({ id: resume.id, update: file })
+    updateResume.mutate({ id: resume.id, update: file }, { onSuccess: () => triggerExtraction.mutate(resume.id) })
   }
 
   return (

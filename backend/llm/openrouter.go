@@ -16,7 +16,7 @@ import (
 // resumeExtractionTimeout. Free models on OpenRouter come and go, so if this
 // one dies, grab a live one from https://openrouter.ai/api/v1/models
 // (pricing.prompt == "0") and set OPENROUTER_MODEL rather than editing this.
-const defaultOpenRouterModel = "minimax/minimax-m2.7:free"
+const defaultOpenRouterModel = "nvidia/nemotron-3-super-120b-a12b:free"
 
 const openRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 
