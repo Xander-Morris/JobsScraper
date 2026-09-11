@@ -30,7 +30,7 @@ export function EducationSection({ token, education }: { token: string; educatio
     <CardContent>
       {education.length > 0 && <ul className="mb-3 space-y-1">
         {education.map((entry) => <li key={entry.id} className="flex items-center justify-between text-sm">
-          <span>{entry.school_name} — {entry.major}, {entry.degree}{entry.gpa != null ? ` · GPA ${entry.gpa}` : ''}{entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}</span>
+          <span>{entry.school_name} · {entry.major}, {entry.degree}{entry.gpa != null ? ` · GPA ${entry.gpa}` : ''}{entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}</span>
           <Button type="button" variant="ghost" size="sm" onClick={() => deleteEducation.mutate(entry.id)}>Remove</Button>
         </li>)}
       </ul>}

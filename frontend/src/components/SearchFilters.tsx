@@ -251,7 +251,7 @@ function TagFilter({
             )}
             {matches.length > visibleMatches.length && (
               <p className="mt-2 px-1 text-xs text-muted-foreground">
-                +{matches.length - visibleMatches.length} more — keep typing to narrow down
+                +{matches.length - visibleMatches.length} more, keep typing to narrow down
               </p>
             )}
           </div>

@@ -27,7 +27,7 @@ const digestJobTimeout = 2 * time.Minute
 
 // StartDigestScheduler sends the job-match digest once at startup, then once
 // per digestInterval, until ctx is cancelled. Run it in its own goroutine,
-// mirroring scraper.StartScrapingJob — on cancel it waits out an in-flight
+// mirroring scraper.StartScrapingJob: on cancel it waits out an in-flight
 // run instead of abandoning it mid-send.
 func StartDigestScheduler(ctx context.Context) {
 	runDigestJobSafely()
@@ -147,7 +147,7 @@ func sendDigestForProfile(ctx context.Context, profile database.DigestProfile) e
 }
 
 // goodFitJobs keeps jobs scoring at least digestGoodFitRatio of the batch's
-// best score — same relative tiering the "Good fit" badge uses client-side,
+// best score, the same relative tiering the "Good fit" badge uses client-side,
 // since a raw ts_rank score isn't on any fixed scale.
 func goodFitJobs(candidates []jobs.Job) []jobs.Job {
 	var best float64

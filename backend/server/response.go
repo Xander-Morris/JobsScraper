@@ -7,7 +7,7 @@ import (
 )
 
 // maxJSONBodySize caps request bodies decoded as JSON. Nothing we decode
-// (profile fields, education/work-experience entries) gets anywhere close —
+// (profile fields, education/work-experience entries) gets anywhere close;
 // this just stops an oversized body from tying up memory before the rate
 // limiter catches the repeat offender.
 const maxJSONBodySize = 1 << 20 // 1 MiB

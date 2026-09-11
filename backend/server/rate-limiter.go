@@ -60,8 +60,8 @@ func (l *ipLimiter) cleanupLoop() {
 	}
 }
 
-// Sized for one SPA screen load — fans out to several endpoints, then polls
-// resume extraction status — while still capping scripted abuse.
+// Sized for one SPA screen load, which fans out to several endpoints, then polls
+// resume extraction status, while still capping scripted abuse.
 var globalLimiter = newIPLimiter(10, 20)
 
 var authLimiter = newIPLimiter(rate.Every(20*time.Second), 5)
@@ -73,7 +73,7 @@ var llmLimiter = newIPLimiter(rate.Every(10*time.Second), 3)
 
 // clientIP trusts the first X-Forwarded-For entry since Caddy overwrites it
 // with the real remote address before proxying (see Caddyfile). Don't expose
-// the backend directly to the internet — that'd make these limits spoofable.
+// the backend directly to the internet; that'd make these limits spoofable.
 func clientIP(r *http.Request) (string, error) {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		if ip := strings.TrimSpace(strings.Split(fwd, ",")[0]); ip != "" {

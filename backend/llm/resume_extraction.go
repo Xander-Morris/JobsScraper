@@ -82,9 +82,9 @@ const extractionPrompt = "Extract structured fields from the resume text below a
 	"Use an empty string for any field you cannot find, and an empty array for missing lists. " +
 	"Do not invent information that isn't in the resume. " +
 	"For URL fields, only use a URL that appears verbatim in the text (including any 'Hyperlinks embedded in this document' " +
-	"list) — never guess or construct one from a project/company name. " +
+	"list). Never guess or construct one from a project/company name. " +
 	"The header/contact area often has several distinct links next to the name and email (e.g. a personal " +
-	"website/portfolio, a GitHub profile, and a LinkedIn profile) — treat each as a separate field (linked_in, " +
+	"website/portfolio, a GitHub profile, and a LinkedIn profile). Treat each as a separate field (linked_in, " +
 	"github, portfolio) rather than collapsing them into one. " +
 	"All start_date and end_date fields must be formatted as YYYY-MM-DD. If only a month and year are given, use " +
 	"the first day of that month (e.g. 'Aug 2022' becomes '2022-08-01'); if only a year is given, use January 1st " +

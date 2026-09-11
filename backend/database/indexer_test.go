@@ -33,7 +33,7 @@ func newTestDB(t *testing.T) {
 	}
 
 	// CASCADE only cascades to dependent objects like FK constraints, not to
-	// child tables themselves — every table with an FK into profiles has to be
+	// child tables themselves; every table with an FK into profiles has to be
 	// listed here, or its rows outlive the id sequence reset and collide with
 	// fresh test profiles reusing the same ids.
 	// schema_migrations needs dropping too, since it survives the reset

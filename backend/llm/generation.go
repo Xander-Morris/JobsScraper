@@ -28,10 +28,10 @@ type GeneratedContent struct {
 
 const generationPrompt = "Using the candidate's resume information and the job posting below, write a tailored " +
 	"cover letter and a short list of resume bullet points reworded to highlight the experience most relevant to " +
-	"this job. Base every claim only on the resume information given — do not invent skills, employers, titles, " +
+	"this job. Base every claim only on the resume information given. Do not invent skills, employers, titles, " +
 	"or accomplishments that aren't present in it. Keep the cover letter to 3-4 short paragraphs, specific to the " +
 	"role and company rather than generic. Tailored bullets should reuse the candidate's real achievements and " +
-	"numbers where available, rewritten to emphasize relevance to this job's requirements — do not fabricate new ones."
+	"numbers where available, rewritten to emphasize relevance to this job's requirements. Do not fabricate new ones."
 
 func GenerateApplicationContent(ctx context.Context, profile ResumeProfile, job JobPosting) (*GeneratedContent, error) {
 	prompt := generationPrompt + "\n\n" + formatResumeProfile(profile) + "\n\n" + formatJobPosting(job)
@@ -45,7 +45,7 @@ func GenerateApplicationContent(ctx context.Context, profile ResumeProfile, job 
 }
 
 // EmbeddingText renders a resume profile as the same compact plain text
-// GenerateApplicationContent feeds the LLM — already a dense summary of the
+// GenerateApplicationContent feeds the LLM, already a dense summary of the
 // resume, so it's good material to embed too.
 func EmbeddingText(profile ResumeProfile) string {
 	return formatResumeProfile(profile)

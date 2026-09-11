@@ -39,7 +39,7 @@ type ResumeExtraction struct {
 	Error          string                    `json:"error"`
 	UpdatedAt      time.Time                 `json:"updated_at"`
 	// Embedding ranks job matches by meaning instead of keyword overlap. Nil
-	// until the background embedding step finishes after extraction — fall
+	// until the background embedding step finishes after extraction, so fall
 	// back to keyword matching, don't treat nil as an error.
 	Embedding *pgvector.Vector `json:"-"`
 }
@@ -288,7 +288,7 @@ func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, er
 }
 
 // SaveResumeEmbedding stores the semantic vector for an already-completed
-// extraction. Best-effort — caller should log and swallow failures here rather
+// extraction. Best-effort: caller should log and swallow failures here rather
 // than treat them as extraction failures, since search/digest just fall back
 // to keyword matching without an embedding.
 func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float32) error {

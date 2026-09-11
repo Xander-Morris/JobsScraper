@@ -1,4 +1,4 @@
-# CrawlerAndIndexer
+# Jobs Scraper
 
 **Live demo:** [jobs-scraper-vvcj.vercel.app](https://jobs-scraper-vvcj.vercel.app/)
 

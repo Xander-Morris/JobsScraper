@@ -188,7 +188,7 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 
 // embedResumeExtraction generates and stores a semantic embedding for a
 // just-completed extraction. Best-effort: log and swallow failures here rather
-// than flip the extraction back to failed — the structured data already
+// than flip the extraction back to failed, since the structured data already
 // saved fine, and search/digest just fall back to keyword matching.
 func embedResumeExtraction(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) {
 	text := llm.EmbeddingText(llm.ResumeProfile{

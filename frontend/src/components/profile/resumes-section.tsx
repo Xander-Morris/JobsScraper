@@ -174,14 +174,14 @@ function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; re
     {education.length > 0 && <div className="space-y-2">
       <p className="text-xs font-semibold text-heading pb-2">Education</p>
       {education.map((entry, i) => <div key={i} className="rounded-lg border border-border p-2">
-        <p className="font-medium">{entry.degree} in {entry.major} — {entry.school_name}</p>
+        <p className="font-medium">{entry.degree} in {entry.major} · {entry.school_name}</p>
         {(entry.start_date || entry.end_date) && <p className="text-xs text-muted-foreground">{entry.start_date} – {entry.end_date}</p>}
       </div>)}
     </div>}
     {workExperience.length > 0 && <div className="space-y-2">
       <p className="text-xs font-semibold text-heading pb-2">Work experience</p>
       {workExperience.map((entry, i) => <div key={i} className="rounded-lg border border-border p-2">
-        <p className="font-medium">{entry.job_title} — {entry.company}</p>
+        <p className="font-medium">{entry.job_title} · {entry.company}</p>
         <p className="text-xs text-muted-foreground">
           {entry.location}{entry.start_date ? ` · ${entry.start_date} – ${entry.end_date || 'present'}` : ''}
         </p>

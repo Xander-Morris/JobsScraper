@@ -79,7 +79,7 @@ function WorkExperienceEntry({ token, entry, onDelete }: { token: string; entry:
   return <div className="rounded-lg border border-border p-3">
     <div className="flex items-start justify-between">
       <div>
-        <p className="text-sm font-semibold text-heading">{entry.job_title} — {entry.company}</p>
+        <p className="text-sm font-semibold text-heading">{entry.job_title} · {entry.company}</p>
         <p className="text-xs text-muted-foreground">
           {jobTypeOptions.find((option) => option.value === entry.job_type)?.label ?? entry.job_type}
           {entry.location ? ` · ${entry.location}` : ''}{entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}

@@ -22,7 +22,7 @@ func New(addr string) *http.Server {
 		Addr:    addr,
 		Handler: Handler(),
 		// Deliberately tight. Resume upload and LLM generation are the two
-		// endpoints that legitimately need longer — they extend their own
+		// endpoints that legitimately need longer; they extend their own
 		// deadline via http.ResponseController instead of loosening this for
 		// everyone else.
 		ReadTimeout:  time.Second * 15,

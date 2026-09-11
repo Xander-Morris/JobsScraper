@@ -13,7 +13,7 @@ interface ProfileAuthContextValue {
 const ProfileAuthContext = createContext<ProfileAuthContextValue | undefined>(undefined)
 
 export function ProfileAuthProvider({ children }: { children: ReactNode }) {
-  // Access token lives in memory only — the httpOnly refresh cookie is what
+  // Access token lives in memory only; the httpOnly refresh cookie is what
   // actually persists the session, so a reload re-derives this instead of
   // reading a stale copy back out of localStorage.
   const [token, setToken] = useState<string | null>(null)

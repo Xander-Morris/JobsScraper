@@ -13,7 +13,7 @@ import (
 const embedJobsBatchSize = 50
 
 // EmbedPendingJobs embeds every job with a NULL embedding, in batches, until
-// none are left. Each job only gets embedded once — descriptions don't change
+// none are left. Each job only gets embedded once; descriptions don't change
 // after posting, so re-scraping won't re-trigger it. Best-effort: log and move
 // on if this fails, don't fail the scrape cycle over it. Search/digest just
 // fall back to keyword matching for jobs with no embedding.

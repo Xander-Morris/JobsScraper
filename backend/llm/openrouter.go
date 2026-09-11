@@ -61,7 +61,7 @@ type openRouterChatResponse struct {
 
 // callOpenRouterChat sends a single-turn prompt to OpenRouter's OpenAI-compatible
 // chat completions endpoint. response_format only guarantees valid JSON, not a
-// specific shape, so the schema gets rendered into the prompt too — same trick
+// specific shape, so the schema gets rendered into the prompt too, the same trick
 // the old Groq client used.
 func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]any) (string, error) {
 	apiKey := openRouterAPIKey()

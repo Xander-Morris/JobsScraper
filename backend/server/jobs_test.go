@@ -45,7 +45,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Same list as database.newTestDB, same reason: CASCADE doesn't reach
-	// child tables, so anything with an FK into profiles needs naming here —
+	// child tables, so anything with an FK into profiles needs naming here;
 	// otherwise its rows outlive the id sequence reset and a second local
 	// test run collides on an already-registered email.
 	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 }
 
 // testDBConnString reads through utils.GetEnv, not os.Getenv, so a value in
-// backend/.env counts — matches database.newTestDB, lets these tests run
+// backend/.env counts; matches database.newTestDB, lets these tests run
 // locally and not just in CI.
 func testDBConnString() string {
 	return utils.GetEnv()["TEST_DATABASE_CONNECTION"]
