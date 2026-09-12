@@ -1,6 +1,6 @@
 import { Button } from './ui/button'
 
-export function Pagination({
+export default function Pagination({
   page,
   total,
   pageSize,
