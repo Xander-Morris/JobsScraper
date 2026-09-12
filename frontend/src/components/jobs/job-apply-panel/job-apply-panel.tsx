@@ -2,17 +2,18 @@ import { useGenerateApplicationContentMutation } from '@/src/api/jobs'
 import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '@/src/api/profile'
 import type { Job } from '@/src/api/schemas'
 import { matchSkills } from '@/src/lib/skills'
+import { useAuth } from '@/src/stores/profile-store'
 import { SparklesIcon } from 'lucide-react'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader } from '../../ui/card'
 import ContactSection, { type ContactField } from './contact-section'
 import CoverLetterSection from './cover-letter-section'
 import FitSection from './fit-section'
-import OpenAndToggle from './open-and-toggle'
 import ResumeSection from './resume-section'
 import SectionHeading from './section-heading'
 
-export default function JobApplyPanel({ token, job }: { token: string; job: Job }) {
+export default function JobApplyPanel({ job }: { job: Job }) {
+  const { token } = useAuth()
   const { data: profile, isLoading: profileLoading } = useProfileQuery(token)
   const activeResume = profile?.resumes?.find((resume) => resume.is_active) ?? null
   const { data: extraction } = useResumeExtractionQuery(token, activeResume?.id ?? 0, {
@@ -43,8 +44,6 @@ export default function JobApplyPanel({ token, job }: { token: string; job: Job 
         <p className="text-xs text-muted-foreground">Everything {job.company}&rsquo;s form asks for, one click away.</p>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <OpenAndToggle job={job}/>
-
         {fields.length > 0 ? (
           <ContactSection fields={fields} />
         ) : (

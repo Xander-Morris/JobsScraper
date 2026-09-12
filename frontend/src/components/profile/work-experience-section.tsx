@@ -18,6 +18,7 @@ import {
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
+import { useAuth } from '@/src/stores/profile-store'
 
 const jobTypeOptions: { value: JobType; label: string }[] = [
   { value: 'internship', label: 'Internship' },
@@ -26,7 +27,8 @@ const jobTypeOptions: { value: JobType; label: string }[] = [
   { value: 'contract', label: 'Contract' }
 ]
 
-export function WorkExperienceSection({ token, workExperience }: { token: string; workExperience: WorkExperience[] }) {
+export function WorkExperienceSection({ workExperience }: { workExperience: WorkExperience[] }) {
+  const { token } = useAuth()
   const addWorkExperience = useAddWorkExperienceMutation(token)
   const deleteWorkExperience = useDeleteWorkExperienceMutation(token)
   const [company, setCompany] = useState('')
@@ -62,12 +64,7 @@ export function WorkExperienceSection({ token, workExperience }: { token: string
         {workExperience.length > 0 && (
           <div className="mb-4 space-y-4">
             {workExperience.map((entry) => (
-              <WorkExperienceEntry
-                key={entry.id}
-                token={token}
-                entry={entry}
-                onDelete={() => deleteWorkExperience.mutate(entry.id)}
-              />
+              <WorkExperienceEntry key={entry.id} entry={entry} onDelete={() => deleteWorkExperience.mutate(entry.id)} />
             ))}
           </div>
         )}
@@ -139,15 +136,8 @@ export function WorkExperienceSection({ token, workExperience }: { token: string
   )
 }
 
-function WorkExperienceEntry({
-  token,
-  entry,
-  onDelete
-}: {
-  token: string
-  entry: WorkExperience
-  onDelete: () => void
-}) {
+function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDelete: () => void }) {
+  const { token } = useAuth()
   const addBullet = useAddWorkExperienceBulletMutation(token)
   const deleteBullet = useDeleteWorkExperienceBulletMutation(token)
   const [bullet, setBullet] = useState('')

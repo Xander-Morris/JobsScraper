@@ -7,9 +7,11 @@ import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
+import { useAuth } from '@/src/stores/profile-store'
 import { XIcon } from 'lucide-react'
 
-export function SkillsSection({ token, skills }: { token: string; skills: Skill[] }) {
+export function SkillsSection({ skills }: { skills: Skill[] }) {
+  const { token } = useAuth()
   const addSkill = useAddSkillMutation(token)
   const deleteSkill = useDeleteSkillMutation(token)
   const [skill, setSkill] = useState('')

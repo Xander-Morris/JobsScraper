@@ -6,6 +6,42 @@ on:
   pull_request:
 
 jobs:
+  format:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: gofmt -w .
+        working-directory: backend
+
+      - run: npx prettier --write .
+        working-directory: frontend
+
+      # No-ops if formatting left nothing to commit. [skip ci] on the commit
+      # itself stops it re-triggering this workflow.
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format [skip ci]"
+          file_pattern: "backend/**/*.go frontend/**"
+
   backend:
     runs-on: ubuntu-latest
     defaults:

@@ -5,7 +5,7 @@ import { useProfileOutletContext } from '@/src/components/profile/profile-contex
 export const Route = createFileRoute('/profile/education')({ component: RouteComponent })
 
 function RouteComponent() {
-  const { token, profile } = useProfileOutletContext()
+  const { profile } = useProfileOutletContext()
 
-  return <EducationSection token={token} education={profile.education ?? []} />
+  return <EducationSection education={profile.education ?? []} />
 }

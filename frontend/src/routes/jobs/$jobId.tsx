@@ -73,7 +73,7 @@ function JobDetailPage() {
               // Assist comes first on narrow screens and rides along in a
               // sticky rail on wide ones, so it never sits below the fold.
               <aside className="order-1 lg:order-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
-                <JobApplyPanel token={token} job={job} />
+                <JobApplyPanel job={job} />
               </aside>
             )}
 

@@ -15,13 +15,15 @@ import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
+import { useAuth } from '@/src/stores/profile-store'
 import { DownloadIcon, FileTextIcon } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 
 const acceptedResumeTypes =
   '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
-export function ResumesSection({ token, resumes, profile }: { token: string; resumes: Resume[]; profile: Profile }) {
+export function ResumesSection({ resumes, profile }: { resumes: Resume[]; profile: Profile }) {
+  const { token } = useAuth()
   const uploadResume = useUploadResumeMutation(token)
   const triggerExtraction = useTriggerResumeExtractionMutation(token)
   const [file, setFile] = useState<File | null>(null)
@@ -54,7 +56,7 @@ export function ResumesSection({ token, resumes, profile }: { token: string; res
         {resumes.length > 0 ? (
           <ul className="space-y-2">
             {resumes.map((resume) => (
-              <ResumeEntry key={resume.id} token={token} resume={resume} profile={profile} />
+              <ResumeEntry key={resume.id} resume={resume} profile={profile} />
             ))}
           </ul>
         ) : (
@@ -91,7 +93,8 @@ function splitFileName(fileName: string): [string, string] {
   return [fileName.slice(0, dot), fileName.slice(dot)]
 }
 
-function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume; profile: Profile }) {
+function ResumeEntry({ resume, profile }: { resume: Resume; profile: Profile }) {
+  const { token } = useAuth()
   const updateResume = useUpdateResumeMutation(token)
   const triggerExtraction = useTriggerResumeExtractionMutation(token)
   const deleteResume = useDeleteResumeMutation(token)
@@ -198,13 +201,14 @@ function ResumeEntry({ token, resume, profile }: { token: string; resume: Resume
         </p>
       )}
       <div className="mt-3 border-t border-border pt-3">
-        <ResumeExtractionPanel token={token} resumeId={resume.id} profile={profile} />
+        <ResumeExtractionPanel resumeId={resume.id} profile={profile} />
       </div>
     </li>
   )
 }
 
-function ResumeExtractionPanel({ token, resumeId, profile }: { token: string; resumeId: number; profile: Profile }) {
+function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profile: Profile }) {
+  const { token } = useAuth()
   const { data, isLoading } = useResumeExtractionQuery(token, resumeId, { enabled: true })
   const retryExtraction = useTriggerResumeExtractionMutation(token)
   const applyExtraction = useApplyResumeExtractionMutation(token)

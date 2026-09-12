@@ -5,7 +5,7 @@ import { useProfileOutletContext } from '@/src/components/profile/profile-contex
 export const Route = createFileRoute('/profile/basic')({ component: RouteComponent })
 
 function RouteComponent() {
-  const { token, profile } = useProfileOutletContext()
+  const { profile } = useProfileOutletContext()
 
-  return <BasicInfoSection token={token} profile={profile} />
+  return <BasicInfoSection profile={profile} />
 }

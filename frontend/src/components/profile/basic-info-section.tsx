@@ -6,8 +6,10 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/src/components/ui/c
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { Switch } from '@/src/components/ui/switch'
+import { useAuth } from '@/src/stores/profile-store'
 
-export function BasicInfoSection({ token, profile }: { token: string; profile: Profile }) {
+export function BasicInfoSection({ profile }: { profile: Profile }) {
+  const { token } = useAuth()
   const updateProfile = useUpdateProfileMutation(token)
   const [name, setName] = useState(profile.name)
   const [address, setAddress] = useState(profile.address)

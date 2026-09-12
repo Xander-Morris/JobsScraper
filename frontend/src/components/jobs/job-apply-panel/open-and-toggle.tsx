@@ -1,26 +1,23 @@
 import type { Job } from "@/src/api/schemas";
-import { useAuth } from "@/src/stores/profile-store";
-import { Link } from "@tanstack/react-router";
 import { ExternalLinkIcon } from "lucide-react";
-import { Button } from "../../ui/button";
+import { buttonVariants } from "../../ui/button";
+import { cn } from "@/src/lib/utils";
 import JobAppliedToggle from "./job-applied-toggle";
 
 interface OpenAndToggleProps {
     job: Job
 }
 
+// job.url is an external posting on another site, not an app route, so this
+// stays a plain <a> rather than tanstack-router's <Link>.
 export default function OpenAndToggle({ job }: OpenAndToggleProps) {
-    const { token } = useAuth()
-    
     return (
-        <div className="flex flex-row gap-2">       
-            <Link to={job.url} target="_blank" rel="noreferrer">
-                <Button type="button" variant="default" className="w-full">
+        <div className="flex flex-row gap-2">
+            <a href={job.url} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: 'default' }))}>
                 <ExternalLinkIcon aria-hidden="true" />
-                View posting 
-            </Button>
-            </Link> 
-            <JobAppliedToggle token={token || ""} job={job} />
+                View posting
+            </a>
+            <JobAppliedToggle job={job} />
         </div>
     )
 }

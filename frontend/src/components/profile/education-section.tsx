@@ -5,8 +5,10 @@ import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
+import { useAuth } from '@/src/stores/profile-store'
 
-export function EducationSection({ token, education }: { token: string; education: Education[] }) {
+export function EducationSection({ education }: { education: Education[] }) {
+  const { token } = useAuth()
   const addEducation = useAddEducationMutation(token)
   const deleteEducation = useDeleteEducationMutation(token)
   const [schoolName, setSchoolName] = useState('')

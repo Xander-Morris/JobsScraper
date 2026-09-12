@@ -19,16 +19,16 @@ const tabs = [
 ] as const
 
 function ProfileLayout() {
-  const { token, isAuthenticated, isInitializing } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
 
   if (isInitializing) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-3xl rounded-xl" />
   if (!isAuthenticated) return <AuthForms />
 
-  return <ProfileContent token={token!} />
+  return <ProfileContent />
 }
 
-function ProfileContent({ token }: { token: string }) {
-  const { logout } = useAuth()
+function ProfileContent() {
+  const { token, logout } = useAuth()
   const { data: profile, error, isLoading, isError } = useProfileQuery(token)
   const isInvalidSession = error instanceof ApiError && (error.status === 401 || error.status === 404)
 
@@ -68,7 +68,7 @@ function ProfileContent({ token }: { token: string }) {
       </nav>
 
       <div className="mt-6">
-        <ProfileOutletProvider token={token} profile={profile}>
+        <ProfileOutletProvider profile={profile}>
           <Outlet />
         </ProfileOutletProvider>
       </div>
