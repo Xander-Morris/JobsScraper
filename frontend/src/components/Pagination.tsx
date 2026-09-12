@@ -4,7 +4,7 @@ export function Pagination({
   page,
   total,
   pageSize,
-  onPageChange,
+  onPageChange
 }: {
   page: number
   total: number

@@ -25,7 +25,7 @@ func findEnvFile() string {
 
 	for {
 		candidate := filepath.Join(dir, ".env")
-		
+
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}

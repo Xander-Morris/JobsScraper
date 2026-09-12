@@ -114,11 +114,11 @@ func (raw RemotiveJob) toJob() Job {
 			}
 
 			if job.SalaryMin == nil {
-				job.SalaryMin = &num 
+				job.SalaryMin = &num
 			}
 
 			if job.SalaryMax == nil {
-				job.SalaryMax = &num 
+				job.SalaryMax = &num
 			}
 		}
 	}

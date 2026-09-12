@@ -64,7 +64,11 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
         {workExperience.length > 0 && (
           <div className="mb-4 space-y-4">
             {workExperience.map((entry) => (
-              <WorkExperienceEntry key={entry.id} entry={entry} onDelete={() => deleteWorkExperience.mutate(entry.id)} />
+              <WorkExperienceEntry
+                key={entry.id}
+                entry={entry}
+                onDelete={() => deleteWorkExperience.mutate(entry.id)}
+              />
             ))}
           </div>
         )}

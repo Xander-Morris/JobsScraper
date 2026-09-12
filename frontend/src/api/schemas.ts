@@ -19,7 +19,7 @@ export const jobSchema = z.object({
   url: z.string().trim(),
   description: htmlDecodedString,
   match_score: z.number().nullable().optional(),
-  applied: z.boolean().default(false),
+  applied: z.boolean().default(false)
 })
 export type Job = z.infer<typeof jobSchema>
 
@@ -27,7 +27,7 @@ export const jobSearchResponseSchema = z.object({
   jobs: z.array(jobSchema),
   total: z.number(),
   limit: z.number(),
-  offset: z.number(),
+  offset: z.number()
 })
 export type JobSearchResponse = z.infer<typeof jobSearchResponseSchema>
 
@@ -43,20 +43,20 @@ export const educationSchema = z.object({
   degree: z.string().trim(),
   gpa: z.number().nullable(),
   start_date: z.string().trim().nullable(),
-  end_date: z.string().trim().nullable(),
+  end_date: z.string().trim().nullable()
 })
 export type Education = z.infer<typeof educationSchema>
 
 export const skillSchema = z.object({
   id: z.number(),
-  skill: z.string().trim(),
+  skill: z.string().trim()
 })
 export type Skill = z.infer<typeof skillSchema>
 
 export const workExperienceBulletSchema = z.object({
   id: z.number(),
   bullet: z.string().trim(),
-  position: z.number(),
+  position: z.number()
 })
 export type WorkExperienceBullet = z.infer<typeof workExperienceBulletSchema>
 
@@ -68,7 +68,7 @@ export const workExperienceSchema = z.object({
   location: z.string().trim().nullable(),
   start_date: z.string().trim().nullable(),
   end_date: z.string().trim().nullable(),
-  bullets: z.array(workExperienceBulletSchema).nullable(),
+  bullets: z.array(workExperienceBulletSchema).nullable()
 })
 export type WorkExperience = z.infer<typeof workExperienceSchema>
 
@@ -79,7 +79,7 @@ export const resumeSchema = z.object({
   file_size: z.number(),
   is_active: z.boolean(),
   created_at: z.string().trim(),
-  updated_at: z.string().trim(),
+  updated_at: z.string().trim()
 })
 export type Resume = z.infer<typeof resumeSchema>
 
@@ -91,7 +91,7 @@ export const extractedEducationSchema = z.object({
   degree: z.string().trim(),
   major: z.string().trim(),
   start_date: z.string().trim(),
-  end_date: z.string().trim(),
+  end_date: z.string().trim()
 })
 
 export const extractedWorkExperienceSchema = z.object({
@@ -100,14 +100,14 @@ export const extractedWorkExperienceSchema = z.object({
   location: z.string().trim(),
   start_date: z.string().trim(),
   end_date: z.string().trim(),
-  bullets: z.array(z.string().trim()).nullable(),
+  bullets: z.array(z.string().trim()).nullable()
 })
 
 export const extractedProjectSchema = z.object({
   name: z.string().trim(),
   url: z.string().trim(),
   technologies: z.array(z.string().trim()).nullable(),
-  bullets: z.array(z.string().trim()).nullable(),
+  bullets: z.array(z.string().trim()).nullable()
 })
 
 export const resumeExtractionSchema = z.object({
@@ -125,7 +125,7 @@ export const resumeExtractionSchema = z.object({
   work_experience: z.array(extractedWorkExperienceSchema).nullable(),
   projects: z.array(extractedProjectSchema).nullable(),
   error: z.string().trim(),
-  updated_at: z.string().trim(),
+  updated_at: z.string().trim()
 })
 export type ResumeExtraction = z.infer<typeof resumeExtractionSchema>
 
@@ -141,17 +141,17 @@ export const profileSchema = z.object({
   education: z.array(educationSchema).nullable(),
   skills: z.array(skillSchema).nullable(),
   work_experience: z.array(workExperienceSchema).nullable(),
-  resumes: z.array(resumeSchema).nullable(),
+  resumes: z.array(resumeSchema).nullable()
 })
 export type Profile = z.infer<typeof profileSchema>
 
 export const authResponseSchema = z.object({
-  token: z.string().trim(),
+  token: z.string().trim()
 })
 export type AuthResponse = z.infer<typeof authResponseSchema>
 
 export const generatedContentSchema = z.object({
   cover_letter: z.string(),
-  tailored_bullets: z.array(z.string()),
+  tailored_bullets: z.array(z.string())
 })
 export type GeneratedContent = z.infer<typeof generatedContentSchema>

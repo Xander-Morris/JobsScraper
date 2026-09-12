@@ -11,6 +11,7 @@ import (
 )
 
 const himalayasEndpoint = "https://himalayas.app/jobs/api"
+
 var himalayasCompanySlug = regexp.MustCompile(`himalayas\.app/companies/([^/]+)/`)
 
 func companyNameFromURL(url string) string {

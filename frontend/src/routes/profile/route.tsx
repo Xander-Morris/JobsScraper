@@ -15,7 +15,7 @@ const tabs = [
   { to: '/profile/education', label: 'Education' },
   { to: '/profile/skills', label: 'Skills' },
   { to: '/profile/work-experience', label: 'Work experience' },
-  { to: '/profile/resumes', label: 'Resumes' },
+  { to: '/profile/resumes', label: 'Resumes' }
 ] as const
 
 function ProfileLayout() {
@@ -41,7 +41,11 @@ function ProfileContent() {
   if (isInvalidSession) return <p className="mt-10 text-muted-foreground">Signing you out...</p>
 
   if (isError) {
-    return <p role="alert" className="mt-10 text-muted-foreground">Unable to load your profile. Please try again.</p>
+    return (
+      <p role="alert" className="mt-10 text-muted-foreground">
+        Unable to load your profile. Please try again.
+      </p>
+    )
   }
 
   if (isLoading || !profile) return <p className="mt-10 text-muted-foreground">Loading profile…</p>

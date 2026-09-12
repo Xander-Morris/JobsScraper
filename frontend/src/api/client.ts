@@ -27,7 +27,7 @@ async function refreshAccessToken(): Promise<string | null> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/profile/refresh`, {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'include'
       })
       if (!res.ok) return null
 
@@ -50,7 +50,7 @@ async function apiFetchInternal<T>(
   path: string,
   schema: ZodType<T>,
   init: RequestInit | undefined,
-  refreshed: boolean,
+  refreshed: boolean
 ): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, { ...init, credentials: init?.credentials ?? 'include' })
 

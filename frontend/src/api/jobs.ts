@@ -7,7 +7,7 @@ import {
   jobSearchResponseSchema,
   type GeneratedContent,
   type Job,
-  type JobSearchResponse,
+  type JobSearchResponse
 } from './schemas'
 
 const statusResponseSchema = z.object({ status: z.string() })
@@ -43,24 +43,21 @@ function buildJobSearchQuery(params: JobSearchParams): string {
 export function fetchJobs(params: JobSearchParams = {}, token?: string | null): Promise<JobSearchResponse> {
   const qs = buildJobSearchQuery(params)
   return apiFetch(`/api/jobs${qs ? `?${qs}` : ''}`, jobSearchResponseSchema, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
   })
 }
 
 export function fetchJob(id: number, token?: string | null): Promise<Job> {
   return apiFetch(`/api/jobs/${id}`, jobSchema, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
   })
 }
 
-export function useJobsQuery(
-  params: JobSearchParams = {},
-  options: { enabled?: boolean; token?: string | null } = {},
-) {
+export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean; token?: string | null } = {}) {
   return useQuery({
     queryKey: ['jobs', params, options.token],
     queryFn: () => fetchJobs(params, options.token),
-    enabled: options.enabled,
+    enabled: options.enabled
   })
 }
 
@@ -68,21 +65,21 @@ export function useJobQuery(id: number, token?: string | null) {
   return useQuery({
     queryKey: ['jobs', id, token],
     queryFn: () => fetchJob(id, token),
-    enabled: Number.isFinite(id),
+    enabled: Number.isFinite(id)
   })
 }
 
 export function markJobApplied(token: string, id: number) {
   return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` }
   })
 }
 
 export function unmarkJobApplied(token: string, id: number) {
   return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` }
   })
 }
 
@@ -93,7 +90,7 @@ function useJobAppliedMutation(mutationFn: (id: number) => Promise<{ status: str
     mutationFn,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
-    },
+    }
   })
 }
 
@@ -108,12 +105,12 @@ export function useUnmarkJobAppliedMutation(token: string | null) {
 export function generateApplicationContent(token: string, jobId: number): Promise<GeneratedContent> {
   return apiFetch(`/api/jobs/${jobId}/generate`, generatedContentSchema, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` }
   })
 }
 
 export function useGenerateApplicationContentMutation(token: string | null) {
   return useMutation({
-    mutationFn: (jobId: number) => generateApplicationContent(token!, jobId),
+    mutationFn: (jobId: number) => generateApplicationContent(token!, jobId)
   })
 }

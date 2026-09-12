@@ -7,7 +7,7 @@ import {
   updateEducation,
   updateProfile,
   updateWorkExperience,
-  useProfileMutation,
+  useProfileMutation
 } from './profile'
 import type { Profile, ResumeExtraction } from './schemas'
 
@@ -45,7 +45,7 @@ async function mergeBasicInfo(token: string, profile: Profile, extraction: Resum
       linked_in: nextLinkedIn,
       github: nextGithub,
       portfolio: nextPortfolio,
-      email_notifications: profile.email_notifications,
+      email_notifications: profile.email_notifications
     })
   }
 
@@ -70,13 +70,13 @@ async function mergeSkills(token: string, profile: Profile, extraction: ResumeEx
 async function mergeEducation(
   token: string,
   profile: Profile,
-  extraction: ResumeExtraction,
+  extraction: ResumeExtraction
 ): Promise<{ added: number; updated: number }> {
   const educationByKey = new Map(
     (profile.education ?? []).map((e) => [
       `${e.school_name.trim().toLowerCase()}|${e.major.trim().toLowerCase()}|${e.degree.trim().toLowerCase()}`,
-      e,
-    ]),
+      e
+    ])
   )
   let added = 0
   let updated = 0
@@ -101,7 +101,7 @@ async function mergeEducation(
         degree,
         gpa: existing.gpa,
         start_date: startDate,
-        end_date: endDate,
+        end_date: endDate
       })
       updated++
     } else {
@@ -116,10 +116,13 @@ async function mergeEducation(
 async function mergeWorkExperience(
   token: string,
   profile: Profile,
-  extraction: ResumeExtraction,
+  extraction: ResumeExtraction
 ): Promise<{ added: number; updated: number }> {
   const workExperienceByKey = new Map(
-    (profile.work_experience ?? []).map((w) => [`${w.company.trim().toLowerCase()}|${w.job_title.trim().toLowerCase()}`, w]),
+    (profile.work_experience ?? []).map((w) => [
+      `${w.company.trim().toLowerCase()}|${w.job_title.trim().toLowerCase()}`,
+      w
+    ])
   )
   let added = 0
   let updated = 0
@@ -157,7 +160,7 @@ async function mergeWorkExperience(
           job_type: existing.job_type,
           location,
           start_date: startDate,
-          end_date: endDate,
+          end_date: endDate
         })
       }
 
@@ -176,7 +179,7 @@ async function mergeWorkExperience(
         job_type: 'unknown',
         location: entry.location,
         start_date: asDate(entry.start_date),
-        end_date: asDate(entry.end_date),
+        end_date: asDate(entry.end_date)
       })
 
       for (const bullet of extractedBullets) {
@@ -193,7 +196,7 @@ async function mergeWorkExperience(
 export async function applyResumeExtractionToProfile(
   token: string,
   profile: Profile,
-  extraction: ResumeExtraction,
+  extraction: ResumeExtraction
 ): Promise<ApplyResumeExtractionResult> {
   const updatedBasicInfo = await mergeBasicInfo(token, profile, extraction)
   const addedSkills = await mergeSkills(token, profile, extraction)
@@ -201,7 +204,7 @@ export async function applyResumeExtractionToProfile(
   const { added: addedWorkExperience, updated: updatedWorkExperience } = await mergeWorkExperience(
     token,
     profile,
-    extraction,
+    extraction
   )
 
   return { updatedBasicInfo, addedEducation, updatedEducation, addedSkills, addedWorkExperience, updatedWorkExperience }
@@ -209,6 +212,6 @@ export async function applyResumeExtractionToProfile(
 
 export function useApplyResumeExtractionMutation(token: string | null) {
   return useProfileMutation(({ profile, extraction }: { profile: Profile; extraction: ResumeExtraction }) =>
-    applyResumeExtractionToProfile(token!, profile, extraction),
+    applyResumeExtractionToProfile(token!, profile, extraction)
   )
 }

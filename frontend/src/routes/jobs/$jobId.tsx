@@ -60,7 +60,7 @@ function JobDetailPage() {
               ))}
             </div>
 
-            <OpenAndToggle job={job}/>
+            <OpenAndToggle job={job} />
           </header>
 
           <div

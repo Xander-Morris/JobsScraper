@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react()],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('.', import.meta.url)),
-    },
-  },
+      '@': fileURLToPath(new URL('.', import.meta.url))
+    }
+  }
 })

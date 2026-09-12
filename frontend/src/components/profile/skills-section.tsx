@@ -23,21 +23,42 @@ export function SkillsSection({ skills }: { skills: Skill[] }) {
     addSkill.mutate({ skill: skill.trim() }, { onSuccess: () => setSkill('') })
   }
 
-  return <Card>
-    <CardHeader><h3 className="text-sm font-semibold text-heading">Skills</h3></CardHeader>
-    <CardContent>
-      {skills.length > 0 && <ul className="mb-3 flex flex-wrap gap-1.5">
-        {skills.map((entry) => <li key={entry.id}>
-          <button type="button" onClick={() => deleteSkill.mutate(entry.id)} aria-label={`Remove ${entry.skill}`} className={cn(badgeVariants({ variant: 'secondary' }), 'gap-1 hover:bg-destructive/10 hover:text-destructive')}>
-            {entry.skill}<XIcon aria-hidden="true" />
-          </button>
-        </li>)}
-      </ul>}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Label htmlFor={id} className="sr-only">Add a skill</Label>
-        <Input id={id} placeholder="Add a skill" value={skill} onChange={(e) => setSkill(e.target.value)} />
-        <Button type="submit" disabled={addSkill.isPending}>Add</Button>
-      </form>
-    </CardContent>
-  </Card>
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="text-sm font-semibold text-heading">Skills</h3>
+      </CardHeader>
+      <CardContent>
+        {skills.length > 0 && (
+          <ul className="mb-3 flex flex-wrap gap-1.5">
+            {skills.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => deleteSkill.mutate(entry.id)}
+                  aria-label={`Remove ${entry.skill}`}
+                  className={cn(
+                    badgeVariants({ variant: 'secondary' }),
+                    'gap-1 hover:bg-destructive/10 hover:text-destructive'
+                  )}
+                >
+                  {entry.skill}
+                  <XIcon aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Label htmlFor={id} className="sr-only">
+            Add a skill
+          </Label>
+          <Input id={id} placeholder="Add a skill" value={skill} onChange={(e) => setSkill(e.target.value)} />
+          <Button type="submit" disabled={addSkill.isPending}>
+            Add
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
 }

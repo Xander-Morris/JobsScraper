@@ -3,7 +3,7 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { Header } from '../components/header'
 
 export const Route = createRootRoute({
-  component: RootComponent,
+  component: RootComponent
 })
 
 function RootComponent() {

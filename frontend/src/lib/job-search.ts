@@ -10,7 +10,7 @@ export const jobSearchSchema = z.object({
   datePosted: z.enum(datePostedOptions).optional(),
   tags: z.array(z.string()).optional(),
   sort: z.enum(['relevance', 'date']).optional(),
-  page: z.number().optional(),
+  page: z.number().optional()
 })
 
 export type JobSearchState = z.infer<typeof jobSearchSchema>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from 'react'
 
 export default function useCopied() {
   const [copied, setCopied] = useState(false)
