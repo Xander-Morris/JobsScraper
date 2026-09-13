@@ -101,9 +101,7 @@ func allSources() []jobs.JobSource {
 	}
 }
 
-// RunScrapeCycle runs one fetch-all-sources-and-write pass. For a scheduler
-// with no long-lived process of its own (a Vercel Cron Job hitting an
-// endpoint per invocation), instead of StartScrapingJob's ticker loop.
+// RunScrapeCycle runs one fetch-all-sources-and-write pass, for cmd/cron.
 func RunScrapeCycle() {
 	runScraperSafely(allSources())
 }

@@ -12,7 +12,8 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `notify/`: Resend email client for the digest
 - `utils/`: env loading and a couple of small helpers
 - `api/`: Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
-- `coldstart/`: one-time startup work (env validation, migrations) shared by the entrypoints under `api/`
+- `cmd/cron/`: runs one scrape or digest pass and exits, scheduled by `.github/workflows/cron.yml`
+- `coldstart/`: one-time startup work (env validation, migrations) shared by `api/` and `cmd/cron/`
 
 ## Running locally
 
@@ -45,10 +46,10 @@ Full list with comments is in `.env.example`. The short version:
 |---|---|---|
 | `DATABASE_CONNECTION` | yes | Postgres connection string |
 | `SECRET_KEY` | yes | JWT signing key |
-| `ALLOWED_ORIGIN` | recommended | CORS origin, defaults to `localhost:5173` which is wrong for any real deploy |
+| `ALLOWED_ORIGIN` | recommended | CORS origin and base URL for password reset links, defaults to `localhost:5173` which is wrong for any real deploy |
 | `COOKIE_SECURE` | recommended | set `true` once you're on HTTPS |
 | `REDIS_URL` | recommended on Vercel | shares login/signup and LLM rate limits across serverless instances; falls back to in-memory limits if unset or unreachable |
-| `RESEND_API_KEY` | optional | digest emails no-op (log only, no send) if unset |
+| `RESEND_API_KEY` | optional | digest and password reset emails no-op (log only, no send) if unset |
 | `RESEND_FROM_ADDRESS` | optional | defaults to Resend's shared sandbox address |
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
 | `TEST_DATABASE_CONNECTION` | dev only | separate DB for `go test` |
@@ -56,17 +57,16 @@ Full list with comments is in `.env.example`. The short version:
 | `OPENROUTER_MODEL` | optional | defaults to `minimax/minimax-m2.7:free`; must be a `:free` model to stay free |
 | `JINA_API_KEY` | recommended | embeddings fail without it (search/digest fall back to keyword matching) |
 | `JINA_EMBED_MODEL` | optional | defaults to `jina-embeddings-v2-base-en`; must stay 768-dim to match the `vector(768)` columns |
-| `CRON_SECRET` | Vercel only | authenticates Vercel Cron Jobs hitting `api/cron/*`; unused by the self-hosted binary |
 
 ## API
 
 Routes are all registered in `server/routes.go`. Roughly: job search/detail is public, marking a job as applied and everything under `/api/profile` requires a bearer token, login/signup are rate limited separately from everything else.
 
-Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout.
+Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout. Password reset emails a one-time link (stored hashed, expires in an hour); using it sets the new password and revokes every refresh token for that profile.
 
 ## Background jobs
 
-Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel, `api/cron/scrape/index.go` and `api/cron/digest/index.go` run these as scheduled Cron Jobs instead, since there's no long-lived process to hold a ticker):
+Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel there's no long-lived process to hold a ticker, so `.github/workflows/cron.yml` runs the same work through `cmd/cron` on a GitHub Actions schedule instead: a scrape every 30 minutes, a digest daily):
 
 - **Scraper**: fetches all job sources immediately on boot, then every 10 minutes
 - **Digest scheduler**: sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on

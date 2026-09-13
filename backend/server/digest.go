@@ -45,9 +45,7 @@ func StartDigestScheduler(ctx context.Context) {
 	}
 }
 
-// RunDigestCycle runs one digest pass across all opted-in profiles. For a
-// scheduler with no long-lived process of its own (a Vercel Cron Job hitting
-// an endpoint per invocation), instead of StartDigestScheduler's ticker loop.
+// RunDigestCycle runs one digest pass across all opted-in profiles, for cmd/cron.
 func RunDigestCycle() {
 	runDigestJobSafely()
 }

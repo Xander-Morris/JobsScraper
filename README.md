@@ -39,7 +39,7 @@ Order matters since Caddy requests a certificate on startup, and a failed ACME c
 
 1. Point a DNS A record for your backend hostname at the host, and wait for it to resolve
 2. Copy `.env.example` to `.env` and set `BACKEND_DOMAIN` and `ACME_EMAIL`
-3. Copy `backend/.env.example` to `backend/.env`. Beyond `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, and `JINA_API_KEY`, a public deployment needs `ALLOWED_ORIGIN` (the frontend's origin), `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` if the frontend is on a different domain (e.g. Vercel), and if digest emails are on, then `PUBLIC_BACKEND_URL` plus a `RESEND_FROM_ADDRESS` on a domain verified in Resend
+3. Copy `backend/.env.example` to `backend/.env`. Beyond `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, and `JINA_API_KEY`, a public deployment needs `ALLOWED_ORIGIN` (the frontend's origin), `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` if the frontend is on a different domain (e.g. Vercel), and for digest and password reset emails, `RESEND_API_KEY` plus a `RESEND_FROM_ADDRESS` on a domain verified in Resend (and `PUBLIC_BACKEND_URL` for digest unsubscribe links)
 4. Bring it up:
 
 ```bash
@@ -55,9 +55,9 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 **Backend** (project root: `backend/`, entrypoints under `backend/api/`, config in `backend/vercel.json`):
 
 1. Import the repo, set the project's root directory to `backend/`
-2. Set env vars: `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` (frontend and backend are on different Vercel domains), `CRON_SECRET` (any random string; Vercel sends it back as a header to authenticate the two cron endpoints below), `REDIS_URL` (a free [Upstash](https://upstash.com) Redis database; without it, login and LLM rate limits live in each function instance's memory and are easy to get around), and `ALLOWED_ORIGIN` (set once you have the frontend's URL from the next step)
+2. Set env vars: `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` (frontend and backend are on different Vercel domains), `RESEND_API_KEY` and `RESEND_FROM_ADDRESS` (password reset emails; without them nobody can recover a forgotten password), `REDIS_URL` (a free [Upstash](https://upstash.com) Redis database; without it, login and LLM rate limits live in each function instance's memory and are easy to get around), and `ALLOWED_ORIGIN` (set once you have the frontend's URL from the next step)
 3. Deploy. Every `/api/*` request routes through the single `api/index.go` function (see the `rewrites` entry in `vercel.json`), running the same handler chain as the self-hosted binary
-4. `vercel.json` already wires up two Vercel Cron Jobs: a daily job re-scrape (`api/cron/scrape/index.go`) and a daily digest send (`api/cron/digest/index.go`), replacing the self-hosted binary's in-process ticker loops (which have nowhere to live in a serverless deployment). Vercel's free (Hobby) plan caps cron at once/day, so the job board refreshes daily instead of every 10 minutes like the self-hosted version. Vercel Pro allows more frequent schedules if you need that back
+4. Scraping and digest emails don't run on Vercel, since its free plan caps functions at 60 seconds and cron at once a day. Instead, `.github/workflows/cron.yml` runs them on GitHub Actions (free for public repos): a scrape every 30 minutes and a digest daily at 04:15 UTC. In the GitHub repo's Settings → Secrets and variables → Actions, add the secrets `DATABASE_CONNECTION` (use Supabase's pooler URL, since Actions runners have no IPv6), `SECRET_KEY` (the same value as the Vercel project, or digest unsubscribe links break), `JINA_API_KEY`, and `RESEND_API_KEY`, plus the variables `RESEND_FROM_ADDRESS` and `PUBLIC_BACKEND_URL`. Trigger a first run by hand from the Actions tab with "Run workflow"
 
 **Frontend** (project root: `frontend/`):
 
@@ -68,6 +68,6 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 
 ## How it fits together
 
-The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes and writes new/updated listings to Postgres, and one that sends the daily digest email to anyone who's opted in (on Vercel, these run as Cron Jobs instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
+The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes and writes new/updated listings to Postgres, and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
 
 The frontend talks to the backend over a plain REST API (see `backend/server/routes.go` for the full list of endpoints) using TanStack Query for data fetching and TanStack Router for routing.

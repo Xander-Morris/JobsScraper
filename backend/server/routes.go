@@ -16,6 +16,8 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/digest/unsubscribe", handleUnsubscribeDigest)
 	mux.HandleFunc("POST /api/profile/create", limitAuth(handleCreateProfile))
 	mux.HandleFunc("POST /api/profile/login", limitAuth(handleLoginProfile))
+	mux.HandleFunc("POST /api/profile/password-reset", limitAuth(handleRequestPasswordReset))
+	mux.HandleFunc("POST /api/profile/password-reset/confirm", limitAuth(handleConfirmPasswordReset))
 	mux.HandleFunc("POST /api/profile/refresh", handleRefreshProfile)
 	mux.HandleFunc("POST /api/profile/logout", handleLogoutProfile)
 	mux.HandleFunc("GET /api/profile", withAuth(handleGetProfile))

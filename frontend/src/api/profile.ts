@@ -93,6 +93,34 @@ export function useLoginMutation() {
   })
 }
 
+export function requestPasswordReset(email: string) {
+  return apiFetch('/api/profile/password-reset', statusResponseSchema, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ email })
+  })
+}
+
+export function confirmPasswordReset(token: string, password: string): Promise<AuthResponse> {
+  return apiFetch('/api/profile/password-reset/confirm', authResponseSchema, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ token, password })
+  })
+}
+
+export function useRequestPasswordResetMutation() {
+  return useMutation({
+    mutationFn: (email: string) => requestPasswordReset(email)
+  })
+}
+
+export function useConfirmPasswordResetMutation() {
+  return useMutation({
+    mutationFn: ({ token, password }: { token: string; password: string }) => confirmPasswordReset(token, password)
+  })
+}
+
 export function fetchProfile(token: string): Promise<Profile> {
   return apiFetch('/api/profile', profileSchema, { headers: authHeaders(token) })
 }
