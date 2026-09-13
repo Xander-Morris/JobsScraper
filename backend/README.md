@@ -47,6 +47,7 @@ Full list with comments is in `.env.example`. The short version:
 | `SECRET_KEY` | yes | JWT signing key |
 | `ALLOWED_ORIGIN` | recommended | CORS origin, defaults to `localhost:5173` which is wrong for any real deploy |
 | `COOKIE_SECURE` | recommended | set `true` once you're on HTTPS |
+| `REDIS_URL` | recommended on Vercel | shares login/signup and LLM rate limits across serverless instances; falls back to in-memory limits if unset or unreachable |
 | `RESEND_API_KEY` | optional | digest emails no-op (log only, no send) if unset |
 | `RESEND_FROM_ADDRESS` | optional | defaults to Resend's shared sandbox address |
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
