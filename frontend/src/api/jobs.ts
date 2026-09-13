@@ -138,7 +138,11 @@ export function generateTailoredResume(token: string, jobId: number): Promise<Ta
   })
 }
 
-export function saveTailoredResume(token: string, jobId: number, content: TailoredResumeContent): Promise<TailoredResume> {
+export function saveTailoredResume(
+  token: string,
+  jobId: number,
+  content: TailoredResumeContent
+): Promise<TailoredResume> {
   return apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
