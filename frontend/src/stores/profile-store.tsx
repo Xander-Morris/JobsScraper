@@ -1,5 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { API_BASE_URL, refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent } from '../api/client'
+
+const authChannelName = 'profile-auth'
+
+type AuthMessage = { type: 'login'; token: string } | { type: 'logout' }
 
 interface ProfileAuthContextValue {
   token: string | null
@@ -19,16 +23,41 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(true)
   const [sessionMessage, setSessionMessage] = useState<string | null>(null)
+  // Keeps other tabs in sync, since each one holds its own in-memory token.
+  const channelRef = useRef<BroadcastChannel | null>(null)
 
   const login = useCallback((next: string) => {
     setToken(next)
     setSessionMessage(null)
+    channelRef.current?.postMessage({ type: 'login', token: next } satisfies AuthMessage)
   }, [])
 
   const logout = useCallback((message?: string) => {
     void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
     setToken(null)
     setSessionMessage(message ?? null)
+    channelRef.current?.postMessage({ type: 'logout' } satisfies AuthMessage)
+  }, [])
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return
+
+    const channel = new BroadcastChannel(authChannelName)
+    channelRef.current = channel
+
+    channel.onmessage = (event: MessageEvent<AuthMessage>) => {
+      if (event.data.type === 'login') {
+        setToken(event.data.token)
+        setSessionMessage(null)
+      } else {
+        setToken(null)
+      }
+    }
+
+    return () => {
+      channel.close()
+      channelRef.current = null
+    }
   }, [])
 
   useEffect(() => {
