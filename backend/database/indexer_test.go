@@ -42,7 +42,7 @@ func newTestDB(t *testing.T) {
 	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
 		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
 		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
-		schema_migrations`
+		profile_tailored_resumes, schema_migrations`
 
 	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)

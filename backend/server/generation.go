@@ -72,6 +72,7 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
 	}, llm.JobPosting{
 		Title:       job.Title,
 		Company:     job.Company,
+		Tags:        job.Tags,
 		Description: job.Description,
 	})
 

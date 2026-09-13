@@ -18,6 +18,7 @@ type ResumeProfile struct {
 type JobPosting struct {
 	Title       string
 	Company     string
+	Tags        []string
 	Description string
 }
 
@@ -95,7 +96,15 @@ func orPresent(endDate string) string {
 }
 
 func formatJobPosting(j JobPosting) string {
-	return fmt.Sprintf("Job posting:\nTitle: %s\nCompany: %s\nDescription: %s\n", j.Title, j.Company, j.Description)
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "Job posting:\nTitle: %s\nCompany: %s\n", j.Title, j.Company)
+	if len(j.Tags) > 0 {
+		fmt.Fprintf(&sb, "Tags: %s\n", strings.Join(j.Tags, ", "))
+	}
+	fmt.Fprintf(&sb, "Description: %s\n", j.Description)
+
+	return sb.String()
 }
 
 func generationSchema() map[string]any {

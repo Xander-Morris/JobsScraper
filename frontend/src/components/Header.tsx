@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 export function Header() {
   return (
-    <header className="flex items-center justify-between border-b border-border px-6 py-4 text-left">
+    <header className="flex items-center justify-between border-b border-border px-6 py-4 text-left print:hidden">
       <Link to="/" className="text-lg font-semibold text-heading no-underline">
         Jobs Scraper
       </Link>

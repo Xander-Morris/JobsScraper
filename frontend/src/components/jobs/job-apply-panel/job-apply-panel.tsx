@@ -11,6 +11,7 @@ import CoverLetterSection from './cover-letter-section'
 import FitSection from './fit-section'
 import ResumeSection from './resume-section'
 import SectionHeading from './section-heading'
+import TailoredResumeSection from './tailored-resume-section'
 
 export default function JobApplyPanel({ job }: { job: Job }) {
   const { token } = useAuth()
@@ -52,9 +53,15 @@ export default function JobApplyPanel({ job }: { job: Job }) {
 
         <ResumeSection activeResume={activeResume} downloadResume={downloadResume} />
         <FitSection matched={matched} missing={missing} />
+        <TailoredResumeSection
+          job={job}
+          token={token}
+          hasActiveResume={activeResume != null}
+          resumeReady={resumeReady}
+        />
 
         <section className="space-y-2 border-t border-border pt-3">
-          <SectionHeading step={3} title="Cover letter" />
+          <SectionHeading step={4} title="Cover letter" />
           {!resumeReady && (
             <p className="text-xs text-muted-foreground">
               {activeResume
