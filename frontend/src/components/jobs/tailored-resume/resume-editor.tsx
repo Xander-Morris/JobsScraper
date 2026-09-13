@@ -119,7 +119,12 @@ function BulletList({
         )
       })}
 
-      <Button type="button" variant="ghost" size="xs" onClick={() => edit((list) => [...list, { text: '', source: '' }])}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        onClick={() => edit((list) => [...list, { text: '', source: '' }])}
+      >
         <PlusIcon aria-hidden="true" /> Add bullet
       </Button>
     </div>

@@ -90,7 +90,11 @@ export default function ResumePreview({ content }: { content: TailoredResumeCont
           {content.projects.map((project, index) => (
             <div key={index} className="break-inside-avoid">
               <EntryHeader
-                title={project.technologies.length > 0 ? `${project.name} (${project.technologies.join(', ')})` : project.name}
+                title={
+                  project.technologies.length > 0
+                    ? `${project.name} (${project.technologies.join(', ')})`
+                    : project.name
+                }
                 dates=""
               />
               {project.url && <p>{project.url}</p>}
@@ -105,7 +109,9 @@ export default function ResumePreview({ content }: { content: TailoredResumeCont
           {content.education.map((edu, index) => (
             <div key={index} className="break-inside-avoid">
               <EntryHeader
-                title={[[edu.degree, edu.major].filter(Boolean).join(' in '), edu.school_name].filter(Boolean).join(', ')}
+                title={[[edu.degree, edu.major].filter(Boolean).join(' in '), edu.school_name]
+                  .filter(Boolean)
+                  .join(', ')}
                 dates={formatRange(edu.start_date, edu.end_date)}
               />
             </div>

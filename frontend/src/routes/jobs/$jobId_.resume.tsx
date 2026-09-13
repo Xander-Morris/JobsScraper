@@ -58,7 +58,10 @@ function TailoredResumePage() {
 
   function handlePrint() {
     const previousTitle = document.title
-    document.title = [draft?.full_name, job?.company, 'resume'].filter(Boolean).map((part) => slugify(part!)).join('-')
+    document.title = [draft?.full_name, job?.company, 'resume']
+      .filter(Boolean)
+      .map((part) => slugify(part!))
+      .join('-')
     window.print()
     document.title = previousTitle
   }
@@ -87,7 +90,13 @@ function TailoredResumePage() {
           {draft && (
             <div className="flex flex-wrap items-center gap-2">
               {dirty && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
-              <Button type="button" variant="ghost" size="sm" onClick={handleRegenerate} disabled={regenerate.isPending}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={regenerate.isPending}
+              >
                 <SparklesIcon aria-hidden="true" /> {regenerate.isPending ? 'Tailoring…' : 'Regenerate'}
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={handlePrint}>
@@ -137,11 +146,7 @@ function TailoredResumePage() {
       {draft && (
         <div className="mt-6 grid items-start gap-8 lg:grid-cols-2 print:mt-0 print:block">
           <div className="print:hidden">
-            <ResumeEditor
-              content={draft}
-              onChange={setDraft}
-              extraction={tailored?.stale ? undefined : extraction}
-            />
+            <ResumeEditor content={draft} onChange={setDraft} extraction={tailored?.stale ? undefined : extraction} />
           </div>
           <div className="lg:sticky lg:top-6">
             <ResumePreview content={draft} />
