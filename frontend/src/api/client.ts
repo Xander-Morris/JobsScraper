@@ -20,22 +20,33 @@ function hasBearerToken(init?: RequestInit): boolean {
   return new Headers(init?.headers).has('Authorization')
 }
 
+async function requestAccessToken(): Promise<string | null> {
+  const res = await fetch(`${API_BASE_URL}/api/profile/refresh`, {
+    method: 'POST',
+    credentials: 'include'
+  })
+  if (!res.ok) return null
+
+  const body = (await res.json()) as { token?: unknown }
+  if (typeof body.token !== 'string' || body.token === '') return null
+
+  return body.token
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight
 
   refreshInFlight = (async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/profile/refresh`, {
-        method: 'POST',
-        credentials: 'include'
-      })
-      if (!res.ok) return null
+      // Refresh tokens are single-use, so tabs refreshing at once would invalidate each other.
+      const token =
+        'locks' in navigator
+          ? await navigator.locks.request('profile-refresh', requestAccessToken)
+          : await requestAccessToken()
+      if (!token) return null
 
-      const body = (await res.json()) as { token?: unknown }
-      if (typeof body.token !== 'string' || body.token === '') return null
-
-      window.dispatchEvent(new CustomEvent<string>(tokenRefreshedEvent, { detail: body.token }))
-      return body.token
+      window.dispatchEvent(new CustomEvent<string>(tokenRefreshedEvent, { detail: token }))
+      return token
     } catch {
       return null
     } finally {
