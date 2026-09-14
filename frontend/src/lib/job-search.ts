@@ -5,6 +5,7 @@ export const datePostedOptions = ['24h', '3d', 'week', 'month'] as const
 export const jobSearchSchema = z.object({
   q: z.string().optional(),
   workplaceType: z.enum(['remote', 'hybrid', 'in_person']).optional(),
+  jobType: z.enum(['intern', 'part_time', 'full_time']).optional(),
   minSalary: z.number().optional(),
   maxSalary: z.number().optional(),
   datePosted: z.enum(datePostedOptions).optional(),

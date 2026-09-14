@@ -239,6 +239,55 @@ func TestGetJobByIDResumeEmbedding(t *testing.T) {
 	}
 }
 
+func TestSearchForJobsJobType(t *testing.T) {
+	newTestDB(t)
+
+	seed := []jobs.Job{
+		{Title: "Software Engineer Intern", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/intern-title"},
+		{Title: "Data Analyst", Company: "Acme", Tags: []string{"Internship", "Part-time"}, PostedAt: time.Now(), URL: "https://example.com/jobs/intern-and-part"},
+		{Title: "Support Agent", Company: "Acme", Tags: []string{"Part Time"}, PostedAt: time.Now(), URL: "https://example.com/jobs/part"},
+		{Title: "Backend Engineer", Company: "Acme", Tags: []string{"Full-time permanent"}, PostedAt: time.Now(), URL: "https://example.com/jobs/full"},
+		{Title: "Internal Tools Engineer", Company: "Acme", Tags: []string{"full_time"}, PostedAt: time.Now(), URL: "https://example.com/jobs/internal-full"},
+		{Title: "Designer", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/untyped"},
+	}
+
+	if err := WriteJobsToDatabase(seed); err != nil {
+		t.Fatalf("seed db: %v", err)
+	}
+
+	tests := []struct {
+		jobType JobTypeFilter
+		want    []string
+	}{
+		{JobTypeFilterIntern, []string{"Data Analyst", "Software Engineer Intern"}},
+		{JobTypeFilterPartTime, []string{"Support Agent"}},
+		{JobTypeFilterFullTime, []string{"Backend Engineer", "Internal Tools Engineer"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.jobType), func(t *testing.T) {
+			result, err := SearchForJobs(context.Background(), &JobSearchParams{JobType: tt.jobType, Limit: 10})
+			if err != nil {
+				t.Fatalf("SearchForJobs: %v", err)
+			}
+
+			var got []string
+			for _, job := range result.Jobs {
+				got = append(got, job.Title)
+			}
+			slices.Sort(got)
+
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("titles = %v, want %v", got, tt.want)
+			}
+
+			if result.Total != len(tt.want) {
+				t.Errorf("Total = %d, want %d", result.Total, len(tt.want))
+			}
+		})
+	}
+}
+
 func TestGetJobByIDNotFound(t *testing.T) {
 	newTestDB(t)
 

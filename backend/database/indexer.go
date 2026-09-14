@@ -19,6 +19,26 @@ const (
 	SortDate      SortOrder = "date"
 )
 
+type JobTypeFilter string
+
+const (
+	JobTypeFilterIntern   JobTypeFilter = "intern"
+	JobTypeFilterPartTime JobTypeFilter = "part_time"
+	JobTypeFilterFullTime JobTypeFilter = "full_time"
+)
+
+// Case-insensitive word matches against a job's title and tags. \M keeps "internal" and "international" out.
+var jobTypePatterns = map[JobTypeFilter]string{
+	JobTypeFilterIntern:   `\mintern(s|ships?)?\M`,
+	JobTypeFilterPartTime: `\mpart[-_ ]?time\M`,
+	JobTypeFilterFullTime: `\mfull[-_ ]?time\M`,
+}
+
+func jobTypeMatch(argIndex int) string {
+	return fmt.Sprintf(`(j.title ~* $%[1]d OR EXISTS (SELECT 1 FROM job_tags jt JOIN tags t ON t.id = jt.tag_id
+		WHERE jt.job_id = j.id AND t.tag ~* $%[1]d))`, argIndex)
+}
+
 type JobSearchParams struct {
 	SearchQuery string
 	// ResumeQuery is a fallback keyword score, used only when ResumeEmbedding is nil.
@@ -30,6 +50,7 @@ type JobSearchParams struct {
 	PostedAfter     *time.Time
 	Tags            []string
 	WorkplaceType   jobs.WorkplaceType
+	JobType         JobTypeFilter
 	MinSalary       int
 	MaxSalary       int
 	Sort            SortOrder
@@ -232,6 +253,19 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 	if params.WorkplaceType != jobs.Unknown {
 		args = append(args, params.WorkplaceType)
 		conditions = append(conditions, fmt.Sprintf("j.workplace_type = $%d", len(args)))
+	}
+
+	if pattern, ok := jobTypePatterns[params.JobType]; ok {
+		args = append(args, pattern)
+		condition := jobTypeMatch(len(args))
+
+		// Intern takes precedence, so part/full-time exclude anything that also reads as an internship.
+		if params.JobType != JobTypeFilterIntern {
+			args = append(args, jobTypePatterns[JobTypeFilterIntern])
+			condition += " AND NOT " + jobTypeMatch(len(args))
+		}
+
+		conditions = append(conditions, condition)
 	}
 
 	if params.MinSalary > 0 {

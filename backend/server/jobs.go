@@ -173,6 +173,7 @@ func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {
 
 	setters := []func(*database.JobSearchParams, url.Values) error{
 		setWorkplaceTypeParam,
+		setJobTypeParam,
 		setSalaryRangeParams,
 		setDatePostedParam,
 		setTagsParam,
@@ -204,6 +205,23 @@ func setWorkplaceTypeParam(params *database.JobSearchParams, query url.Values) e
 	}
 
 	params.WorkplaceType = workplaceType
+
+	return nil
+}
+
+func setJobTypeParam(params *database.JobSearchParams, query url.Values) error {
+	raw := query.Get("job_type")
+
+	if raw == "" {
+		return nil
+	}
+
+	switch jobType := database.JobTypeFilter(raw); jobType {
+	case database.JobTypeFilterIntern, database.JobTypeFilterPartTime, database.JobTypeFilterFullTime:
+		params.JobType = jobType
+	default:
+		return fmt.Errorf("invalid job_type %q", raw)
+	}
 
 	return nil
 }

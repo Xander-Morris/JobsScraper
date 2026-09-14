@@ -6,6 +6,7 @@ import (
 	"main/utils"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -61,6 +62,7 @@ type himalayasJob struct {
 	MinSalary            float64  `json:"minSalary"`
 	MaxSalary            float64  `json:"maxSalary"`
 	Categories           []string `json:"categories"`
+	EmploymentType       string   `json:"employmentType"`
 	LocationRestrictions []string `json:"locationRestrictions"`
 	Description          string   `json:"description"`
 	PubDate              int64    `json:"pubDate"`
@@ -132,7 +134,7 @@ func (raw himalayasJob) toJob() Job {
 		Company:       companyName,
 		Location:      location,
 		WorkplaceType: Remote,
-		Tags:          utils.CleanTags(raw.Categories),
+		Tags:          utils.CleanTags(append(slices.Clone(raw.Categories), raw.EmploymentType)),
 		URL:           url,
 		Description:   utils.StripHTML(raw.Description),
 	}

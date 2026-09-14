@@ -18,6 +18,7 @@ const statusResponseSchema = z.object({ status: z.string() })
 export interface JobSearchParams {
   q?: string
   workplaceType?: 'remote' | 'hybrid' | 'in_person'
+  jobType?: 'intern' | 'part_time' | 'full_time'
   minSalary?: number
   maxSalary?: number
   datePosted?: '24h' | '3d' | 'week' | 'month'
@@ -32,6 +33,7 @@ function buildJobSearchQuery(params: JobSearchParams): string {
 
   if (params.q) search.set('q', params.q)
   if (params.workplaceType) search.set('workplace_type', params.workplaceType)
+  if (params.jobType) search.set('job_type', params.jobType)
   if (params.minSalary !== undefined) search.set('min_salary', String(params.minSalary))
   if (params.maxSalary !== undefined) search.set('max_salary', String(params.maxSalary))
   if (params.datePosted) search.set('date_posted', params.datePosted)

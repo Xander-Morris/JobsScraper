@@ -122,6 +122,16 @@ func TestParseJobSearchParams(t *testing.T) {
 			},
 		},
 		{name: "invalid workplace_type", url: "/api/jobs?workplace_type=nowhere", wantErr: true},
+		{
+			name: "valid job_type",
+			url:  "/api/jobs?job_type=part_time",
+			check: func(t *testing.T, params *database.JobSearchParams) {
+				if params.JobType != database.JobTypeFilterPartTime {
+					t.Errorf("JobType = %q, want %q", params.JobType, database.JobTypeFilterPartTime)
+				}
+			},
+		},
+		{name: "invalid job_type", url: "/api/jobs?job_type=contract", wantErr: true},
 		{name: "invalid min_salary", url: "/api/jobs?min_salary=abc", wantErr: true},
 		{name: "invalid max_salary", url: "/api/jobs?max_salary=abc", wantErr: true},
 		{

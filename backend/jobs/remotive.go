@@ -6,6 +6,7 @@ import (
 	"main/utils"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 )
@@ -38,7 +39,7 @@ type RemotiveJob struct {
 	CompanyName               string `json:"company_name"`
 	CompanyLogo               string `json:"company_logo"`
 	Category                  string `json:"category"`
-	JobType                   string `json:"full_time"`
+	JobType                   string `json:"job_type"`
 	Date                      string `json:"date"`
 	URL                       string `json:"url"`
 	Description               string `json:"description"`
@@ -87,7 +88,8 @@ func (r *Remotive) FetchJobs() ([]Job, error) {
 }
 
 func (raw RemotiveJob) toJob() Job {
-	var tags = []string{raw.Category}
+	// job_type comes as e.g. "full_time"; spaced so it reads like other sources' type tags.
+	var tags = []string{raw.Category, strings.ReplaceAll(raw.JobType, "_", " ")}
 
 	job := Job{
 		Title:         raw.Title,

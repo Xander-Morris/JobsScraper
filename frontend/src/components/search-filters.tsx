@@ -34,6 +34,13 @@ const DATE_POSTED_OPTIONS: { value: JobSearchState['datePosted'] | ''; label: st
   { value: 'month', label: 'Past month' }
 ]
 
+const JOB_TYPE_OPTIONS: { value: JobSearchState['jobType'] | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'intern', label: 'Intern' },
+  { value: 'part_time', label: 'Part-Time' },
+  { value: 'full_time', label: 'Full-Time' }
+]
+
 function formatSalaryThousands(value: number): string {
   return value >= 1000 ? `$${Math.round(value / 1000)}k` : `$${value}`
 }
@@ -85,6 +92,32 @@ function DatePostedFilter({
       <DropdownMenuContent>
         {DATE_POSTED_OPTIONS.map((opt) => (
           <DropdownMenuItem key={opt.value || 'any'} onClick={() => onChange(opt.value || undefined)}>
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function JobTypeFilter({
+  value,
+  onChange
+}: {
+  value: JobSearchState['jobType']
+  onChange: (value: JobSearchState['jobType']) => void
+}) {
+  const label = JOB_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'All'
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+        {label}
+        <ChevronDownIcon className="opacity-50" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {JOB_TYPE_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt.value || 'all'} onClick={() => onChange(opt.value || undefined)}>
             {opt.label}
           </DropdownMenuItem>
         ))}
@@ -306,6 +339,7 @@ export function SearchFilters({
           value={search.workplaceType}
           onChange={(workplaceType) => onChange({ ...search, workplaceType })}
         />
+        <JobTypeFilter value={search.jobType} onChange={(jobType) => onChange({ ...search, jobType })} />
         <DatePostedFilter value={search.datePosted} onChange={(datePosted) => onChange({ ...search, datePosted })} />
         <SortFilter value={search.sort} onChange={(sort) => onChange({ ...search, sort })} />
       </div>
