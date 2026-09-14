@@ -12,6 +12,9 @@ import (
 
 const embedJobsBatchSize = 50
 
+// maxEmbeddingChars caps the text sent to Jina per job; the stored description stays whole.
+const maxEmbeddingChars = 2000
+
 // EmbedPendingJobs embeds every job with a NULL embedding, in batches, until
 // none are left. Each job only gets embedded once; descriptions don't change
 // after posting, so re-scraping won't re-trigger it. Best-effort: log and move
@@ -39,7 +42,7 @@ func embedNextJobBatch(ctx context.Context) (int, error) {
 	}
 
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, description FROM jobs WHERE embedding IS NULL AND coalesce(description, '') <> '' LIMIT $1`,
+		`SELECT id, title, description FROM jobs WHERE embedding IS NULL AND coalesce(description, '') <> '' LIMIT $1`,
 		embedJobsBatchSize)
 
 	if err != nil {
@@ -72,19 +75,30 @@ func embedNextJobBatch(ctx context.Context) (int, error) {
 	return len(ids), nil
 }
 
+// jobEmbeddingText is the title plus the opening of the description, where role, stack, and requirements usually are.
+func jobEmbeddingText(title, description string) string {
+	text := []rune(title + "\n\n" + description)
+
+	if len(text) > maxEmbeddingChars {
+		text = text[:maxEmbeddingChars]
+	}
+
+	return string(text)
+}
+
 func scanPendingJobs(rows *sql.Rows) (ids []int64, texts []string, err error) {
 	defer rows.Close()
 
 	for rows.Next() {
 		var id int64
-		var description string
+		var title, description string
 
-		if err := rows.Scan(&id, &description); err != nil {
+		if err := rows.Scan(&id, &title, &description); err != nil {
 			return nil, nil, fmt.Errorf("scan pending job: %w", err)
 		}
 
 		ids = append(ids, id)
-		texts = append(texts, description)
+		texts = append(texts, jobEmbeddingText(title, description))
 	}
 
 	if err := rows.Err(); err != nil {

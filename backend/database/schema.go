@@ -63,23 +63,6 @@ func (j *JobType) UnmarshalJSON(data []byte) error {
 // insertStatements holds the upsert SQL for tables written outside their own
 // dedicated files. Table DDL itself lives in migrations/ (see migrate.go).
 var insertStatements = map[string]string{
-	"jobs": `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		ON CONFLICT(url) DO UPDATE SET
-			title = excluded.title,
-			company = excluded.company,
-			location = excluded.location,
-			workplace_type = excluded.workplace_type,
-			salary_min = excluded.salary_min,
-			salary_max = excluded.salary_max,
-			posted_at = excluded.posted_at,
-			description = excluded.description
-		RETURNING id;`,
-
-	"tags": `INSERT INTO tags (tag) VALUES ($1) ON CONFLICT(tag) DO UPDATE SET tag=excluded.tag RETURNING id;`,
-
-	"job_tags": `INSERT INTO job_tags (job_id, tag_id) VALUES ($1, $2) ON CONFLICT (job_id, tag_id) DO NOTHING;`,
-
 	"profiles": `INSERT INTO profiles (email, password) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id;`,
 
 	"profiles_education": `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)

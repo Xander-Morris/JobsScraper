@@ -3,12 +3,16 @@ package jobs
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"main/utils"
 	"net/http"
 	"time"
 )
 
 const arbeitnowEndpoint = "https://www.arbeitnow.com/api/job-board-api"
+
+// arbeitnowMaxPages caps each run; pages are ordered by created_at.
+const arbeitnowMaxPages = 5
 
 var _ JobSource = (*Arbeitnow)(nil)
 
@@ -27,7 +31,10 @@ func NewArbeitnow(userAgent string) *Arbeitnow {
 }
 
 type arbeitnowResponse struct {
-	Data []arbeitnowJob `json:"data"`
+	Data  []arbeitnowJob `json:"data"`
+	Links struct {
+		Next *string `json:"next"`
+	} `json:"links"`
 }
 
 type arbeitnowJob struct {
@@ -66,40 +73,33 @@ func (jt *arbeitnowJobTypes) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FetchJobs pages through the feed. A failed later page keeps the pages already fetched.
 func (a *Arbeitnow) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", a.Endpoint, nil)
+	var result []Job
 
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
+	for page := 1; page <= arbeitnowMaxPages; page++ {
+		var parsed arbeitnowResponse
 
-	req.Header.Set("User-Agent", a.UserAgent)
-	resp, err := a.HTTPClient.Do(req)
+		if err := getJSON(a.HTTPClient, a.UserAgent, fmt.Sprintf("%s?page=%d", a.Endpoint, page), &parsed); err != nil {
+			if len(result) > 0 {
+				slog.Warn("jobs: arbeitnow page failed, keeping earlier pages", "page", page, "error", err)
+				break
+			}
 
-	if err != nil {
-		return nil, fmt.Errorf("fetch arbeitnow feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("arbeitnow feed returned status %d", resp.StatusCode)
-	}
-
-	var parsed arbeitnowResponse
-
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode arbeitnow feed: %w", err)
-	}
-
-	result := make([]Job, 0, len(parsed.Data))
-
-	for _, raw := range parsed.Data {
-		if raw.Slug == "" || raw.Title == "" {
-			continue
+			return nil, fmt.Errorf("fetch arbeitnow feed: %w", err)
 		}
 
-		result = append(result, raw.toJob())
+		for _, raw := range parsed.Data {
+			if raw.Slug == "" || raw.Title == "" {
+				continue
+			}
+
+			result = append(result, raw.toJob())
+		}
+
+		if parsed.Links.Next == nil || len(parsed.Data) == 0 {
+			break
+		}
 	}
 
 	return result, nil

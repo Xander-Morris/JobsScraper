@@ -1,10 +1,11 @@
 package jobs
 
 import (
-	"encoding/json"
 	"fmt"
+	"log/slog"
 	"main/utils"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,6 +13,9 @@ import (
 )
 
 const himalayasEndpoint = "https://himalayas.app/jobs/api"
+
+// himalayasMaxPages caps each run; the API returns at most 20 jobs per page.
+const himalayasMaxPages = 25
 
 var himalayasCompanySlug = regexp.MustCompile(`himalayas\.app/companies/([^/]+)/`)
 
@@ -52,7 +56,8 @@ func NewHimalayas(userAgent string) *Himalayas {
 }
 
 type himalayasResponse struct {
-	Jobs []himalayasJob `json:"jobs"`
+	Jobs       []himalayasJob `json:"jobs"`
+	NextCursor string         `json:"nextCursor"`
 }
 
 type himalayasJob struct {
@@ -69,40 +74,42 @@ type himalayasJob struct {
 	ApplicationLink      string   `json:"applicationLink"`
 }
 
+// FetchJobs follows the feed's cursor pagination. A failed later page keeps the pages already fetched.
 func (h *Himalayas) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", h.Endpoint, nil)
+	var result []Job
+	cursor := ""
 
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
+	for page := 1; page <= himalayasMaxPages; page++ {
+		pageURL := h.Endpoint
 
-	req.Header.Set("User-Agent", h.UserAgent)
-	resp, err := h.HTTPClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("fetch himalayas feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("himalayas feed returned status %d", resp.StatusCode)
-	}
-
-	var parsed himalayasResponse
-
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode himalayas feed: %w", err)
-	}
-
-	result := make([]Job, 0, len(parsed.Jobs))
-
-	for _, raw := range parsed.Jobs {
-		if raw.Guid == "" || raw.Title == "" {
-			continue
+		if cursor != "" {
+			pageURL += "?cursor=" + url.QueryEscape(cursor)
 		}
 
-		result = append(result, raw.toJob())
+		var parsed himalayasResponse
+
+		if err := getJSON(h.HTTPClient, h.UserAgent, pageURL, &parsed); err != nil {
+			if len(result) > 0 {
+				slog.Warn("jobs: himalayas page failed, keeping earlier pages", "page", page, "error", err)
+				break
+			}
+
+			return nil, fmt.Errorf("fetch himalayas feed: %w", err)
+		}
+
+		for _, raw := range parsed.Jobs {
+			if raw.Guid == "" || raw.Title == "" {
+				continue
+			}
+
+			result = append(result, raw.toJob())
+		}
+
+		if parsed.NextCursor == "" || len(parsed.Jobs) == 0 {
+			break
+		}
+
+		cursor = parsed.NextCursor
 	}
 
 	return result, nil

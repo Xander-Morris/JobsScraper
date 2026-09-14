@@ -7,7 +7,7 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `server/`: HTTP handlers, routing, auth middleware, rate limiting
 - `database/`: Postgres access, migrations, schema
 - `scraper/`: runs the job source fetchers on a 10 minute ticker
-- `jobs/`: one file per job source (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely)
+- `jobs/`: one file per job source: public feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and company boards on Greenhouse, Lever, and Ashby, whose company lists sit at the top of `greenhouse.go`, `lever.go`, and `ashby.go`
 - `llm/`: resume text extraction and generation via OpenRouter, embeddings via Jina AI
 - `notify/`: Resend email client for the digest
 - `utils/`: env loading and a couple of small helpers
@@ -66,12 +66,22 @@ Auth is a short-lived JWT access token plus a longer-lived refresh token in an h
 
 ## Background jobs
 
-Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel there's no long-lived process to hold a ticker, so `.github/workflows/cron.yml` runs the same work through `cmd/cron` on a GitHub Actions schedule instead: a scrape every 30 minutes, a digest daily):
+Two loops start alongside the HTTP server and run for the life of the process (self-hosted only; on Vercel there's no long-lived process to hold a ticker, so `.github/workflows/cron.yml` runs the same work through `cmd/cron` on a GitHub Actions schedule instead: a scrape every hour, a digest daily):
 
 - **Scraper**: fetches all job sources immediately on boot, then every 10 minutes
 - **Digest scheduler**: sends the "jobs matching your profile" email once on boot, then every 24 hours, to anyone with `email_notifications` on
 
 Both recover from panics per-run so one bad fetch or one bad email doesn't take down the whole loop.
+
+Each scrape cycle also:
+
+- **Expires old jobs**: postings first published more than 60 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Jobs someone marked applied or tailored a resume for are kept, but drop out of search.
+- **Embeds new jobs**: the title plus the first 2,000 characters of the description go to Jina, which keeps token use down on the free tier. The full description is still stored and shown.
+- **Tolerates broken boards**: a Greenhouse, Lever, or Ashby company that fails (renamed board, outage) is logged and skipped without failing the rest.
+
+### Adding a job source
+
+Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead.
 
 ## Docker
 

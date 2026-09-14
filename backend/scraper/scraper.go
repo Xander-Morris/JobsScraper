@@ -11,8 +11,22 @@ import (
 )
 
 // embedJobsTimeout caps how long one cycle spends embedding new jobs before
-// giving up and letting the next cycle pick it back up.
-const embedJobsTimeout = 2 * time.Minute
+// giving up and letting the next cycle pick it back up. Jina's free tier allows
+// 100k tokens a minute, so a large backlog takes a few cycles to clear.
+const embedJobsTimeout = 10 * time.Minute
+
+// dropExpiredJobs skips postings already past retention, so they aren't written and embedded only to be deleted.
+func dropExpiredJobs(fetched []jobs.Job, cutoff time.Time) []jobs.Job {
+	kept := make([]jobs.Job, 0, len(fetched))
+
+	for _, job := range fetched {
+		if job.PostedAt.IsZero() || !job.PostedAt.Before(cutoff) {
+			kept = append(kept, job)
+		}
+	}
+
+	return kept
+}
 
 func runScraper(sources []jobs.JobSource) {
 	slog.Info("scraper: starting fetch cycle")
@@ -52,7 +66,8 @@ func runScraper(sources []jobs.JobSource) {
 		var filtered []jobs.Job
 
 		for _, job := range sourceJobs {
-			key := job.Company + job.Title + job.PostedAt.Month().String()
+			// Location keeps one company's same-titled openings in different cities apart.
+			key := job.Company + job.Title + job.Location + job.PostedAt.Month().String()
 			exists, _ := seen[key]
 
 			if !exists {
@@ -65,9 +80,22 @@ func runScraper(sources []jobs.JobSource) {
 		fetchedJobs = append(fetchedJobs, filtered...)
 	}
 
+	fetchedCount := len(fetchedJobs)
+	fetchedJobs = dropExpiredJobs(fetchedJobs, time.Now().Add(-database.JobMaxAge))
+	slog.Info("scraper: writing jobs", "count", len(fetchedJobs), "skipped_expired", fetchedCount-len(fetchedJobs))
+
 	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
 		slog.Error("scraper: write jobs to database", "error", err)
 		return
+	}
+
+	deleteCtx, cancelDelete := context.WithTimeout(context.Background(), time.Minute)
+	defer cancelDelete()
+
+	if deleted, err := database.DeleteExpiredJobs(deleteCtx); err != nil {
+		slog.Error("scraper: delete expired jobs", "error", err)
+	} else {
+		slog.Info("scraper: deleted expired jobs", "count", deleted)
 	}
 
 	embedCtx, cancel := context.WithTimeout(context.Background(), embedJobsTimeout)
@@ -98,6 +126,9 @@ func allSources() []jobs.JobSource {
 		jobs.NewJobicy(botAgent),
 		jobs.NewHimalayas(botAgent),
 		jobs.NewWeWorkRemotely(botAgent),
+		jobs.NewGreenhouse(botAgent),
+		jobs.NewLever(botAgent),
+		jobs.NewAshby(botAgent),
 	}
 }
 

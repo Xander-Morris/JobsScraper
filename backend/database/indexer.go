@@ -245,6 +245,10 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 	var conditions []string
 	var args []any
 
+	// Jobs kept past JobMaxAge only because a user acted on them stay out of search.
+	args = append(args, time.Now().Add(-JobMaxAge))
+	conditions = append(conditions, fmt.Sprintf("%s >= $%d", jobAgeColumn, len(args)))
+
 	if params.SearchQuery != "" {
 		args = append(args, params.SearchQuery)
 		conditions = append(conditions, fmt.Sprintf("j.search_vector @@ plainto_tsquery('english', $%d)", len(args)))

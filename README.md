@@ -2,7 +2,7 @@
 
 **Live demo:** [https://www.jobsscraper.com/](https://www.jobsscraper.com/)
 
-A job board that crawls remote job listings from a handful of public sources (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely), indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site.
+A job board that crawls listings from public job feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and from company job boards hosted on Greenhouse, Lever, and Ashby, indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site.
 
 ## What's in here
 
@@ -57,7 +57,7 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 1. Import the repo, set the project's root directory to `backend/`
 2. Set env vars: `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` (frontend and backend are on different Vercel domains), `RESEND_API_KEY` and `RESEND_FROM_ADDRESS` (password reset emails; without them nobody can recover a forgotten password), `REDIS_URL` (a free [Upstash](https://upstash.com) Redis database; without it, login and LLM rate limits live in each function instance's memory and are easy to get around), and `ALLOWED_ORIGIN` (set once you have the frontend's URL from the next step)
 3. Deploy. Every `/api/*` request routes through the single `api/index.go` function (see the `rewrites` entry in `vercel.json`), running the same handler chain as the self-hosted binary
-4. Scraping and digest emails don't run on Vercel, since its free plan caps functions at 60 seconds and cron at once a day. Instead, `.github/workflows/cron.yml` runs them on GitHub Actions (free for public repos): a scrape every 30 minutes and a digest daily at 04:15 UTC. In the GitHub repo's Settings → Secrets and variables → Actions, add the secrets `DATABASE_CONNECTION` (use Supabase's pooler URL, since Actions runners have no IPv6), `SECRET_KEY` (the same value as the Vercel project, or digest unsubscribe links break), `JINA_API_KEY`, and `RESEND_API_KEY`, plus the variables `RESEND_FROM_ADDRESS` and `PUBLIC_BACKEND_URL`. Trigger a first run by hand from the Actions tab with "Run workflow"
+4. Scraping and digest emails don't run on Vercel, since its free plan caps functions at 60 seconds and cron at once a day. Instead, `.github/workflows/cron.yml` runs them on GitHub Actions (free for public repos): a scrape every hour and a digest daily at 04:15 UTC. In the GitHub repo's Settings → Secrets and variables → Actions, add the secrets `DATABASE_CONNECTION` (use Supabase's pooler URL, since Actions runners have no IPv6), `SECRET_KEY` (the same value as the Vercel project, or digest unsubscribe links break), `JINA_API_KEY`, and `RESEND_API_KEY`, plus the variables `RESEND_FROM_ADDRESS` and `PUBLIC_BACKEND_URL`. Trigger a first run by hand from the Actions tab with "Run workflow"
 
 **Frontend** (project root: `frontend/`):
 
@@ -68,6 +68,6 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 
 ## How it fits together
 
-The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes and writes new/updated listings to Postgres, and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
+The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes, writes new/updated listings to Postgres, and deletes postings more than 60 days old (except ones someone marked applied or tailored a resume for), and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
 
 The frontend talks to the backend over a plain REST API (see `backend/server/routes.go` for the full list of endpoints) using TanStack Query for data fetching and TanStack Router for routing.

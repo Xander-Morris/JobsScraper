@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,8 @@ const (
 	defaultJinaEmbedModel = "jina-embeddings-v2-base-en"
 	jinaAPIURL            = "https://api.jina.ai/v1/embeddings"
 )
+
+var errJinaRateLimited = errors.New("jina rate limited")
 
 func jinaAPIKey() string {
 	return os.Getenv("JINA_API_KEY")
@@ -69,6 +72,10 @@ func callJinaEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read jina response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("%w: %s", errJinaRateLimited, string(respBody))
 	}
 
 	if resp.StatusCode != http.StatusOK {

@@ -23,11 +23,20 @@ func ParseWorkplaceType(s string) (WorkplaceType, bool) {
 		return Remote, true
 	case "hybrid":
 		return Hybrid, true
-	case "in_person", "in-person", "inperson":
+	case "in_person", "in-person", "inperson", "onsite", "on-site", "on_site":
 		return InPerson, true
 	default:
 		return Unknown, false
 	}
+}
+
+// workplaceFromLocation infers Remote from free-text locations like "Remote - US".
+func workplaceFromLocation(location string) WorkplaceType {
+	if strings.Contains(strings.ToLower(location), "remote") {
+		return Remote
+	}
+
+	return Unknown
 }
 
 func (w WorkplaceType) String() string {

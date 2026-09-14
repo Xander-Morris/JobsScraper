@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-const jobicyEndpoint = "https://jobicy.com/api/v2/remote-jobs"
+// count=100 returns 100 jobs in one request instead of the default page.
+const jobicyEndpoint = "https://jobicy.com/api/v2/remote-jobs?count=100"
 
 var _ JobSource = (*Jobicy)(nil)
 
