@@ -6,6 +6,7 @@ on:
   pull_request:
 
 jobs:
+  # Auto-fixes and commits formatting/lint, then fails on anything left.
   format:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -32,7 +33,10 @@ jobs:
       - run: gofmt -w .
         working-directory: backend
 
-      - run: npx prettier --write .
+      - run: npm run lint:fix
+        working-directory: frontend
+
+      - run: npm run format
         working-directory: frontend
 
       # No-ops if formatting left nothing to commit. [skip ci] on the commit
@@ -41,6 +45,45 @@ jobs:
         with:
           commit_message: "style: auto-format [skip ci]"
           file_pattern: "backend/**/*.go frontend/**"
+
+      - run: npm run lint
+        working-directory: frontend
+
+  # Fork PRs can't be pushed to, so check only.
+  format-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - name: gofmt
+        working-directory: backend
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted Go files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: npm run format:check
+        working-directory: frontend
+
+      - run: npm run lint
+        working-directory: frontend
 
   backend:
     runs-on: ubuntu-latest
@@ -90,5 +133,4 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
-      - run: npm run lint
       - run: npm run build

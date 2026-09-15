@@ -37,7 +37,9 @@ npm run format:check   # prettier --check
 npm run preview         # serve the production build locally
 ```
 
-CI runs `lint` and `build` on every push and PR. There's no test suite wired up yet, if you add one, hook it into `.github/workflows/ci.yml` alongside those.
+CI runs `lint` and `build` on every push and PR. On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead. There's no test suite wired up yet, if you add one, hook it into `.github/workflows/ci.yml` alongside those.
+
+On Windows with `core.autocrlf=true`, `format:check` flags every file locally because of CRLF line endings. That's harmless, git stores LF and CI checks LF.
 
 ## Env vars
 

@@ -36,7 +36,7 @@ go test -p 1 ./...
 
 Tests that touch the database use `TEST_DATABASE_CONNECTION` instead of `DATABASE_CONNECTION`. Make sure that's set to a **different** database than your real one, the test suite drops and recreates tables on it. If `TEST_DATABASE_CONNECTION` isn't set, DB-backed tests skip themselves rather than fail.
 
-CI runs `go vet`, `go build`, and `go test` against a throwaway Postgres service container, so you don't need Docker locally just to get a green check.
+CI runs `go vet`, `go build`, and `go test` against a throwaway Postgres service container, so you don't need Docker locally just to get a green check. It also runs `gofmt -w` and commits the result back to the branch (fork PRs just fail on unformatted files instead).
 
 ## Config
 
