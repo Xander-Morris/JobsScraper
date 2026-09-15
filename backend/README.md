@@ -13,7 +13,8 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `utils/`: env loading and a couple of small helpers
 - `api/`: Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
 - `cmd/cron/`: runs one scrape or digest pass and exits, scheduled by `.github/workflows/cron.yml`
-- `coldstart/`: one-time startup work (env validation, migrations) shared by `api/` and `cmd/cron/`
+- `cmd/migrate/`: applies pending migrations and exits, run by the `migrate` job in `.github/workflows/ci.yml` on push to `main`
+- `coldstart/`: one-time startup work (env validation) shared by `api/` and `cmd/cron/`
 
 ## Running locally
 
@@ -22,7 +23,7 @@ You need Go 1.26+ and a Postgres database.
 1. Copy `.env.example` to `.env` and fill in `DATABASE_CONNECTION` (a Postgres connection string) and `SECRET_KEY` (any long random string, `openssl rand -base64 48` works fine)
 2. `go run .`
 
-The server listens on `:8090` by default (override with `PORT`). Tables are created/migrated automatically on startup, so there's no separate migration step to run by hand.
+The server listens on `:8090` by default (override with `PORT`). `go run .` applies migrations on startup, so there's no separate step locally. The Vercel function skips them to keep cold starts fast; run `go run ./cmd/migrate` (or let CI's `migrate` job do it) before deploying a schema change there.
 
 Resume extraction and cover letter generation need `OPENROUTER_API_KEY` set (a free key from [openrouter.ai/keys](https://openrouter.ai/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
 

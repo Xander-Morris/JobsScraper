@@ -1,10 +1,14 @@
 package database
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"main/jobs"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -27,16 +31,36 @@ const (
 	JobTypeFilterFullTime JobTypeFilter = "full_time"
 )
 
-// Case-insensitive word matches against a job's title and tags. \M keeps "internal" and "international" out.
-var jobTypePatterns = map[JobTypeFilter]string{
-	JobTypeFilterIntern:   `\mintern(s|ships?)?\M`,
-	JobTypeFilterPartTime: `\mpart[-_ ]?time\M`,
-	JobTypeFilterFullTime: `\mfull[-_ ]?time\M`,
+// Case-insensitive word matches against a job's title and tags. \b keeps "internal" and "international" out.
+// Mirrors the \m...\M regexes migration 000006 backfilled with.
+var jobTypePatterns = map[JobTypeFilter]*regexp.Regexp{
+	JobTypeFilterIntern:   regexp.MustCompile(`(?i)\bintern(s|ships?)?\b`),
+	JobTypeFilterPartTime: regexp.MustCompile(`(?i)\bpart[-_ ]?time\b`),
+	JobTypeFilterFullTime: regexp.MustCompile(`(?i)\bfull[-_ ]?time\b`),
 }
 
-func jobTypeMatch(argIndex int) string {
-	return fmt.Sprintf(`(j.title ~* $%[1]d OR EXISTS (SELECT 1 FROM job_tags jt JOIN tags t ON t.id = jt.tag_id
-		WHERE jt.job_id = j.id AND t.tag ~* $%[1]d))`, argIndex)
+var jobTypeColumns = map[JobTypeFilter]string{
+	JobTypeFilterIntern:   "j.is_intern",
+	JobTypeFilterPartTime: "j.is_part_time",
+	JobTypeFilterFullTime: "j.is_full_time",
+}
+
+// jobTypeFlags are stored on each job at write time, so search filters on a column instead of a regex per row.
+type jobTypeFlags struct {
+	intern, partTime, fullTime bool
+}
+
+func jobTypeFlagsFor(job jobs.Job) jobTypeFlags {
+	matches := func(filter JobTypeFilter) bool {
+		pattern := jobTypePatterns[filter]
+		return pattern.MatchString(job.Title) || slices.ContainsFunc(job.Tags, pattern.MatchString)
+	}
+
+	return jobTypeFlags{
+		intern:   matches(JobTypeFilterIntern),
+		partTime: matches(JobTypeFilterPartTime),
+		fullTime: matches(JobTypeFilterFullTime),
+	}
 }
 
 type JobSearchParams struct {
@@ -74,6 +98,13 @@ type SearchResult struct {
 	Total int
 }
 
+// Display columns shared by search results and job detail; detail adds description.
+const jobColumns = `j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
+	j.salary_min, j.salary_max, j.posted_at, j.url`
+
+const jobTagsColumn = `COALESCE((SELECT json_agg(t.tag ORDER BY jt.tag_id) FROM job_tags jt
+	JOIN tags t ON t.id = jt.tag_id WHERE jt.job_id = j.id), '[]')`
+
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
 	db, err := GetDb()
 
@@ -83,90 +114,28 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 
 	from, whereArgs := buildJobSearchFromWhere(params)
 	query, args := buildJobSearchSelect(params, from, whereArgs)
-	rows, err := db.QueryContext(ctx, query, args...)
 
-	if err != nil {
-		return nil, fmt.Errorf("search jobs: %w", err)
-	}
-
-	defer rows.Close()
-
+	// Page and total don't depend on each other, so run them over separate connections.
 	var results []jobs.Job
-	scannedRows := make(map[int64]jobs.Job)
-	var jobOrder []int64
-	total := 0
-
-	for rows.Next() {
-		job, jobID, rowTotal, err := scanJobSearchRow(rows)
-
-		if err != nil {
-			return nil, fmt.Errorf("scan job row: %w", err)
-		}
-
-		total = rowTotal
-		scannedRows[jobID] = job
-		jobOrder = append(jobOrder, jobID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate job rows: %w", err)
-	}
-
-	// total comes from a COUNT(*) OVER() on the SELECT, which counts rows
-	// before LIMIT/OFFSET trims them - readable off any row that survived
-	// the trim, but there is none to read it from when OFFSET lands past the
-	// end of the result set. Only then is a separate COUNT query worth it.
-	if len(jobOrder) == 0 && params.Offset > 0 {
-		total, err = countJobSearchResults(ctx, db, from, whereArgs)
-
-		if err != nil {
-			return nil, fmt.Errorf("count jobs: %w", err)
-		}
-	}
-
-	jobIDs := make([]int64, 0, len(scannedRows))
-	for jobID := range scannedRows {
-		jobIDs = append(jobIDs, jobID)
-	}
-
-	// Tags and applied status don't depend on each other, so fetch them over
-	// separate connections instead of paying for both round trips in sequence.
-	var tagMap map[int64][]string
-	var appliedMap map[int64]bool
-	var tagErr, appliedErr error
+	var total int
+	var pageErr, countErr error
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		tagMap, tagErr = fetchTagsForJobs(ctx, db, jobIDs)
+		results, pageErr = queryJobs(ctx, db, query, args)
 	})
 
-	if params.ProfileID != 0 {
-		wg.Go(func() {
-			appliedMap, appliedErr = AppliedJobIDs(ctx, params.ProfileID, jobIDs)
-		})
-	}
+	wg.Go(func() {
+		total, countErr = countJobSearchResults(ctx, db, from, whereArgs)
+	})
 
 	wg.Wait()
 
-	if tagErr != nil {
-		return nil, fmt.Errorf("fetch tags for jobs: %w", tagErr)
+	if pageErr != nil {
+		return nil, fmt.Errorf("search jobs: %w", pageErr)
 	}
-	if appliedErr != nil {
-		return nil, fmt.Errorf("fetch applied jobs: %w", appliedErr)
-	}
-
-	for _, jobID := range jobOrder {
-		job := scannedRows[jobID]
-
-		if tags, ok := tagMap[jobID]; ok {
-			job.Tags = tags
-		}
-
-		if appliedMap[jobID] {
-			job.Applied = true
-		}
-
-		results = append(results, job)
+	if countErr != nil {
+		return nil, fmt.Errorf("count jobs: %w", countErr)
 	}
 
 	return &SearchResult{Jobs: results, Total: total}, nil
@@ -179,56 +148,44 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	matchScoreColumn := "NULL::real"
 	args := []any{id}
+	matchScoreColumn := cmp.Or(resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery), "NULL::real")
+	appliedColumn := appliedExpr(&args, params.ProfileID)
 
-	switch {
-	case params.ResumeEmbedding != nil:
-		args = append(args, *params.ResumeEmbedding)
-		matchScoreColumn = fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(args))
-	case params.ResumeQuery != "":
-		args = append(args, params.ResumeQuery)
-		matchScoreColumn = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(args))
-	}
+	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, COALESCE(j.description, '')
+		FROM jobs j WHERE j.id = $1`, jobColumns, matchScoreColumn, jobTagsColumn, appliedColumn)
 
-	query := fmt.Sprintf(`SELECT j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
-		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, ''), %s AS match_score
-		FROM jobs j WHERE j.id = $1`, matchScoreColumn)
-
-	job, jobID, err := scanJobRow(db.QueryRowContext(ctx, query, args...))
+	job, err := scanJob(db.QueryRowContext(ctx, query, args...), true)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var tagMap map[int64][]string
-	var applied bool
-	var tagErr, appliedErr error
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		tagMap, tagErr = fetchTagsForJobs(ctx, db, []int64{jobID})
-	})
-
-	if params.ProfileID != 0 {
-		wg.Go(func() {
-			applied, appliedErr = IsJobApplied(ctx, params.ProfileID, jobID)
-		})
-	}
-
-	wg.Wait()
-
-	if tagErr != nil {
-		return nil, fmt.Errorf("fetch tags for job: %w", tagErr)
-	}
-	if appliedErr != nil {
-		return nil, fmt.Errorf("check job applied: %w", appliedErr)
-	}
-
-	job.Tags = tagMap[jobID]
-	job.Applied = applied
-
 	return &job, nil
+}
+
+func queryJobs(ctx context.Context, db *sql.DB, query string, args []any) ([]jobs.Job, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var results []jobs.Job
+
+	for rows.Next() {
+		job, err := scanJob(rows, false)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan job row: %w", err)
+		}
+
+		results = append(results, job)
+	}
+
+	return results, rows.Err()
 }
 
 func countJobSearchResults(ctx context.Context, db *sql.DB, from string, args []any) (int, error) {
@@ -259,14 +216,12 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 		conditions = append(conditions, fmt.Sprintf("j.workplace_type = $%d", len(args)))
 	}
 
-	if pattern, ok := jobTypePatterns[params.JobType]; ok {
-		args = append(args, pattern)
-		condition := jobTypeMatch(len(args))
+	if column, ok := jobTypeColumns[params.JobType]; ok {
+		condition := column
 
 		// Intern takes precedence, so part/full-time exclude anything that also reads as an internship.
 		if params.JobType != JobTypeFilterIntern {
-			args = append(args, jobTypePatterns[JobTypeFilterIntern])
-			condition += " AND NOT " + jobTypeMatch(len(args))
+			condition += " AND NOT " + jobTypeColumns[JobTypeFilterIntern]
 		}
 
 		conditions = append(conditions, condition)
@@ -309,54 +264,34 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 	return from, args
 }
 
+// buildJobSearchSelect sorts and pages over (id, sort_key) only, then fetches display
+// columns, score, tags and applied for just the rows on the page.
 func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any) (string, []any) {
-	const jobColumns = `j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
-		j.salary_min, j.salary_max, j.posted_at, j.url, COALESCE(j.description, '')`
-
-	args := make([]any, len(whereArgs), len(whereArgs)+5)
-	copy(args, whereArgs)
+	args := slices.Clone(whereArgs)
 
 	rankable := params.Sort != SortDate
 	hasSearchQuery := params.SearchQuery != ""
 
-	// match_score shows as a fit signal even when sorting by date. resumeScoreExpr
-	// gets reused below in ORDER BY when blending with a typed search query.
-	matchScoreColumn := "NULL::real"
-	var resumeScoreExpr string
+	// match_score shows as a fit signal even when sorting by date.
+	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
+	hasResumeScore := resumeScore != ""
 
-	switch {
-	case params.ResumeEmbedding != nil:
-		args = append(args, *params.ResumeEmbedding)
-		resumeScoreExpr = fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(args))
-	case params.ResumeQuery != "":
-		args = append(args, params.ResumeQuery)
-		resumeScoreExpr = fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(args))
-	}
-
-	if resumeScoreExpr != "" {
-		matchScoreColumn = resumeScoreExpr
-	}
-
-	hasResumeScore := resumeScoreExpr != ""
-	// total_count rides along on every row via a window function so the
-	// caller can skip a separate COUNT(*) query in the common case.
-	query := fmt.Sprintf("SELECT %s, %s AS match_score, COUNT(*) OVER() AS total_count %s", jobColumns, matchScoreColumn, from)
+	var sortKey string
 
 	switch {
 	case rankable && hasSearchQuery && hasResumeScore:
 		// Typed search stays primary; resume score just nudges ties toward a
 		// good skill match, doesn't override an explicit query.
 		args = append(args, params.SearchQuery)
-		query += fmt.Sprintf(
-			" ORDER BY (ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * coalesce(%s, 0)) DESC",
-			len(args), resumeScoreExpr)
+		sortKey = fmt.Sprintf("ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * coalesce(%s, 0)", len(args), resumeScore)
 	case rankable && hasSearchQuery:
 		args = append(args, params.SearchQuery)
-		query += fmt.Sprintf(" ORDER BY ts_rank(j.search_vector, plainto_tsquery('english', $%d)) DESC", len(args))
+		sortKey = fmt.Sprintf("ts_rank(j.search_vector, plainto_tsquery('english', $%d))", len(args))
 	case rankable && hasResumeScore:
-		query += fmt.Sprintf(" ORDER BY coalesce(%s, 0) DESC", resumeScoreExpr)
+		// NULLS LAST below puts jobs not embedded yet after scored ones.
+		sortKey = resumeScore
 	default:
-		query += " ORDER BY j.posted_at DESC"
+		sortKey = jobAgeColumn
 	}
 
 	limit := params.Limit
@@ -365,58 +300,72 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	}
 
 	args = append(args, limit, max(params.Offset, 0))
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)-1, len(args))
+	page := fmt.Sprintf("SELECT j.id, %s AS sort_key %s ORDER BY sort_key DESC NULLS LAST, j.id DESC LIMIT $%d OFFSET $%d",
+		sortKey, from, len(args)-1, len(args))
+
+	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
+	appliedColumn := appliedExpr(&args, params.ProfileID)
+
+	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s
+		FROM (%s) page JOIN jobs j ON j.id = page.id
+		ORDER BY page.sort_key DESC NULLS LAST, page.id DESC`,
+		jobColumns, matchScoreColumn, jobTagsColumn, appliedColumn, page)
 
 	return query, args
+}
+
+// resumeScoreExpr scores j against the caller's resume, appending its arg to args.
+// Empty when there's no resume to score against.
+func resumeScoreExpr(args *[]any, embedding *pgvector.Vector, query string) string {
+	switch {
+	case embedding != nil:
+		*args = append(*args, *embedding)
+		return fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(*args))
+	case query != "":
+		*args = append(*args, query)
+		return fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(*args))
+	default:
+		return ""
+	}
+}
+
+// appliedExpr is whether profileID marked j applied; always false for anonymous callers.
+func appliedExpr(args *[]any, profileID int64) string {
+	if profileID == 0 {
+		return "false"
+	}
+
+	*args = append(*args, profileID)
+
+	return fmt.Sprintf("EXISTS (SELECT 1 FROM profile_job_applications a WHERE a.profile_id = $%d AND a.job_id = j.id)", len(*args))
 }
 
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanJobRow(row rowScanner) (jobs.Job, int64, error) {
+// scanJob reads jobColumns, match_score, tags and applied, plus description when withDescription.
+func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 	var job jobs.Job
-	var jobID int64
 	var salaryMin, salaryMax sql.NullInt64
 	var postedAtRaw any
 	var matchScore sql.NullFloat64
+	var tags []byte
 
-	err := row.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description, &matchScore)
+	dest := []any{&job.ID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
+		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &matchScore, &tags, &job.Applied}
 
-	if err != nil {
-		return jobs.Job{}, 0, err
+	if withDescription {
+		dest = append(dest, &job.Description)
 	}
 
-	job = finishJobRow(job, jobID, salaryMin, salaryMax, postedAtRaw, matchScore)
-
-	return job, jobID, nil
-}
-
-// scanJobSearchRow is scanJobRow plus the total_count column
-// buildJobSearchSelect adds via COUNT(*) OVER().
-func scanJobSearchRow(row rowScanner) (jobs.Job, int64, int, error) {
-	var job jobs.Job
-	var jobID int64
-	var salaryMin, salaryMax sql.NullInt64
-	var postedAtRaw any
-	var matchScore sql.NullFloat64
-	var total int
-
-	err := row.Scan(&jobID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &job.Description, &matchScore, &total)
-
-	if err != nil {
-		return jobs.Job{}, 0, 0, err
+	if err := row.Scan(dest...); err != nil {
+		return jobs.Job{}, err
 	}
 
-	job = finishJobRow(job, jobID, salaryMin, salaryMax, postedAtRaw, matchScore)
-
-	return job, jobID, total, nil
-}
-
-func finishJobRow(job jobs.Job, jobID int64, salaryMin, salaryMax sql.NullInt64, postedAtRaw any, matchScore sql.NullFloat64) jobs.Job {
-	job.ID = jobID
+	if err := json.Unmarshal(tags, &job.Tags); err != nil {
+		return jobs.Job{}, fmt.Errorf("decode tags: %w", err)
+	}
 
 	if salaryMin.Valid {
 		min := int(salaryMin.Int64)
@@ -446,59 +395,17 @@ func finishJobRow(job jobs.Job, jobID int64, salaryMin, salaryMax sql.NullInt64,
 		}
 	}
 
-	return job
+	return job, nil
 }
 
 func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
 	db, err := GetDb()
-	var res []string
-
-	if err != nil {
-		return res, err
-	}
-
-	query := "SELECT DISTINCT tag FROM tags"
-	rows, err := db.QueryContext(ctx, query)
 
 	if err != nil {
 		return nil, err
 	}
 
-	for rows.Next() {
-		var tag string
-
-		if err := rows.Scan(&tag); err != nil {
-			return res, err
-		}
-
-		if rows.Err() != nil {
-			return res, err
-		}
-
-		res = append(res, tag)
-	}
-
-	return res, nil
-}
-
-func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int64][]string, error) {
-	if len(jobIDs) == 0 {
-		return make(map[int64][]string), nil
-	}
-
-	placeholders := make([]string, len(jobIDs))
-	args := make([]any, len(jobIDs))
-
-	for i, v := range jobIDs {
-		args[i] = v
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-	}
-
-	query := fmt.Sprintf(
-		"SELECT jt.job_id, t.tag FROM tags t JOIN job_tags jt ON jt.tag_id = t.id WHERE jt.job_id IN (%s)",
-		strings.Join(placeholders, ","),
-	)
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, "SELECT tag FROM tags ORDER BY tag")
 
 	if err != nil {
 		return nil, err
@@ -506,18 +413,17 @@ func fetchTagsForJobs(ctx context.Context, db *sql.DB, jobIDs []int64) (map[int6
 
 	defer rows.Close()
 
-	tagsMappings := make(map[int64][]string)
+	var res []string
 
 	for rows.Next() {
-		var jobID int64
 		var tag string
 
-		if err := rows.Scan(&jobID, &tag); err != nil {
+		if err := rows.Scan(&tag); err != nil {
 			return nil, err
 		}
 
-		tagsMappings[jobID] = append(tagsMappings[jobID], tag)
+		res = append(res, tag)
 	}
 
-	return tagsMappings, rows.Err()
+	return res, rows.Err()
 }

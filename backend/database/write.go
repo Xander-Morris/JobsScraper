@@ -33,8 +33,10 @@ func CreateTables() error {
 const writeJobsChunkSize = 500
 
 // Keeps a known post date when a later scrape of the same URL has none.
-const upsertJobsSQL = `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description)
-	SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::int[], $6::int[], $7::timestamptz[], $8::text[], $9::text[])
+const upsertJobsSQL = `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description,
+		is_intern, is_part_time, is_full_time)
+	SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::int[], $6::int[], $7::timestamptz[], $8::text[], $9::text[],
+		$10::bool[], $11::bool[], $12::bool[])
 	ON CONFLICT (url) DO UPDATE SET
 		title = excluded.title,
 		company = excluded.company,
@@ -43,7 +45,10 @@ const upsertJobsSQL = `INSERT INTO jobs (title, company, location, workplace_typ
 		salary_min = excluded.salary_min,
 		salary_max = excluded.salary_max,
 		posted_at = COALESCE(excluded.posted_at, jobs.posted_at),
-		description = excluded.description
+		description = excluded.description,
+		is_intern = excluded.is_intern,
+		is_part_time = excluded.is_part_time,
+		is_full_time = excluded.is_full_time
 	RETURNING id, url`
 
 func writeJobs(tx *sql.Tx, batch []jobs.Job) error {
@@ -90,6 +95,7 @@ func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 	workplaceTypes := make([]int32, n)
 	salaryMins, salaryMaxes := make([]*int32, n), make([]*int32, n)
 	postedAts := make([]*time.Time, n)
+	interns, partTimes, fullTimes := make([]bool, n), make([]bool, n), make([]bool, n)
 
 	for i, job := range chunk {
 		titles[i], companies[i], locations[i] = job.Title, job.Company, job.Location
@@ -97,13 +103,17 @@ func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 		workplaceTypes[i] = int32(job.WorkplaceType)
 		salaryMins[i], salaryMaxes[i] = int32Ptr(job.SalaryMin), int32Ptr(job.SalaryMax)
 
+		flags := jobTypeFlagsFor(job)
+		interns[i], partTimes[i], fullTimes[i] = flags.intern, flags.partTime, flags.fullTime
+
 		if !job.PostedAt.IsZero() {
 			postedAt := job.PostedAt.UTC()
 			postedAts[i] = &postedAt
 		}
 	}
 
-	rows, err := tx.Query(upsertJobsSQL, titles, companies, locations, workplaceTypes, salaryMins, salaryMaxes, postedAts, urls, descriptions)
+	rows, err := tx.Query(upsertJobsSQL, titles, companies, locations, workplaceTypes, salaryMins, salaryMaxes, postedAts, urls, descriptions,
+		interns, partTimes, fullTimes)
 	if err != nil {
 		return nil, fmt.Errorf("upsert jobs: %w", err)
 	}

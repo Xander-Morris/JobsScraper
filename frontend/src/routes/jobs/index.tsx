@@ -1,11 +1,14 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useJobsQuery } from '../../api/jobs'
+import { useEffect, useMemo } from 'react'
+import { jobsQueryOptions, useJobsQuery, type JobSearchParams } from '../../api/jobs'
 import { AuthForms } from '../../components/auth/AuthForms'
 import { JobCard } from '../../components/jobs/job-card'
 import Pagination from '../../components/pagination'
 import { SearchFilters } from '../../components/search-filters'
 import { Skeleton } from '../../components/ui/skeleton'
 import { jobSearchSchema, type JobSearchState } from '../../lib/job-search'
+import { cn } from '../../lib/utils'
 import { useAuth } from '../../stores/profile-store'
 
 const PAGE_SIZE = 20
@@ -19,9 +22,10 @@ function JobsPage() {
   const { isAuthenticated, isInitializing, token } = useAuth()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
+  const queryClient = useQueryClient()
 
-  const { data, isLoading, isError, error } = useJobsQuery(
-    {
+  const params = useMemo<JobSearchParams>(
+    () => ({
       q: search.q,
       workplaceType: search.workplaceType,
       jobType: search.jobType,
@@ -32,9 +36,22 @@ function JobsPage() {
       sort: search.sort,
       limit: PAGE_SIZE,
       offset: ((search.page ?? 1) - 1) * PAGE_SIZE
-    },
-    { enabled: isAuthenticated, token }
+    }),
+    [search]
   )
+
+  const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, {
+    enabled: isAuthenticated,
+    token
+  })
+
+  const hasNextPage = !!data && !isPlaceholderData && (params.offset ?? 0) + PAGE_SIZE < data.total
+
+  // Next page is usually the next click.
+  useEffect(() => {
+    if (!hasNextPage) return
+    void queryClient.prefetchQuery(jobsQueryOptions({ ...params, offset: (params.offset ?? 0) + PAGE_SIZE }, token))
+  }, [hasNextPage, params, queryClient, token])
 
   function updateFilters(next: JobSearchState) {
     navigate({ search: { ...next, page: 1 } })
@@ -90,7 +107,10 @@ function JobsPage() {
           <p className="mt-6 text-xs text-muted-foreground">
             {data.total} result{data.total === 1 ? '' : 's'}
           </p>
-          <ul className="mt-2 space-y-2">
+          <ul
+            className={cn('mt-2 space-y-2 transition-opacity', isPlaceholderData && 'opacity-60')}
+            aria-busy={isPlaceholderData}
+          >
             {data.jobs.map((job) => (
               <JobCard key={job.id} job={job} bestMatchScore={bestMatchScore} />
             ))}

@@ -79,7 +79,8 @@ type Job struct {
 	SalaryMax     *int          `json:"salary_max"`
 	PostedAt      time.Time     `json:"posted_at"`
 	URL           string        `json:"url"`
-	Description   string        `json:"description"`
+	// Description is empty in search results; only job detail loads it.
+	Description string `json:"description,omitempty"`
 	// MatchScore is a text-relevance score (roughly 0-1) against the caller's active
 	// resume, nil when there's no active resume to compare against.
 	MatchScore *float64 `json:"match_score,omitempty"`

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { ApiError, apiFetch } from './client'
 import {
@@ -58,20 +58,31 @@ export function fetchJob(id: number, token?: string | null): Promise<Job> {
   })
 }
 
+// Keyed on auth state, not the token: it rotates every reload. Logout clears ['jobs'].
+export function jobsQueryOptions(params: JobSearchParams, token?: string | null) {
+  return queryOptions({
+    queryKey: ['jobs', params, !!token],
+    queryFn: () => fetchJobs(params, token)
+  })
+}
+
+export function jobQueryOptions(id: number, token?: string | null) {
+  return queryOptions({
+    queryKey: ['jobs', id, !!token],
+    queryFn: () => fetchJob(id, token)
+  })
+}
+
 export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean; token?: string | null } = {}) {
   return useQuery({
-    queryKey: ['jobs', params, options.token],
-    queryFn: () => fetchJobs(params, options.token),
-    enabled: options.enabled
+    ...jobsQueryOptions(params, options.token),
+    enabled: options.enabled,
+    placeholderData: keepPreviousData
   })
 }
 
 export function useJobQuery(id: number, token?: string | null) {
-  return useQuery({
-    queryKey: ['jobs', id, token],
-    queryFn: () => fetchJob(id, token),
-    enabled: Number.isFinite(id)
-  })
+  return useQuery({ ...jobQueryOptions(id, token), enabled: Number.isFinite(id) })
 }
 
 export function markJobApplied(token: string, id: number) {

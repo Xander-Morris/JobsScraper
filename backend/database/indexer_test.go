@@ -55,6 +55,10 @@ func newTestDB(t *testing.T) {
 		db.Close()
 		SetDB(prev)
 	})
+
+	if err := CreateTables(); err != nil {
+		t.Fatalf("init schema: %v", err)
+	}
 }
 
 func TestGetJobByID(t *testing.T) {
@@ -121,6 +125,98 @@ func TestGetJobByID(t *testing.T) {
 
 	if !slices.Equal(gotTags, wantTags) {
 		t.Errorf("Tags = %v, want %v", gotTags, wantTags)
+	}
+
+	if got.Description != seed.Description {
+		t.Errorf("Description = %q, want %q", got.Description, seed.Description)
+	}
+}
+
+func TestSearchForJobsPage(t *testing.T) {
+	newTestDB(t)
+	ctx := context.Background()
+
+	seed := []jobs.Job{
+		{Title: "Older", Company: "Acme", Tags: []string{"go", "sql"}, PostedAt: time.Now().Add(-48 * time.Hour),
+			URL: "https://example.com/jobs/older", Description: "long text"},
+		{Title: "Newer", Company: "Acme", PostedAt: time.Now().Add(-time.Hour),
+			URL: "https://example.com/jobs/newer", Description: "long text"},
+	}
+
+	if err := WriteJobsToDatabase(seed); err != nil {
+		t.Fatalf("seed db: %v", err)
+	}
+
+	olderID := jobIDByURL(t, seed[0].URL)
+
+	var profileID int64
+	if err := cachedDb.QueryRow(`INSERT INTO profiles (email, password) VALUES ('page@example.com', 'x') RETURNING id`).Scan(&profileID); err != nil {
+		t.Fatalf("seed profile: %v", err)
+	}
+
+	if err := MarkJobApplied(ctx, profileID, olderID); err != nil {
+		t.Fatalf("mark applied: %v", err)
+	}
+
+	result, err := SearchForJobs(ctx, &JobSearchParams{Sort: SortDate, ProfileID: profileID, Limit: 10})
+	if err != nil {
+		t.Fatalf("SearchForJobs: %v", err)
+	}
+
+	if len(result.Jobs) != 2 || result.Jobs[0].Title != "Newer" || result.Jobs[1].Title != "Older" {
+		t.Fatalf("jobs = %+v, want Newer then Older", result.Jobs)
+	}
+
+	if result.Total != 2 {
+		t.Errorf("Total = %d, want 2", result.Total)
+	}
+
+	newer, older := result.Jobs[0], result.Jobs[1]
+
+	if !slices.Equal(older.Tags, []string{"go", "sql"}) {
+		t.Errorf("older Tags = %v, want [go sql]", older.Tags)
+	}
+
+	if newer.Tags == nil || len(newer.Tags) != 0 {
+		t.Errorf("newer Tags = %#v, want empty non-nil slice", newer.Tags)
+	}
+
+	if !older.Applied || newer.Applied {
+		t.Errorf("Applied = older %v, newer %v, want true, false", older.Applied, newer.Applied)
+	}
+
+	for _, job := range result.Jobs {
+		if job.Description != "" {
+			t.Errorf("%s Description = %q, want empty in search results", job.Title, job.Description)
+		}
+	}
+
+	past, err := SearchForJobs(ctx, &JobSearchParams{Limit: 10, Offset: 50})
+	if err != nil {
+		t.Fatalf("SearchForJobs past end: %v", err)
+	}
+
+	if len(past.Jobs) != 0 || past.Total != 2 {
+		t.Errorf("past end = %d jobs, Total %d, want 0 jobs, Total 2", len(past.Jobs), past.Total)
+	}
+}
+
+func TestJobTypeFlagsFor(t *testing.T) {
+	tests := []struct {
+		job  jobs.Job
+		want jobTypeFlags
+	}{
+		{jobs.Job{Title: "Software Engineer Intern"}, jobTypeFlags{intern: true}},
+		{jobs.Job{Title: "Data Analyst", Tags: []string{"Internship", "Part-time"}}, jobTypeFlags{intern: true, partTime: true}},
+		{jobs.Job{Title: "Support Agent", Tags: []string{"Part Time"}}, jobTypeFlags{partTime: true}},
+		{jobs.Job{Title: "Internal Tools Engineer", Tags: []string{"full_time"}}, jobTypeFlags{fullTime: true}},
+		{jobs.Job{Title: "International Sales", Tags: []string{"Fulltimer", "internals"}}, jobTypeFlags{}},
+	}
+
+	for _, tt := range tests {
+		if got := jobTypeFlagsFor(tt.job); got != tt.want {
+			t.Errorf("jobTypeFlagsFor(%q, %v) = %+v, want %+v", tt.job.Title, tt.job.Tags, got, tt.want)
+		}
 	}
 }
 

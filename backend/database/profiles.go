@@ -141,10 +141,6 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 		return 0, err
 	}
 
-	if err := CreateTables(); err != nil {
-		return 0, err
-	}
-
 	tx, err := db.Begin()
 
 	if err != nil {

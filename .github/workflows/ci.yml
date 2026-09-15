@@ -118,6 +118,27 @@ jobs:
         env:
           TEST_DATABASE_CONNECTION: postgresql://postgres:postgres@localhost:5432/crawlerandindexer_test
 
+  # The Vercel function no longer migrates on cold start. Vercel deploys on its
+  # own schedule, so migrations must stay compatible with the previous deploy.
+  migrate:
+    runs-on: ubuntu-latest
+    needs: backend
+    if: github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - run: go run ./cmd/migrate
+        env:
+          DATABASE_CONNECTION: ${{ secrets.DATABASE_CONNECTION }}
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

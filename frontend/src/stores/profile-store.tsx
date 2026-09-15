@@ -1,7 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { API_BASE_URL, refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent } from '../api/client'
 
 const authChannelName = 'profile-auth'
+
+// Started at import so the refresh overlaps app boot instead of waiting for first render.
+const initialRefresh = refreshAccessToken()
 
 type AuthMessage = { type: 'login'; token: string } | { type: 'logout' }
 
@@ -25,6 +29,7 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const [sessionMessage, setSessionMessage] = useState<string | null>(null)
   // Keeps other tabs in sync, since each one holds its own in-memory token.
   const channelRef = useRef<BroadcastChannel | null>(null)
+  const queryClient = useQueryClient()
 
   const login = useCallback((next: string) => {
     setToken(next)
@@ -32,12 +37,19 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
     channelRef.current?.postMessage({ type: 'login', token: next } satisfies AuthMessage)
   }, [])
 
-  const logout = useCallback((message?: string) => {
-    void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
-    setToken(null)
-    setSessionMessage(message ?? null)
-    channelRef.current?.postMessage({ type: 'logout' } satisfies AuthMessage)
-  }, [])
+  // Jobs keys don't include the token, so drop per-user data (applied, match score) on logout.
+  const clearUserJobs = useCallback(() => queryClient.removeQueries({ queryKey: ['jobs'] }), [queryClient])
+
+  const logout = useCallback(
+    (message?: string) => {
+      void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
+      setToken(null)
+      clearUserJobs()
+      setSessionMessage(message ?? null)
+      channelRef.current?.postMessage({ type: 'logout' } satisfies AuthMessage)
+    },
+    [clearUserJobs]
+  )
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return
@@ -51,6 +63,7 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
         setSessionMessage(null)
       } else {
         setToken(null)
+        clearUserJobs()
       }
     }
 
@@ -58,12 +71,12 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
       channel.close()
       channelRef.current = null
     }
-  }, [])
+  }, [clearUserJobs])
 
   useEffect(() => {
     let cancelled = false
 
-    refreshAccessToken().then((next) => {
+    initialRefresh.then((next) => {
       if (cancelled) return
       if (next) setToken(next)
       setIsInitializing(false)

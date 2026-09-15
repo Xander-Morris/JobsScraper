@@ -46,7 +46,7 @@ Order matters since Caddy requests a certificate on startup, and a failed ACME c
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Migrations apply automatically at boot. The database must be Postgres 14+ with the `vector` extension available (Supabase includes it), and should be a different database than `TEST_DATABASE_CONNECTION`. The test suite drops tables.
+The self-hosted binary applies migrations at boot. On Vercel the function doesn't (it would slow every cold start); the `migrate` job in `.github/workflows/ci.yml` applies them on push to `main`. The database must be Postgres 14+ with the `vector` extension available (Supabase includes it), and should be a different database than `TEST_DATABASE_CONNECTION`. The test suite drops tables.
 
 ### Fully on Vercel (free)
 
@@ -58,6 +58,7 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 2. Set env vars: `DATABASE_CONNECTION`, `SECRET_KEY`, `OPENROUTER_API_KEY`, `JINA_API_KEY`, `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none` (frontend and backend are on different Vercel domains), `RESEND_API_KEY` and `RESEND_FROM_ADDRESS` (password reset emails; without them nobody can recover a forgotten password), `REDIS_URL` (a free [Upstash](https://upstash.com) Redis database; without it, login and LLM rate limits live in each function instance's memory and are easy to get around), and `ALLOWED_ORIGIN` (set once you have the frontend's URL from the next step)
 3. Deploy. Every `/api/*` request routes through the single `api/index.go` function (see the `rewrites` entry in `vercel.json`), running the same handler chain as the self-hosted binary
 4. Scraping and digest emails don't run on Vercel, since its free plan caps functions at 60 seconds and cron at once a day. Instead, `.github/workflows/cron.yml` runs them on GitHub Actions (free for public repos): a scrape every hour and a digest daily at 04:15 UTC. In the GitHub repo's Settings → Secrets and variables → Actions, add the secrets `DATABASE_CONNECTION` (use Supabase's pooler URL, since Actions runners have no IPv6), `SECRET_KEY` (the same value as the Vercel project, or digest unsubscribe links break), `JINA_API_KEY`, and `RESEND_API_KEY`, plus the variables `RESEND_FROM_ADDRESS` and `PUBLIC_BACKEND_URL`. Trigger a first run by hand from the Actions tab with "Run workflow"
+5. Migrations: the `migrate` job in `.github/workflows/ci.yml` uses the same `DATABASE_CONNECTION` secret to apply pending migrations on every push to `main`, after tests pass. Use Supabase's session pooler URL (port 5432), not the transaction pooler (6543), since golang-migrate holds a session advisory lock. For a brand-new database, run `go run ./cmd/migrate` locally once before the first deploy
 
 **Frontend** (project root: `frontend/`):
 

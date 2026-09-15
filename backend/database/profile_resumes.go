@@ -304,6 +304,12 @@ func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float3
 	return err
 }
 
+const resumeExtractionSelect = `SELECT e.resume_id, e.status, e.full_name, e.email, e.phone,
+		e.linked_in, e.github, e.portfolio, e.summary,
+		e.skills, e.education, e.work_experience, e.projects, e.error, e.updated_at, e.embedding
+	FROM profile_resume_extractions e
+	JOIN profile_resumes r ON r.id = e.resume_id`
+
 func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
 	db, err := GetDb()
 
@@ -311,17 +317,17 @@ func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (Resume
 		return ResumeExtraction{}, err
 	}
 
+	return scanResumeExtraction(db.QueryRowContext(ctx, resumeExtractionSelect+`
+		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID))
+}
+
+func scanResumeExtraction(row rowScanner) (ResumeExtraction, error) {
 	var extraction ResumeExtraction
 	var fullName, email, phone, linkedIn, github, portfolio, summary, errMsg sql.NullString
 	var skills, education, workExperience, projects sql.NullString
 	var embedding sql.Null[pgvector.Vector]
 
-	err = db.QueryRowContext(ctx, `SELECT e.resume_id, e.status, e.full_name, e.email, e.phone,
-			e.linked_in, e.github, e.portfolio, e.summary,
-			e.skills, e.education, e.work_experience, e.projects, e.error, e.updated_at, e.embedding
-		FROM profile_resume_extractions e
-		JOIN profile_resumes r ON r.id = e.resume_id
-		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID).Scan(
+	err := row.Scan(
 		&extraction.ResumeID, &extraction.Status, &fullName, &email, &phone,
 		&linkedIn, &github, &portfolio, &summary,
 		&skills, &education, &workExperience, &projects, &errMsg, &extraction.UpdatedAt, &embedding,
@@ -378,27 +384,15 @@ func GetActiveResumeExtraction(ctx context.Context, profileID int64) (extraction
 		return ResumeExtraction{}, false, err
 	}
 
-	var resumeID int64
-	err = db.QueryRowContext(ctx, `SELECT id FROM profile_resumes WHERE profile_id = $1 AND is_active`, profileID).Scan(&resumeID)
+	// One round trip, since this runs ahead of every signed-in job search.
+	extraction, err = scanResumeExtraction(db.QueryRowContext(ctx, resumeExtractionSelect+`
+		WHERE r.profile_id = $1 AND r.is_active AND e.status = 'completed'`, profileID))
 
 	if err == sql.ErrNoRows {
 		return ResumeExtraction{}, false, nil
 	}
 	if err != nil {
 		return ResumeExtraction{}, false, err
-	}
-
-	extraction, err = GetResumeExtraction(ctx, profileID, resumeID)
-
-	if err == sql.ErrNoRows {
-		return ResumeExtraction{}, false, nil
-	}
-	if err != nil {
-		return ResumeExtraction{}, false, err
-	}
-
-	if extraction.Status != "completed" {
-		return ResumeExtraction{}, false, nil
 	}
 
 	return extraction, true, nil

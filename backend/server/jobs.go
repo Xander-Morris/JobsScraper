@@ -33,11 +33,14 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
+
 	if profileID, ok := profileIDFromContext(r.Context()); ok {
 		params.ProfileID = profileID
 		params.ResumeQuery, params.ResumeEmbedding = activeResumeSearchContext(r.Context(), profileID, "search jobs")
 	}
 
+	resumeDone := time.Now()
 	result, err := database.SearchForJobs(r.Context(), params)
 
 	if err != nil {
@@ -49,6 +52,11 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 	if result.Jobs == nil {
 		result.Jobs = []jobs.Job{}
 	}
+
+	// Shows in DevTools' Timing tab where a slow search spent its time.
+	w.Header().Set("Server-Timing", fmt.Sprintf("resume;dur=%d, search;dur=%d",
+		resumeDone.Sub(start).Milliseconds(), time.Since(resumeDone).Milliseconds()))
+	w.Header().Set("Timing-Allow-Origin", allowedOrigin())
 
 	writeJSON(w, http.StatusOK, jobSearchResponse{
 		Jobs:   result.Jobs,

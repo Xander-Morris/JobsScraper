@@ -1,18 +1,30 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import type { Job } from '../../api/schemas'
+import { jobQueryOptions } from '../../api/jobs'
+import type { JobListItem } from '../../api/schemas'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
+import { useAuth } from '../../stores/profile-store'
 import { Badge } from '../ui/badge'
 import { Card, CardContent } from '../ui/card'
 
-export function JobCard({ job, bestMatchScore }: { job: Job; bestMatchScore?: number }) {
+export function JobCard({ job, bestMatchScore }: { job: JobListItem; bestMatchScore?: number }) {
+  const queryClient = useQueryClient()
+  const { token } = useAuth()
   const salary = formatSalary(job.salary_min, job.salary_max)
   const fitLabel = matchFitLabel(job.match_score, bestMatchScore)
+
+  // Warms the detail page before the click lands.
+  function prefetchDetail() {
+    void queryClient.prefetchQuery(jobQueryOptions(job.id, token))
+  }
 
   return (
     <li>
       <Link
         to="/jobs/$jobId"
         params={{ jobId: String(job.id) }}
+        onMouseEnter={prefetchDetail}
+        onFocus={prefetchDetail}
         className="group block no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
       >
         <Card className="text-left transition-colors group-hover:ring-accent-border">

@@ -1,6 +1,7 @@
-// Package coldstart holds the one-time startup work (env validation, table
-// creation) for entrypoints other than main.go: the Vercel function under
-// backend/api/ and the scheduled jobs in backend/cmd/cron.
+// Package coldstart holds the one-time startup work (env validation) for
+// entrypoints other than main.go: the Vercel function under backend/api/ and
+// the scheduled jobs in backend/cmd/cron. Migrations run from CI via
+// backend/cmd/migrate instead, so cold starts don't wait on them.
 package coldstart
 
 import (
@@ -8,13 +9,12 @@ import (
 	"os"
 	"sync"
 
-	"main/database"
 	"main/utils"
 )
 
 var once sync.Once
 
-// Ensure runs startup validation and migrations once per warm container.
+// Ensure runs startup validation once per warm container.
 // Safe to call at the top of every request.
 func Ensure() {
 	once.Do(func() {
@@ -22,11 +22,6 @@ func Ensure() {
 
 		if err := utils.RequireEnv("DATABASE_CONNECTION", "SECRET_KEY"); err != nil {
 			slog.Error("startup: env validation failed", "error", err)
-			os.Exit(1)
-		}
-
-		if err := database.CreateTables(); err != nil {
-			slog.Error("startup: create tables failed", "error", err)
 			os.Exit(1)
 		}
 	})

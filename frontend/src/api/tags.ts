@@ -7,5 +7,5 @@ export function fetchTags(): Promise<string[]> {
 }
 
 export function useTagsQuery() {
-  return useQuery({ queryKey: ['tags'], queryFn: fetchTags })
+  return useQuery({ queryKey: ['tags'], queryFn: fetchTags, staleTime: 10 * 60_000 })
 }

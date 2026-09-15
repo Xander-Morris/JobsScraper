@@ -23,8 +23,12 @@ export const jobSchema = z.object({
 })
 export type Job = z.infer<typeof jobSchema>
 
+// Search results skip description; only the detail endpoint sends it.
+export const jobListItemSchema = jobSchema.omit({ description: true })
+export type JobListItem = z.infer<typeof jobListItemSchema>
+
 export const jobSearchResponseSchema = z.object({
-  jobs: z.array(jobSchema),
+  jobs: z.array(jobListItemSchema),
   total: z.number(),
   limit: z.number(),
   offset: z.number()
