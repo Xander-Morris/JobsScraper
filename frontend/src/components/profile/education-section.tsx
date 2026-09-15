@@ -1,4 +1,3 @@
-import { useId, useState, type FormEvent } from 'react'
 import { useAddEducationMutation, useDeleteEducationMutation } from '@/src/api/profile'
 import type { Education } from '@/src/api/schemas'
 import { Button } from '@/src/components/ui/button'
@@ -6,6 +5,7 @@ import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { useAuth } from '@/src/stores/profile-store'
+import { useId, useState } from 'react'
 
 export function EducationSection({ education }: { education: Education[] }) {
   const { token } = useAuth()
@@ -19,7 +19,7 @@ export function EducationSection({ education }: { education: Education[] }) {
   const [endDate, setEndDate] = useState('')
   const id = useId()
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     addEducation.mutate(
       {

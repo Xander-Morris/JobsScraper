@@ -1,4 +1,3 @@
-import { useId, useState, type FormEvent } from 'react'
 import { useAddSkillMutation, useDeleteSkillMutation } from '@/src/api/profile'
 import type { Skill } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
@@ -9,6 +8,7 @@ import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
 import { useAuth } from '@/src/stores/profile-store'
 import { XIcon } from 'lucide-react'
+import { useId, useState } from 'react'
 
 export function SkillsSection({ skills }: { skills: Skill[] }) {
   const { token } = useAuth()
@@ -17,7 +17,7 @@ export function SkillsSection({ skills }: { skills: Skill[] }) {
   const [skill, setSkill] = useState('')
   const id = useId()
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!skill.trim()) return
     addSkill.mutate({ skill: skill.trim() }, { onSuccess: () => setSkill('') })

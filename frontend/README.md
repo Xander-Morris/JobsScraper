@@ -21,7 +21,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Dev server runs on `localhost:5173`. `.env` just needs `VITE_API_URL` pointing at your backend, defaults to `http://localhost:8090` which matches the backend's default port.
+Dev server runs on `localhost:5173`. `.env` needs `VITE_API_URL` pointing at your backend (defaults to `http://localhost:8090`, which matches the backend's default port) and `VITE_MAPBOX_TOKEN` for address autocomplete on the profile page.
 
 Make sure the backend is actually running too, this app doesn't do anything useful against a dead API.
 
@@ -41,12 +41,15 @@ CI runs `lint` and `build` on every push and PR. There's no test suite wired up 
 
 ## Env vars
 
-Just one: `VITE_API_URL`. Vite inlines this into the JS bundle at build time, it's not something you can change at runtime after the app is built. That matters for Docker specifically, see below.
+- `VITE_API_URL`: backend URL
+- `VITE_MAPBOX_TOKEN`: Mapbox public (`pk.`) token for address autofill. Without it the address field still works, just no suggestions. It ships in the bundle, so restrict it to your site's URLs in the Mapbox dashboard
+
+Vite inlines these into the JS bundle at build time, they're not something you can change at runtime after the app is built. That matters for Docker specifically, see below.
 
 ## Docker
 
 ```bash
-docker build --build-arg VITE_API_URL=https://api.yourdomain.com -t crawlerandindexer-frontend .
+docker build --build-arg VITE_API_URL=https://api.yourdomain.com --build-arg VITE_MAPBOX_TOKEN=pk.... -t crawlerandindexer-frontend .
 ```
 
-Because `VITE_API_URL` gets baked into the bundle during `npm run build`, you have to pass it as a build arg pointing at wherever the backend will actually be reachable, not as a runtime environment variable on the container. The image itself is just nginx serving the static build, `nginx.conf` handles the SPA fallback routing so refreshing on a deep link like `/jobs/123` doesn't 404.
+Because these get baked into the bundle during `npm run build`, you have to pass them as build args (with `VITE_API_URL` pointing at wherever the backend will actually be reachable), not as runtime environment variables on the container. The image itself is just nginx serving the static build, `nginx.conf` handles the SPA fallback routing so refreshing on a deep link like `/jobs/123` doesn't 404.

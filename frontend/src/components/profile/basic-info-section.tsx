@@ -1,4 +1,3 @@
-import { useId, useState, type FormEvent } from 'react'
 import { useUpdateProfileMutation } from '@/src/api/profile'
 import type { Profile } from '@/src/api/schemas'
 import { Button } from '@/src/components/ui/button'
@@ -7,6 +6,8 @@ import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { Switch } from '@/src/components/ui/switch'
 import { useAuth } from '@/src/stores/profile-store'
+import { AddressAutofill } from '@mapbox/search-js-react'
+import { useId, useState } from 'react'
 
 export function BasicInfoSection({ profile }: { profile: Profile }) {
   const { token } = useAuth()
@@ -19,7 +20,7 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
   const [emailNotifications, setEmailNotifications] = useState(profile.email_notifications)
   const id = useId()
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     updateProfile.mutate({
       name,
@@ -44,7 +45,14 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${id}-address`}>Address</Label>
-            <Input id={`${id}-address`} value={address} onChange={(e) => setAddress(e.target.value)} />
+            <AddressAutofill accessToken={import.meta.env.VITE_MAPBOX_TOKEN ?? ''}>
+              <Input
+                id={`${id}-address`}
+                value={address}
+                autoComplete="street-address"
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </AddressAutofill>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${id}-linkedin`}>LinkedIn URL</Label>

@@ -63,7 +63,7 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 
 1. Import the repo, set the project's root directory to `frontend/`
 2. Framework preset: Vite (build command `tsc -b && vite build`, output `dist`, both auto-detected)
-3. Set the env var `VITE_API_URL` to the backend project's Vercel URL (baked in at build time)
+3. Set the env vars `VITE_API_URL` to the backend project's Vercel URL and `VITE_MAPBOX_TOKEN` to a Mapbox public token (address autofill), both baked in at build time
 4. Deploy, then go back and set `ALLOWED_ORIGIN` on the backend project to this URL and redeploy it
 
 ## How it fits together

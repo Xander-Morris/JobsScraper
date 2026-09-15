@@ -1,5 +1,3 @@
-import { useId, useState, type FormEvent } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
 import {
   useAddWorkExperienceBulletMutation,
   useAddWorkExperienceMutation,
@@ -19,6 +17,8 @@ import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
 import { useAuth } from '@/src/stores/profile-store'
+import { ChevronDownIcon } from 'lucide-react'
+import { useId, useState } from 'react'
 
 const jobTypeOptions: { value: JobType; label: string }[] = [
   { value: 'internship', label: 'Internship' },
@@ -39,7 +39,7 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
   const [endDate, setEndDate] = useState('')
   const id = useId()
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     addWorkExperience.mutate(
       { company, job_title: jobTitle, job_type: jobType, location, start_date: startDate, end_date: endDate },
@@ -147,7 +147,7 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
   const [bullet, setBullet] = useState('')
   const id = useId()
 
-  function handleAddBullet(e: FormEvent) {
+  function handleAddBullet(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!bullet.trim()) return
     addBullet.mutate({ workExperienceId: entry.id, req: { bullet: bullet.trim() } }, { onSuccess: () => setBullet('') })

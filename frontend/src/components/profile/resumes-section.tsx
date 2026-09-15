@@ -1,4 +1,3 @@
-import { useApplyResumeExtractionMutation, type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
 import {
   useActivateResumeMutation,
   useDeleteResumeMutation,
@@ -8,6 +7,7 @@ import {
   useUpdateResumeMutation,
   useUploadResumeMutation
 } from '@/src/api/profile'
+import { useApplyResumeExtractionMutation, type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
 import type { Profile, Resume } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
@@ -17,7 +17,7 @@ import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
 import { useAuth } from '@/src/stores/profile-store'
 import { DownloadIcon, FileTextIcon } from 'lucide-react'
-import { useId, useState, type FormEvent } from 'react'
+import { useId, useState } from 'react'
 
 const acceptedResumeTypes =
   '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -30,7 +30,7 @@ export function ResumesSection({ resumes, profile }: { resumes: Resume[]; profil
   const id = useId()
   const error = uploadResume.error instanceof Error ? uploadResume.error.message : null
 
-  function handleUpload(e: FormEvent) {
+  function handleUpload(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!file) return
     // Upload just saves the file now; kick off extraction as its own request
@@ -120,7 +120,7 @@ function ResumeEntry({ resume, profile }: { resume: Resume; profile: Profile }) 
     })
   }
 
-  function handleRename(e: FormEvent) {
+  function handleRename(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!fileName.trim() || newFileName === resume.file_name) return
     updateResume.mutate({ id: resume.id, update: newFileName })

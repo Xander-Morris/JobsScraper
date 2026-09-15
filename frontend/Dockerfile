@@ -10,6 +10,8 @@ COPY . .
 # must be set to the backend's public URL when you build the image.
 ARG VITE_API_URL=http://localhost:8090
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_MAPBOX_TOKEN
+ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
 
 RUN npm run build
 
