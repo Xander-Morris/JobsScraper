@@ -38,9 +38,7 @@ type ResumeExtraction struct {
 	Projects       []llm.ProjectEntry        `json:"projects"`
 	Error          string                    `json:"error"`
 	UpdatedAt      time.Time                 `json:"updated_at"`
-	// Embedding ranks job matches by meaning instead of keyword overlap. Nil
-	// until the background embedding step finishes after extraction, so fall
-	// back to keyword matching, don't treat nil as an error.
+	// Embedding ranks job matches by meaning instead of keyword overlap.
 	Embedding *pgvector.Vector `json:"-"`
 }
 

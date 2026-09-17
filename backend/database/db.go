@@ -30,10 +30,6 @@ func GetDb() (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Kept modest since a serverless deployment (backend/api/) can run many of
-	// these pools concurrently, one per warm container, all against the same
-	// Postgres connection limit, unlike the self-hosted binary, which only
-	// ever has one.
 	db.SetMaxOpenConns(5)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)

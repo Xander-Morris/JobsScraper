@@ -1,7 +1,5 @@
 // Package coldstart holds the one-time startup work (env validation) for
-// entrypoints other than main.go: the Vercel function under backend/api/ and
-// the scheduled jobs in backend/cmd/cron. Migrations run from CI via
-// backend/cmd/migrate instead, so cold starts don't wait on them.
+// entrypoints other than main.go.
 package coldstart
 
 import (
@@ -15,7 +13,6 @@ import (
 var once sync.Once
 
 // Ensure runs startup validation once per warm container.
-// Safe to call at the top of every request.
 func Ensure() {
 	once.Do(func() {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
