@@ -15,6 +15,7 @@ export function Header() {
         </Link>
         <Link
           to="/jobs"
+          activeOptions={{ includeSearch: false }}
           className="text-muted-foreground no-underline hover:text-heading [&.active]:font-semibold [&.active]:text-heading"
         >
           Jobs
