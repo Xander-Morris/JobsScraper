@@ -4,7 +4,8 @@ import {
   useDeleteWorkExperienceBulletMutation,
   useDeleteWorkExperienceMutation
 } from '@/src/hooks/use-profile'
-import type { JobType, WorkExperience } from '@/src/api/schemas'
+import { useAppForm } from '@/src/hooks/use-app-form'
+import { jobTypeSchema, type JobType, type WorkExperience } from '@/src/api/schemas'
 import { Button, buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import {
@@ -13,11 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/src/components/ui/dropdown-menu'
-import { Input } from '@/src/components/ui/input'
-import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
+import { revalidateLogic } from '@tanstack/react-form'
 import { ChevronDownIcon } from 'lucide-react'
-import { useId, useState } from 'react'
+import { z } from 'zod'
 
 const jobTypeOptions: { value: JobType; label: string }[] = [
   { value: 'internship', label: 'Internship' },
@@ -26,32 +26,51 @@ const jobTypeOptions: { value: JobType; label: string }[] = [
   { value: 'contract', label: 'Contract' }
 ]
 
+const required = z.string().trim().min(1, 'Required')
+
+const workExperienceFormSchema = z
+  .object({
+    company: required,
+    job_title: required,
+    job_type: jobTypeSchema,
+    location: z.string(),
+    start_date: z.string(),
+    end_date: z.string()
+  })
+  .refine((v) => !v.start_date || !v.end_date || v.end_date >= v.start_date, {
+    message: 'End is before start',
+    path: ['end_date']
+  })
+
+function jobTypeLabel(jobType: string) {
+  return jobTypeOptions.find((option) => option.value === jobType)?.label ?? jobType
+}
+
 export function WorkExperienceSection({ workExperience }: { workExperience: WorkExperience[] }) {
   const addWorkExperience = useAddWorkExperienceMutation()
   const deleteWorkExperience = useDeleteWorkExperienceMutation()
-  const [company, setCompany] = useState('')
-  const [jobTitle, setJobTitle] = useState('')
-  const [jobType, setJobType] = useState<JobType>('internship')
-  const [location, setLocation] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const id = useId()
 
-  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    addWorkExperience.mutate(
-      { company, job_title: jobTitle, job_type: jobType, location, start_date: startDate, end_date: endDate },
-      {
-        onSuccess: () => {
-          setCompany('')
-          setJobTitle('')
-          setLocation('')
-          setStartDate('')
-          setEndDate('')
-        }
-      }
-    )
-  }
+  const form = useAppForm({
+    defaultValues: {
+      company: '',
+      job_title: '',
+      job_type: 'internship' as JobType,
+      location: '',
+      start_date: '',
+      end_date: ''
+    },
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: workExperienceFormSchema },
+    onSubmit: async ({ value, formApi }) => {
+      await addWorkExperience.mutateAsync({
+        ...value,
+        company: value.company.trim(),
+        job_title: value.job_title.trim(),
+        location: value.location.trim()
+      })
+      formApi.reset()
+    }
+  })
 
   return (
     <Card>
@@ -70,69 +89,36 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
             ))}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-company`} className="sr-only">
-              Company
-            </Label>
-            <Input
-              id={`${id}-company`}
-              required
-              placeholder="Company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-title`} className="sr-only">
-              Job title
-            </Label>
-            <Input
-              id={`${id}-title`}
-              required
-              placeholder="Job title"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-            />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(buttonVariants({ variant: 'outline' }), 'w-32 justify-between font-normal')}
-            >
-              {jobTypeOptions.find((option) => option.value === jobType)?.label}
-              <ChevronDownIcon className="opacity-50" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {jobTypeOptions.map((option) => (
-                <DropdownMenuItem key={option.value} onClick={() => setJobType(option.value)}>
-                  {option.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-location`} className="sr-only">
-              Location
-            </Label>
-            <Input
-              id={`${id}-location`}
-              placeholder="Location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-start`}>Start date</Label>
-            <Input id={`${id}-start`} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-end`}>End date</Label>
-            <Input id={`${id}-end`} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-          <Button type="submit" disabled={addWorkExperience.isPending}>
-            Add
-          </Button>
-        </form>
+        <form.AppForm>
+          <form.Form className="flex flex-wrap items-end gap-2">
+            <form.AppField name="company">{(f) => <f.TextField label="Company" srOnlyLabel />}</form.AppField>
+            <form.AppField name="job_title">{(f) => <f.TextField label="Job title" srOnlyLabel />}</form.AppField>
+            <form.Field name="job_type">
+              {(f) => (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label="Job type"
+                    className={cn(buttonVariants({ variant: 'outline' }), 'w-32 justify-between font-normal')}
+                  >
+                    {jobTypeLabel(f.state.value)}
+                    <ChevronDownIcon className="opacity-50" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {jobTypeOptions.map((option) => (
+                      <DropdownMenuItem key={option.value} onClick={() => f.handleChange(option.value)}>
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </form.Field>
+            <form.AppField name="location">{(f) => <f.TextField label="Location" srOnlyLabel />}</form.AppField>
+            <form.AppField name="start_date">{(f) => <f.TextField label="Start date" type="date" />}</form.AppField>
+            <form.AppField name="end_date">{(f) => <f.TextField label="End date" type="date" />}</form.AppField>
+            <form.SubmitButton>Add</form.SubmitButton>
+          </form.Form>
+        </form.AppForm>
       </CardContent>
     </Card>
   )
@@ -141,14 +127,16 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
 function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDelete: () => void }) {
   const addBullet = useAddWorkExperienceBulletMutation()
   const deleteBullet = useDeleteWorkExperienceBulletMutation()
-  const [bullet, setBullet] = useState('')
-  const id = useId()
 
-  function handleAddBullet(e: React.SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!bullet.trim()) return
-    addBullet.mutate({ workExperienceId: entry.id, req: { bullet: bullet.trim() } }, { onSuccess: () => setBullet('') })
-  }
+  const form = useAppForm({
+    defaultValues: { bullet: '' },
+    onSubmit: async ({ value, formApi }) => {
+      const bullet = value.bullet.trim()
+      if (!bullet) return
+      await addBullet.mutateAsync({ workExperienceId: entry.id, req: { bullet } })
+      formApi.reset()
+    }
+  })
 
   return (
     <div className="rounded-lg border border-border p-3">
@@ -158,7 +146,7 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
             {entry.job_title} · {entry.company}
           </p>
           <p className="text-xs text-muted-foreground">
-            {jobTypeOptions.find((option) => option.value === entry.job_type)?.label ?? entry.job_type}
+            {jobTypeLabel(entry.job_type)}
             {entry.location ? ` · ${entry.location}` : ''}
             {entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}
           </p>
@@ -184,21 +172,14 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
           ))}
         </ul>
       )}
-      <form onSubmit={handleAddBullet} className="mt-2 flex gap-2">
-        <Label htmlFor={id} className="sr-only">
-          Add a bullet point
-        </Label>
-        <Input
-          id={id}
-          placeholder="Add a bullet point"
-          value={bullet}
-          onChange={(e) => setBullet(e.target.value)}
-          className="flex-1"
-        />
-        <Button type="submit" disabled={addBullet.isPending}>
-          Add
-        </Button>
-      </form>
+      <form.AppForm>
+        <form.Form className="mt-2 flex gap-2">
+          <form.AppField name="bullet">
+            {(f) => <f.TextField label="Add a bullet point" srOnlyLabel className="flex-1" />}
+          </form.AppField>
+          <form.SubmitButton>Add</form.SubmitButton>
+        </form.Form>
+      </form.AppForm>
     </div>
   )
 }

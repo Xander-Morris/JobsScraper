@@ -40,9 +40,18 @@ export function matchFitLabel(score: number | null | undefined, best?: number): 
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso)
   const diffMs = Date.now() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const diffMinutes = Math.floor(diffMs / (1000 * 60))
+  const diffDays = Math.floor(diffMinutes / (60 * 24))
 
-  if (diffDays <= 0) return 'today'
+  if (diffDays <= 0) {
+    if (diffMinutes < 1) return 'just now'
+    const hours = Math.floor(diffMinutes / 60)
+    const minutes = diffMinutes % 60
+    const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`
+    if (hours === 0) return `${plural(minutes, 'minute')} ago`
+    if (minutes === 0) return `${plural(hours, 'hour')} ago`
+    return `${plural(hours, 'hour')}, ${plural(minutes, 'minute')} ago`
+  }
   if (diffDays === 1) return 'yesterday'
   if (diffDays < 30) return `${diffDays}d ago`
   if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`

@@ -1,25 +1,24 @@
 import { useAddSkillMutation, useDeleteSkillMutation } from '@/src/hooks/use-profile'
+import { useAppForm } from '@/src/hooks/use-app-form'
 import type { Skill } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
-import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
-import { Input } from '@/src/components/ui/input'
-import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
 import { XIcon } from 'lucide-react'
-import { useId, useState } from 'react'
 
 export function SkillsSection({ skills }: { skills: Skill[] }) {
   const addSkill = useAddSkillMutation()
   const deleteSkill = useDeleteSkillMutation()
-  const [skill, setSkill] = useState('')
-  const id = useId()
 
-  function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!skill.trim()) return
-    addSkill.mutate({ skill: skill.trim() }, { onSuccess: () => setSkill('') })
-  }
+  const form = useAppForm({
+    defaultValues: { skill: '' },
+    onSubmit: async ({ value, formApi }) => {
+      const skill = value.skill.trim()
+      if (!skill) return
+      await addSkill.mutateAsync({ skill })
+      formApi.reset()
+    }
+  })
 
   return (
     <Card>
@@ -47,15 +46,14 @@ export function SkillsSection({ skills }: { skills: Skill[] }) {
             ))}
           </ul>
         )}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Label htmlFor={id} className="sr-only">
-            Add a skill
-          </Label>
-          <Input id={id} placeholder="Add a skill" value={skill} onChange={(e) => setSkill(e.target.value)} />
-          <Button type="submit" disabled={addSkill.isPending}>
-            Add
-          </Button>
-        </form>
+        <form.AppForm>
+          <form.Form className="flex gap-2">
+            <form.AppField name="skill">
+              {(f) => <f.TextField label="Add a skill" srOnlyLabel className="flex-1" />}
+            </form.AppField>
+            <form.SubmitButton>Add</form.SubmitButton>
+          </form.Form>
+        </form.AppForm>
       </CardContent>
     </Card>
   )
