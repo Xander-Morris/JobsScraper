@@ -16,7 +16,7 @@ const embedJobsBatchSize = 50
 const maxEmbeddingChars = 2000
 
 // EmbedPendingJobs embeds every job with a NULL embedding, in batches, until
-// none are left. 
+// none are left.
 func EmbedPendingJobs(ctx context.Context) error {
 	for {
 		n, err := embedNextJobBatch(ctx)
