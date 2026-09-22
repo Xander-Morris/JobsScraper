@@ -2,23 +2,65 @@ package jobs
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 )
 
+// feedTimeout bounds one request to a single-endpoint feed.
+const feedTimeout = 10 * time.Second
+
+// boardFeedTimeout is longer because one fetch walks every board on the ATS.
+const boardFeedTimeout = 60 * time.Second
+
+// feed is what every source needs to reach its API: a client, the User-Agent
+// we identify as, and the endpoint, which tests point at a local server.
+type feed struct {
+	HTTPClient *http.Client
+	UserAgent  string
+	Endpoint   string
+}
+
+func newFeed(userAgent, endpoint string) feed {
+	return feed{
+		HTTPClient: &http.Client{Timeout: feedTimeout},
+		UserAgent:  userAgent,
+		Endpoint:   endpoint,
+	}
+}
+
+func newBoardFeed(userAgent, endpoint string) feed {
+	return feed{
+		HTTPClient: &http.Client{Timeout: boardFeedTimeout},
+		UserAgent:  userAgent,
+		Endpoint:   endpoint,
+	}
+}
+
 // getJSON GETs url and decodes the JSON body into dest.
-func getJSON(client *http.Client, userAgent, url string, dest any) error {
+func (f feed) getJSON(url string, dest any) error {
+	return f.get(url, func(r io.Reader) error { return json.NewDecoder(r).Decode(dest) })
+}
+
+// getXML GETs url and decodes the XML body into dest.
+func (f feed) getXML(url string, dest any) error {
+	return f.get(url, func(r io.Reader) error { return xml.NewDecoder(r).Decode(dest) })
+}
+
+func (f feed) get(url string, decode func(io.Reader) error) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", f.UserAgent)
 
-	resp, err := client.Do(req)
+	resp, err := f.HTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch %s: %w", url, err)
 	}
@@ -28,7 +70,7 @@ func getJSON(client *http.Client, userAgent, url string, dest any) error {
 		return fmt.Errorf("%s returned status %d", url, resp.StatusCode)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+	if err := decode(resp.Body); err != nil {
 		return fmt.Errorf("decode %s: %w", url, err)
 	}
 

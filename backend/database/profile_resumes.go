@@ -43,13 +43,7 @@ type ResumeExtraction struct {
 }
 
 func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := db.QueryContext(ctx, `SELECT id, file_name, content_type, file_size, is_active, created_at, updated_at
+	rows, err := db().QueryContext(ctx, `SELECT id, file_name, content_type, file_size, is_active, created_at, updated_at
 		FROM profile_resumes WHERE profile_id = $1 ORDER BY updated_at DESC, id DESC`, profileID)
 
 	if err != nil {
@@ -76,14 +70,8 @@ func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) 
 // AddResume marks the new resume active if it's the profile's first, so
 // relevance sorting has something to work with right away.
 func AddResume(ctx context.Context, profileID int64, fileName, contentType string, content []byte) (int64, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
-	}
-
 	var id int64
-	err = db.QueryRowContext(ctx, `INSERT INTO profile_resumes (profile_id, file_name, content_type, file_size, content, is_active)
+	err := db().QueryRowContext(ctx, `INSERT INTO profile_resumes (profile_id, file_name, content_type, file_size, content, is_active)
 		VALUES ($1, $2, $3, $4, $5, NOT EXISTS (SELECT 1 FROM profile_resumes WHERE profile_id = $1))
 		RETURNING id`, profileID, fileName, contentType, len(content), content).Scan(&id)
 
@@ -93,14 +81,8 @@ func AddResume(ctx context.Context, profileID int64, fileName, contentType strin
 // SetActiveResume makes resumeID the profile's one active resume (the relevance
 // signal for job search) and unmarks whichever one was active before.
 func SetActiveResume(ctx context.Context, profileID, resumeID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
 	var exists bool
-	err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profile_resumes WHERE id = $1 AND profile_id = $2)`,
+	err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profile_resumes WHERE id = $1 AND profile_id = $2)`,
 		resumeID, profileID).Scan(&exists)
 
 	if err != nil {
@@ -111,19 +93,13 @@ func SetActiveResume(ctx context.Context, profileID, resumeID int64) error {
 		return sql.ErrNoRows
 	}
 
-	_, err = db.ExecContext(ctx, `UPDATE profile_resumes SET is_active = (id = $2) WHERE profile_id = $1`, profileID, resumeID)
+	_, err = db().ExecContext(ctx, `UPDATE profile_resumes SET is_active = (id = $2) WHERE profile_id = $1`, profileID, resumeID)
 
 	return err
 }
 
 func ReplaceResume(ctx context.Context, profileID, resumeID int64, fileName, contentType string, content []byte) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `UPDATE profile_resumes
+	result, err := db().ExecContext(ctx, `UPDATE profile_resumes
 		SET file_name = $1, content_type = $2, file_size = $3, content = $4, updated_at = NOW()
 		WHERE id = $5 AND profile_id = $6`, fileName, contentType, len(content), content, resumeID, profileID)
 
@@ -145,13 +121,7 @@ func ReplaceResume(ctx context.Context, profileID, resumeID int64, fileName, con
 }
 
 func RenameResume(ctx context.Context, profileID, resumeID int64, fileName string) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `UPDATE profile_resumes SET file_name = $1, updated_at = NOW()
+	result, err := db().ExecContext(ctx, `UPDATE profile_resumes SET file_name = $1, updated_at = NOW()
 		WHERE id = $2 AND profile_id = $3`, fileName, resumeID, profileID)
 
 	if err != nil {
@@ -172,15 +142,9 @@ func RenameResume(ctx context.Context, profileID, resumeID int64, fileName strin
 }
 
 func GetResume(ctx context.Context, profileID, resumeID int64) (ProfileResume, []byte, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return ProfileResume{}, nil, err
-	}
-
 	var resume ProfileResume
 	var content []byte
-	err = db.QueryRowContext(ctx, `SELECT id, file_name, content_type, file_size, content, created_at, updated_at
+	err := db().QueryRowContext(ctx, `SELECT id, file_name, content_type, file_size, content, created_at, updated_at
 		FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID).Scan(
 		&resume.ID, &resume.FileName, &resume.ContentType, &resume.FileSize, &content, &resume.CreatedAt, &resume.UpdatedAt,
 	)
@@ -189,13 +153,7 @@ func GetResume(ctx context.Context, profileID, resumeID int64) (ProfileResume, [
 }
 
 func DeleteResume(ctx context.Context, profileID, resumeID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `DELETE FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID)
+	result, err := db().ExecContext(ctx, `DELETE FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID)
 
 	if err != nil {
 		return err
@@ -215,13 +173,7 @@ func DeleteResume(ctx context.Context, profileID, resumeID int64) error {
 }
 
 func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status)
+	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status)
 		VALUES ($1, 'pending')
 		ON CONFLICT (resume_id) DO UPDATE SET status = 'pending', error = NULL, updated_at = NOW()`, resumeID)
 
@@ -229,12 +181,6 @@ func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
 }
 
 func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
 	skills, err := json.Marshal(extracted.Skills)
 	if err != nil {
 		return fmt.Errorf("encode skills: %w", err)
@@ -255,7 +201,7 @@ func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *
 		return fmt.Errorf("encode projects: %w", err)
 	}
 
-	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions
+	_, err = db().ExecContext(ctx, `INSERT INTO profile_resume_extractions
 			(resume_id, status, full_name, email, phone, linked_in, github, portfolio, summary, skills, education, work_experience, projects, error)
 		VALUES ($1, 'completed', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL)
 		ON CONFLICT (resume_id) DO UPDATE SET
@@ -271,13 +217,7 @@ func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *
 }
 
 func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, errMsg string) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status, error)
+	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status, error)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (resume_id) DO UPDATE SET status = excluded.status, error = excluded.error, updated_at = NOW()`,
 		resumeID, status, errMsg)
@@ -290,13 +230,7 @@ func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, er
 // than treat them as extraction failures, since search/digest just fall back
 // to keyword matching without an embedding.
 func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float32) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `UPDATE profile_resume_extractions SET embedding = $1 WHERE resume_id = $2`,
+	_, err := db().ExecContext(ctx, `UPDATE profile_resume_extractions SET embedding = $1 WHERE resume_id = $2`,
 		pgvector.NewVector(embedding), resumeID)
 
 	return err
@@ -309,13 +243,7 @@ const resumeExtractionSelect = `SELECT e.resume_id, e.status, e.full_name, e.ema
 	JOIN profile_resumes r ON r.id = e.resume_id`
 
 func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return ResumeExtraction{}, err
-	}
-
-	return scanResumeExtraction(db.QueryRowContext(ctx, resumeExtractionSelect+`
+	return scanResumeExtraction(db().QueryRowContext(ctx, resumeExtractionSelect+`
 		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID))
 }
 
@@ -376,14 +304,8 @@ func scanResumeExtraction(row rowScanner) (ResumeExtraction, error) {
 // active resume, or its extraction isn't completed yet. Both are normal,
 // expected states, not failures.
 func GetActiveResumeExtraction(ctx context.Context, profileID int64) (extraction ResumeExtraction, found bool, err error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return ResumeExtraction{}, false, err
-	}
-
 	// One round trip, since this runs ahead of every signed-in job search.
-	extraction, err = scanResumeExtraction(db.QueryRowContext(ctx, resumeExtractionSelect+`
+	extraction, err = scanResumeExtraction(db().QueryRowContext(ctx, resumeExtractionSelect+`
 		WHERE r.profile_id = $1 AND r.is_active AND e.status = 'completed'`, profileID))
 
 	if err == sql.ErrNoRows {

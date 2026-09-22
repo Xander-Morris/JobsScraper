@@ -12,23 +12,17 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"main/coldstart"
 	"main/database"
+	"main/digest"
 	"main/scraper"
 	"main/server"
-	"main/utils"
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	coldstart.Ensure("DATABASE_CONNECTION", "SECRET_KEY")
 
-	if err := utils.RequireEnv("DATABASE_CONNECTION", "SECRET_KEY"); err != nil {
-		slog.Error("startup: env validation failed", "error", err)
-		os.Exit(1)
-	}
-
-	err := database.CreateTables()
-
-	if err != nil {
+	if err := database.CreateTables(); err != nil {
 		slog.Error("startup: create tables failed", "error", err)
 		os.Exit(1)
 	}
@@ -46,7 +40,7 @@ func main() {
 	})
 
 	g.Go(func() error {
-		server.StartDigestScheduler(ctx)
+		digest.StartScheduler(ctx)
 		return nil
 	})
 

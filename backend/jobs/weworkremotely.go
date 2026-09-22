@@ -1,10 +1,7 @@
 package jobs
 
 import (
-	"encoding/xml"
-	"fmt"
 	"main/utils"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -14,17 +11,11 @@ const weWorkRemotelyEndpoint = "https://weworkremotely.com/remote-jobs.rss"
 var _ JobSource = (*WeWorkRemotely)(nil)
 
 type WeWorkRemotely struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewWeWorkRemotely(userAgent string) *WeWorkRemotely {
-	return &WeWorkRemotely{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   weWorkRemotelyEndpoint,
-	}
+	return &WeWorkRemotely{newFeed(userAgent, weWorkRemotelyEndpoint)}
 }
 
 type weWorkRemotelyFeed struct {
@@ -47,29 +38,10 @@ type weWorkRemotelyItem struct {
 }
 
 func (w *WeWorkRemotely) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", w.Endpoint, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", w.UserAgent)
-	resp, err := w.HTTPClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("fetch weworkremotely feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("weworkremotely feed returned status %d", resp.StatusCode)
-	}
-
 	var parsed weWorkRemotelyFeed
 
-	if err := xml.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode weworkremotely feed: %w", err)
+	if err := w.getXML(w.Endpoint, &parsed); err != nil {
+		return nil, err
 	}
 
 	result := make([]Job, 0, len(parsed.Channel.Items))

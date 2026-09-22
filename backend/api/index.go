@@ -15,7 +15,7 @@ var once sync.Once
 var httpHandler http.Handler
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	coldstart.Ensure()
+	coldstart.Ensure("DATABASE_CONNECTION", "SECRET_KEY")
 
 	once.Do(func() { httpHandler = server.Handler() })
 

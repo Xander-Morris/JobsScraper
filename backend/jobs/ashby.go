@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"main/utils"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -23,18 +22,14 @@ var camelCaseBoundary = regexp.MustCompile(`([a-z])([A-Z])`)
 var _ JobSource = (*Ashby)(nil)
 
 type Ashby struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
-	Boards     []Board
+	feed
+	Boards []Board
 }
 
 func NewAshby(userAgent string) *Ashby {
 	return &Ashby{
-		HTTPClient: &http.Client{Timeout: 60 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   ashbyEndpoint,
-		Boards:     ashbyBoards,
+		feed:   newBoardFeed(userAgent, ashbyEndpoint),
+		Boards: ashbyBoards,
 	}
 }
 
@@ -60,7 +55,7 @@ func (a *Ashby) FetchJobs() ([]Job, error) {
 	return fetchBoards("ashby", a.Boards, func(board Board) ([]Job, error) {
 		var parsed ashbyResponse
 
-		if err := getJSON(a.HTTPClient, a.UserAgent, a.Endpoint+"/"+board.Slug, &parsed); err != nil {
+		if err := a.getJSON(a.Endpoint+"/"+board.Slug, &parsed); err != nil {
 			return nil, err
 		}
 

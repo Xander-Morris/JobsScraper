@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"main/utils"
-	"net/http"
 	"time"
 )
 
@@ -17,17 +16,11 @@ const arbeitnowMaxPages = 5
 var _ JobSource = (*Arbeitnow)(nil)
 
 type Arbeitnow struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewArbeitnow(userAgent string) *Arbeitnow {
-	return &Arbeitnow{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   arbeitnowEndpoint,
-	}
+	return &Arbeitnow{newFeed(userAgent, arbeitnowEndpoint)}
 }
 
 type arbeitnowResponse struct {
@@ -80,7 +73,7 @@ func (a *Arbeitnow) FetchJobs() ([]Job, error) {
 	for page := 1; page <= arbeitnowMaxPages; page++ {
 		var parsed arbeitnowResponse
 
-		if err := getJSON(a.HTTPClient, a.UserAgent, fmt.Sprintf("%s?page=%d", a.Endpoint, page), &parsed); err != nil {
+		if err := a.getJSON(fmt.Sprintf("%s?page=%d", a.Endpoint, page), &parsed); err != nil {
 			if len(result) > 0 {
 				slog.Warn("jobs: arbeitnow page failed, keeping earlier pages", "page", page, "error", err)
 				break

@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { FileTextIcon, SparklesIcon } from 'lucide-react'
-import { useGenerateTailoredResumeMutation, useTailoredResumeQuery } from '@/src/api/jobs'
+import { useGenerateTailoredResumeMutation, useTailoredResumeQuery } from '@/src/hooks/use-jobs'
 import type { Job } from '@/src/api/schemas'
 import { formatRelativeDate } from '@/src/lib/format'
 import { cn } from '@/src/lib/utils'
@@ -10,17 +10,15 @@ import SectionHeading from './section-heading'
 
 export default function TailoredResumeSection({
   job,
-  token,
   hasActiveResume,
   resumeReady
 }: {
   job: Job
-  token: string | null
   hasActiveResume: boolean
   resumeReady: boolean
 }) {
-  const { data: tailored, isLoading } = useTailoredResumeQuery(token, job.id)
-  const generate = useGenerateTailoredResumeMutation(token)
+  const { data: tailored, isLoading } = useTailoredResumeQuery(job.id)
+  const generate = useGenerateTailoredResumeMutation()
   const error = generate.error instanceof Error ? generate.error.message : null
 
   function handleGenerate() {

@@ -1,10 +1,7 @@
 package jobs
 
 import (
-	"encoding/json"
-	"fmt"
 	"main/utils"
-	"net/http"
 	"time"
 )
 
@@ -14,17 +11,11 @@ const jobicyEndpoint = "https://jobicy.com/api/v2/remote-jobs?count=100"
 var _ JobSource = (*Jobicy)(nil)
 
 type Jobicy struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewJobicy(userAgent string) *Jobicy {
-	return &Jobicy{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   jobicyEndpoint,
-	}
+	return &Jobicy{newFeed(userAgent, jobicyEndpoint)}
 }
 
 type jobicyResponse struct {
@@ -46,29 +37,10 @@ type jobicyJob struct {
 }
 
 func (j *Jobicy) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", j.Endpoint, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", j.UserAgent)
-	resp, err := j.HTTPClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("fetch jobicy feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jobicy feed returned status %d", resp.StatusCode)
-	}
-
 	var parsed jobicyResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode jobicy feed: %w", err)
+	if err := j.getJSON(j.Endpoint, &parsed); err != nil {
+		return nil, err
 	}
 
 	result := make([]Job, 0, len(parsed.Jobs))

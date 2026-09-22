@@ -1,6 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { API_BASE_URL, refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent } from '../api/client'
+import {
+  API_BASE_URL,
+  refreshAccessToken,
+  sessionExpiredEvent,
+  setAccessToken,
+  tokenRefreshedEvent
+} from '../api/client'
+import { queryKeys } from '../api/query-keys'
 
 const authChannelName = 'profile-auth'
 
@@ -32,17 +39,19 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
 
   const login = useCallback((next: string) => {
+    setAccessToken(next)
     setToken(next)
     setSessionMessage(null)
     channelRef.current?.postMessage({ type: 'login', token: next } satisfies AuthMessage)
   }, [])
 
   // Jobs keys don't include the token, so drop per-user data (applied, match score) on logout.
-  const clearUserJobs = useCallback(() => queryClient.removeQueries({ queryKey: ['jobs'] }), [queryClient])
+  const clearUserJobs = useCallback(() => queryClient.removeQueries({ queryKey: queryKeys.jobs }), [queryClient])
 
   const logout = useCallback(
     (message?: string) => {
       void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
+      setAccessToken(null)
       setToken(null)
       clearUserJobs()
       setSessionMessage(message ?? null)
@@ -59,9 +68,11 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
 
     channel.onmessage = (event: MessageEvent<AuthMessage>) => {
       if (event.data.type === 'login') {
+        setAccessToken(event.data.token)
         setToken(event.data.token)
         setSessionMessage(null)
       } else {
+        setAccessToken(null)
         setToken(null)
         clearUserJobs()
       }
@@ -78,7 +89,10 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
 
     initialRefresh.then((next) => {
       if (cancelled) return
-      if (next) setToken(next)
+      if (next) {
+        setAccessToken(next)
+        setToken(next)
+      }
       setIsInitializing(false)
     })
 

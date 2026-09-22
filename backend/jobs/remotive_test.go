@@ -14,12 +14,12 @@ func TestRemotiveJobToJob(t *testing.T) {
 
 	tests := []struct {
 		name string
-		raw  RemotiveJob
+		raw  remotiveJob
 		want Job
 	}{
 		{
 			name: "salary string yields same min and max from first parsed number",
-			raw: RemotiveJob{
+			raw: remotiveJob{
 				ID:                        1,
 				Title:                     "Backend Engineer",
 				CompanyName:               "RemoteCo",
@@ -46,7 +46,7 @@ func TestRemotiveJobToJob(t *testing.T) {
 		},
 		{
 			name: "empty salary and unparsable date leave those fields unset",
-			raw: RemotiveJob{
+			raw: remotiveJob{
 				ID:                        2,
 				Title:                     "Support Engineer",
 				CompanyName:               "RemoteCo",

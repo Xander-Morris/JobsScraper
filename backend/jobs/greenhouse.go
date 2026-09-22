@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"main/utils"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -24,18 +23,14 @@ var greenhouseBoards = []Board{
 var _ JobSource = (*Greenhouse)(nil)
 
 type Greenhouse struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
-	Boards     []Board
+	feed
+	Boards []Board
 }
 
 func NewGreenhouse(userAgent string) *Greenhouse {
 	return &Greenhouse{
-		HTTPClient: &http.Client{Timeout: 60 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   greenhouseEndpoint,
-		Boards:     greenhouseBoards,
+		feed:   newBoardFeed(userAgent, greenhouseEndpoint),
+		Boards: greenhouseBoards,
 	}
 }
 
@@ -64,7 +59,7 @@ func (g *Greenhouse) FetchJobs() ([]Job, error) {
 	return fetchBoards("greenhouse", g.Boards, func(board Board) ([]Job, error) {
 		var parsed greenhouseResponse
 
-		if err := getJSON(g.HTTPClient, g.UserAgent, g.Endpoint+"/"+board.Slug+"/jobs?content=true", &parsed); err != nil {
+		if err := g.getJSON(g.Endpoint+"/"+board.Slug+"/jobs?content=true", &parsed); err != nil {
 			return nil, err
 		}
 

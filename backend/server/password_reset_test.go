@@ -86,11 +86,7 @@ func TestPasswordResetRejectsExpiredToken(t *testing.T) {
 		t.Fatalf("create reset token: %v", err)
 	}
 
-	db, err := database.GetDb()
-	if err != nil {
-		t.Fatalf("get db: %v", err)
-	}
-	if _, err := db.Exec("UPDATE profile_password_reset_tokens SET expires_at = NOW() - INTERVAL '1 minute' WHERE profile_id = $1", profileID); err != nil {
+	if _, err := database.DB().Exec("UPDATE profile_password_reset_tokens SET expires_at = NOW() - INTERVAL '1 minute' WHERE profile_id = $1", profileID); err != nil {
 		t.Fatalf("expire token: %v", err)
 	}
 

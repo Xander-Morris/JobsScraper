@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -21,13 +20,7 @@ const maxResumeSize = 10 << 20 // 10 MiB
 
 const resumeUploadReadTimeout = 2 * time.Minute
 
-func handleUploadResume(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleUploadResume(w http.ResponseWriter, r *http.Request, profileID int64) {
 	fileName, contentType, content, err := readResumeUpload(w, r, true)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -36,8 +29,7 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 
 	id, err := database.AddResume(r.Context(), profileID, fileName, contentType, content)
 	if err != nil {
-		slog.Error("upload resume", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to upload resume")
+		writeDBError(w, "upload resume", err, "profile not found", "failed to upload resume")
 		return
 	}
 
@@ -54,16 +46,9 @@ func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleUpdateResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
@@ -87,41 +72,22 @@ func handleUpdateResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume not found")
-			return
-		}
-
-		slog.Error("update resume", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update resume")
+		writeDBError(w, "update resume", err, "resume not found", "failed to update resume")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	writeJSON(w, http.StatusOK, statusResponse("updated"))
 }
 
-func handleDownloadResume(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDownloadResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
 	resume, content, err := database.GetResume(r.Context(), profileID, resumeID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume not found")
-			return
-		}
-
-		slog.Error("download resume", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to download resume")
+		writeDBError(w, "download resume", err, "resume not found", "failed to download resume")
 		return
 	}
 
@@ -132,31 +98,18 @@ func handleDownloadResume(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
-func handleDeleteResume(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDeleteResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
 	if err := database.DeleteResume(r.Context(), profileID, resumeID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume not found")
-			return
-		}
-
-		slog.Error("delete resume", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete resume")
+		writeDBError(w, "delete resume", err, "resume not found", "failed to delete resume")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, statusResponse("deleted"))
 }
 
 // resumeExtractionTimeout bounds one extraction call, not the HTTP request it
@@ -222,89 +175,50 @@ func embedResumeExtraction(ctx context.Context, resumeID int64, extracted *llm.E
 	}
 }
 
-func handleGetResumeExtraction(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleGetResumeExtraction(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
 	extraction, err := database.GetResumeExtraction(r.Context(), profileID, resumeID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume extraction not found")
-			return
-		}
-
-		slog.Error("get resume extraction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get resume extraction")
+		writeDBError(w, "get resume extraction", err, "resume extraction not found", "failed to get resume extraction")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, extraction)
 }
 
-func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
 	resume, content, err := database.GetResume(r.Context(), profileID, resumeID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume not found")
-			return
-		}
-
-		slog.Error("trigger resume extraction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to trigger resume extraction")
+		writeDBError(w, "trigger resume extraction", err, "resume not found", "failed to trigger resume extraction")
 		return
 	}
 
 	runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "pending"})
+	writeJSON(w, http.StatusOK, statusResponse("pending"))
 }
 
-func handleActivateResume(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleActivateResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	resumeID, ok := pathID(w, r, "id", "resume")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	resumeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid resume id")
 		return
 	}
 
 	if err := database.SetActiveResume(r.Context(), profileID, resumeID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "resume not found")
-			return
-		}
-
-		slog.Error("activate resume", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to activate resume")
+		writeDBError(w, "activate resume", err, "resume not found", "failed to activate resume")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "activated"})
+	writeJSON(w, http.StatusOK, statusResponse("activated"))
 }
 
 func readResumeUpload(w http.ResponseWriter, r *http.Request, requireFile bool) (string, string, []byte, error) {

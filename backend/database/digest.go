@@ -13,13 +13,7 @@ type DigestProfile struct {
 }
 
 func ListProfilesForDigest(ctx context.Context) ([]DigestProfile, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := db.QueryContext(ctx, `SELECT id, email, last_digest_sent_at FROM profiles WHERE email_notifications_enabled`)
+	rows, err := db().QueryContext(ctx, `SELECT id, email, last_digest_sent_at FROM profiles WHERE email_notifications_enabled`)
 
 	if err != nil {
 		return nil, err
@@ -45,13 +39,7 @@ func ListProfilesForDigest(ctx context.Context) ([]DigestProfile, error) {
 }
 
 func MarkDigestSent(ctx context.Context, profileID int64, sentAt time.Time) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `UPDATE profiles SET last_digest_sent_at = $1 WHERE id = $2`, sentAt, profileID)
+	_, err := db().ExecContext(ctx, `UPDATE profiles SET last_digest_sent_at = $1 WHERE id = $2`, sentAt, profileID)
 
 	return err
 }
@@ -59,13 +47,7 @@ func MarkDigestSent(ctx context.Context, profileID int64, sentAt time.Time) erro
 // DisableEmailDigest turns off the job-match digest for a profile. Used by the
 // one-click unsubscribe link in digest emails.
 func DisableEmailDigest(ctx context.Context, profileID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `UPDATE profiles SET email_notifications_enabled = FALSE WHERE id = $1`, profileID)
+	_, err := db().ExecContext(ctx, `UPDATE profiles SET email_notifications_enabled = FALSE WHERE id = $1`, profileID)
 
 	return err
 }

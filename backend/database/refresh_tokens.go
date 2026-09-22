@@ -27,24 +27,14 @@ func refreshTokenHash(token string) string {
 }
 
 func StoreRefreshToken(ctx context.Context, profileID int64, token string, expiresAt time.Time) error {
-	db, err := GetDb()
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, `INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at)
+	_, err := db().ExecContext(ctx, `INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at)
 		VALUES ($1, $2, $3)`, refreshTokenHash(token), profileID, expiresAt)
 	return err
 }
 
 // RotateRefreshToken consumes a valid token and replaces it with a new one.
 func RotateRefreshToken(ctx context.Context, oldToken, newToken string, expiresAt time.Time) (int64, error) {
-	db, err := GetDb()
-	if err != nil {
-		return 0, err
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -74,11 +64,6 @@ func RotateRefreshToken(ctx context.Context, oldToken, newToken string, expiresA
 }
 
 func DeleteRefreshToken(ctx context.Context, token string) error {
-	db, err := GetDb()
-	if err != nil {
-		return err
-	}
-
-	_, err = db.ExecContext(ctx, "DELETE FROM profile_refresh_tokens WHERE token_hash = $1", refreshTokenHash(token))
+	_, err := db().ExecContext(ctx, "DELETE FROM profile_refresh_tokens WHERE token_hash = $1", refreshTokenHash(token))
 	return err
 }

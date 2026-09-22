@@ -6,8 +6,7 @@ import {
   deleteWorkExperienceBullet,
   updateEducation,
   updateProfile,
-  updateWorkExperience,
-  useProfileMutation
+  updateWorkExperience
 } from './profile'
 import type { Profile, ResumeExtraction } from './schemas'
 
@@ -26,7 +25,7 @@ function asDate(value: string): string | undefined {
   return isoDatePattern.test(value) ? value : undefined
 }
 
-async function mergeBasicInfo(token: string, profile: Profile, extraction: ResumeExtraction): Promise<boolean> {
+async function mergeBasicInfo(profile: Profile, extraction: ResumeExtraction): Promise<boolean> {
   const nextName = profile.name || extraction.full_name
   const nextLinkedIn = profile.linked_in || extraction.linked_in
   const nextGithub = profile.github || extraction.github
@@ -39,7 +38,7 @@ async function mergeBasicInfo(token: string, profile: Profile, extraction: Resum
     nextPortfolio !== profile.portfolio
 
   if (changed) {
-    await updateProfile(token, {
+    await updateProfile({
       name: nextName,
       address: profile.address,
       linked_in: nextLinkedIn,
@@ -52,7 +51,7 @@ async function mergeBasicInfo(token: string, profile: Profile, extraction: Resum
   return changed
 }
 
-async function mergeSkills(token: string, profile: Profile, extraction: ResumeExtraction): Promise<number> {
+async function mergeSkills(profile: Profile, extraction: ResumeExtraction): Promise<number> {
   const existingSkills = new Set((profile.skills ?? []).map((s) => s.skill.trim().toLowerCase()))
   let added = 0
 
@@ -60,7 +59,7 @@ async function mergeSkills(token: string, profile: Profile, extraction: ResumeEx
     const skill = raw.trim()
     if (!skill || existingSkills.has(skill.toLowerCase())) continue
     existingSkills.add(skill.toLowerCase())
-    await addSkill(token, { skill })
+    await addSkill({ skill })
     added++
   }
 
@@ -68,7 +67,6 @@ async function mergeSkills(token: string, profile: Profile, extraction: ResumeEx
 }
 
 async function mergeEducation(
-  token: string,
   profile: Profile,
   extraction: ResumeExtraction
 ): Promise<{ added: number; updated: number }> {
@@ -95,7 +93,7 @@ async function mergeEducation(
     if (existing) {
       if (startDate === (existing.start_date ?? undefined) && endDate === (existing.end_date ?? undefined)) continue
 
-      await updateEducation(token, existing.id, {
+      await updateEducation(existing.id, {
         school_name: schoolName,
         major,
         degree,
@@ -105,7 +103,7 @@ async function mergeEducation(
       })
       updated++
     } else {
-      await addEducation(token, { school_name: schoolName, major, degree, start_date: startDate, end_date: endDate })
+      await addEducation({ school_name: schoolName, major, degree, start_date: startDate, end_date: endDate })
       added++
     }
   }
@@ -114,7 +112,6 @@ async function mergeEducation(
 }
 
 async function mergeWorkExperience(
-  token: string,
   profile: Profile,
   extraction: ResumeExtraction
 ): Promise<{ added: number; updated: number }> {
@@ -154,7 +151,7 @@ async function mergeWorkExperience(
       if (!fieldsChanged && bulletsToAdd.length === 0 && bulletsToRemove.length === 0) continue
 
       if (fieldsChanged) {
-        await updateWorkExperience(token, existing.id, {
+        await updateWorkExperience(existing.id, {
           company,
           job_title: jobTitle,
           job_type: existing.job_type,
@@ -165,15 +162,15 @@ async function mergeWorkExperience(
       }
 
       for (const bullet of bulletsToAdd) {
-        await addWorkExperienceBullet(token, existing.id, { bullet })
+        await addWorkExperienceBullet(existing.id, { bullet })
       }
       for (const bullet of bulletsToRemove) {
-        await deleteWorkExperienceBullet(token, existing.id, bullet.id)
+        await deleteWorkExperienceBullet(existing.id, bullet.id)
       }
 
       updated++
     } else {
-      const { id } = await addWorkExperience(token, {
+      const { id } = await addWorkExperience({
         company,
         job_title: jobTitle,
         job_type: 'unknown',
@@ -183,7 +180,7 @@ async function mergeWorkExperience(
       })
 
       for (const bullet of extractedBullets) {
-        await addWorkExperienceBullet(token, id, { bullet })
+        await addWorkExperienceBullet(id, { bullet })
       }
 
       added++
@@ -194,24 +191,13 @@ async function mergeWorkExperience(
 }
 
 export async function applyResumeExtractionToProfile(
-  token: string,
   profile: Profile,
   extraction: ResumeExtraction
 ): Promise<ApplyResumeExtractionResult> {
-  const updatedBasicInfo = await mergeBasicInfo(token, profile, extraction)
-  const addedSkills = await mergeSkills(token, profile, extraction)
-  const { added: addedEducation, updated: updatedEducation } = await mergeEducation(token, profile, extraction)
-  const { added: addedWorkExperience, updated: updatedWorkExperience } = await mergeWorkExperience(
-    token,
-    profile,
-    extraction
-  )
+  const updatedBasicInfo = await mergeBasicInfo(profile, extraction)
+  const addedSkills = await mergeSkills(profile, extraction)
+  const { added: addedEducation, updated: updatedEducation } = await mergeEducation(profile, extraction)
+  const { added: addedWorkExperience, updated: updatedWorkExperience } = await mergeWorkExperience(profile, extraction)
 
   return { updatedBasicInfo, addedEducation, updatedEducation, addedSkills, addedWorkExperience, updatedWorkExperience }
-}
-
-export function useApplyResumeExtractionMutation(token: string | null) {
-  return useProfileMutation(({ profile, extraction }: { profile: Profile; extraction: ResumeExtraction }) =>
-    applyResumeExtractionToProfile(token!, profile, extraction)
-  )
 }

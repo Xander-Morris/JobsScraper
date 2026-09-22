@@ -14,13 +14,7 @@ func CreateTables() error {
 		return nil
 	}
 
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(db()); err != nil {
 		return err
 	}
 
@@ -219,17 +213,11 @@ func int32Ptr(v *int) *int32 {
 }
 
 func WriteJobsToDatabase(jobs []jobs.Job) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
 	if err := CreateTables(); err != nil {
 		return err
 	}
 
-	tx, err := db.Begin()
+	tx, err := db().Begin()
 
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)

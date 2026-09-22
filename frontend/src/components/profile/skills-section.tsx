@@ -1,4 +1,4 @@
-import { useAddSkillMutation, useDeleteSkillMutation } from '@/src/api/profile'
+import { useAddSkillMutation, useDeleteSkillMutation } from '@/src/hooks/use-profile'
 import type { Skill } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
@@ -6,14 +6,12 @@ import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
-import { useAuth } from '@/src/stores/profile-store'
 import { XIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 
 export function SkillsSection({ skills }: { skills: Skill[] }) {
-  const { token } = useAuth()
-  const addSkill = useAddSkillMutation(token)
-  const deleteSkill = useDeleteSkillMutation(token)
+  const addSkill = useAddSkillMutation()
+  const deleteSkill = useDeleteSkillMutation()
   const [skill, setSkill] = useState('')
   const id = useId()
 

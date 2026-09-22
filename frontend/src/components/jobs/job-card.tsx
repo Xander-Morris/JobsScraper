@@ -1,21 +1,21 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { jobQueryOptions } from '../../api/jobs'
+import { jobQueryOptions } from '@/src/hooks/use-jobs'
 import type { JobListItem } from '../../api/schemas'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
-import { useAuth } from '../../stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 import { Badge } from '../ui/badge'
 import { Card, CardContent } from '../ui/card'
 
 export function JobCard({ job, bestMatchScore }: { job: JobListItem; bestMatchScore?: number }) {
+  const { isAuthenticated } = useAuth()
   const queryClient = useQueryClient()
-  const { token } = useAuth()
   const salary = formatSalary(job.salary_min, job.salary_max)
   const fitLabel = matchFitLabel(job.match_score, bestMatchScore)
 
   // Warms the detail page before the click lands.
   function prefetchDetail() {
-    void queryClient.prefetchQuery(jobQueryOptions(job.id, token))
+    void queryClient.prefetchQuery(jobQueryOptions(job.id, isAuthenticated))
   }
 
   return (

@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"time"
 )
 
@@ -15,12 +14,7 @@ func CreatePasswordResetToken(ctx context.Context, profileID int64) (string, err
 		return "", err
 	}
 
-	db, err := GetDb()
-	if err != nil {
-		return "", err
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db().BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
@@ -47,7 +41,7 @@ func CreatePasswordResetToken(ctx context.Context, profileID int64) (string, err
 // Returns sql.ErrNoRows if the token is unknown, used, or expired.
 func ResetPassword(ctx context.Context, token, password string) (int64, error) {
 	if len(password) < 8 {
-		return 0, fmt.Errorf("%w: password must be at least 8 characters", ErrInvalidProfile)
+		return 0, invalidInput("password must be at least 8 characters")
 	}
 
 	hash, err := HashPassword(password)
@@ -55,12 +49,7 @@ func ResetPassword(ctx context.Context, token, password string) (int64, error) {
 		return 0, err
 	}
 
-	db, err := GetDb()
-	if err != nil {
-		return 0, err
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := db().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}

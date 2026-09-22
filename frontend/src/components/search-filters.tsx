@@ -1,6 +1,6 @@
 import { ChevronDownIcon, XIcon } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
-import { useTagsQuery } from '../api/tags'
+import { useTagsQuery } from '@/src/hooks/use-tags'
 import type { JobSearchState } from '../lib/job-search'
 import { cn } from '../lib/utils'
 import { badgeVariants } from './ui/badge'

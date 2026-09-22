@@ -1,17 +1,15 @@
-import { useUpdateProfileMutation } from '@/src/api/profile'
+import { useUpdateProfileMutation } from '@/src/hooks/use-profile'
 import type { Profile } from '@/src/api/schemas'
 import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { Switch } from '@/src/components/ui/switch'
-import { useAuth } from '@/src/stores/profile-store'
 import { AddressAutofill } from '@mapbox/search-js-react'
 import { useId, useState } from 'react'
 
 export function BasicInfoSection({ profile }: { profile: Profile }) {
-  const { token } = useAuth()
-  const updateProfile = useUpdateProfileMutation(token)
+  const updateProfile = useUpdateProfileMutation()
   const [name, setName] = useState(profile.name)
   const [address, setAddress] = useState(profile.address)
   const [linkedIn, setLinkedIn] = useState(profile.linked_in)

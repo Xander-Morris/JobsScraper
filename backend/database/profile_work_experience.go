@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"fmt"
 )
 
 type ProfileWorkExperienceBullet struct {
@@ -37,8 +36,8 @@ type AddWorkExperienceBulletRequest struct {
 	Position int    `json:"position"`
 }
 
-func listWorkExperienceBullets(ctx context.Context, db *sql.DB, workExperienceID int64) ([]ProfileWorkExperienceBullet, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, bullet, position FROM profiles_work_experience_bullets
+func listWorkExperienceBullets(ctx context.Context, workExperienceID int64) ([]ProfileWorkExperienceBullet, error) {
+	rows, err := db().QueryContext(ctx, `SELECT id, bullet, position FROM profiles_work_experience_bullets
 		WHERE work_experience_id = $1 ORDER BY position, id`, workExperienceID)
 
 	if err != nil {
@@ -62,8 +61,8 @@ func listWorkExperienceBullets(ctx context.Context, db *sql.DB, workExperienceID
 	return bullets, rows.Err()
 }
 
-func listWorkExperience(ctx context.Context, db *sql.DB, profileID int64) ([]ProfileWorkExperience, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, company, job_title, job_type, location, start_date, end_date
+func listWorkExperience(ctx context.Context, profileID int64) ([]ProfileWorkExperience, error) {
+	rows, err := db().QueryContext(ctx, `SELECT id, company, job_title, job_type, location, start_date, end_date
 		FROM profiles_work_experience WHERE profile_id = $1 ORDER BY start_date DESC NULLS LAST, id`, profileID)
 
 	if err != nil {
@@ -105,7 +104,7 @@ func listWorkExperience(ctx context.Context, db *sql.DB, profileID int64) ([]Pro
 	}
 
 	for i := range entries {
-		bullets, err := listWorkExperienceBullets(ctx, db, entries[i].ID)
+		bullets, err := listWorkExperienceBullets(ctx, entries[i].ID)
 
 		if err != nil {
 			return nil, err
@@ -119,31 +118,25 @@ func listWorkExperience(ctx context.Context, db *sql.DB, profileID int64) ([]Pro
 
 func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperienceRequest) (int64, error) {
 	if req.Company == "" || req.JobTitle == "" {
-		return 0, fmt.Errorf("company and job_title are required")
+		return 0, invalidInput("company and job_title are required")
 	}
 
 	jobType, ok := ParseJobType(req.JobType)
 
 	if !ok {
-		return 0, fmt.Errorf("invalid job_type: %s", req.JobType)
+		return 0, invalidInput("invalid job_type: %s", req.JobType)
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return 0, fmt.Errorf("invalid start_date: %w", err)
+		return 0, invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return 0, fmt.Errorf("invalid end_date: %w", err)
-	}
-
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
+		return 0, invalidInput("invalid end_date: %s", err)
 	}
 
 	var location *string
@@ -154,7 +147,7 @@ func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperie
 
 	var workExperienceID int64
 
-	err = db.QueryRowContext(ctx, insertStatements["profiles_work_experience"],
+	err = db().QueryRowContext(ctx, insertStatements["profiles_work_experience"],
 		profileID, req.Company, req.JobTitle, int(jobType), location, startDate, endDate).Scan(&workExperienceID)
 
 	if err != nil {
@@ -166,31 +159,25 @@ func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperie
 
 func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64, req *AddWorkExperienceRequest) error {
 	if req.Company == "" || req.JobTitle == "" {
-		return fmt.Errorf("company and job_title are required")
+		return invalidInput("company and job_title are required")
 	}
 
 	jobType, ok := ParseJobType(req.JobType)
 
 	if !ok {
-		return fmt.Errorf("invalid job_type: %s", req.JobType)
+		return invalidInput("invalid job_type: %s", req.JobType)
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return fmt.Errorf("invalid start_date: %w", err)
+		return invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return fmt.Errorf("invalid end_date: %w", err)
-	}
-
-	db, err := GetDb()
-
-	if err != nil {
-		return err
+		return invalidInput("invalid end_date: %s", err)
 	}
 
 	var location *string
@@ -199,7 +186,7 @@ func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64
 		location = &req.Location
 	}
 
-	result, err := db.ExecContext(ctx, `UPDATE profiles_work_experience
+	result, err := db().ExecContext(ctx, `UPDATE profiles_work_experience
 		SET company = $1, job_title = $2, job_type = $3, location = $4, start_date = $5, end_date = $6
 		WHERE id = $7 AND profile_id = $8`,
 		req.Company, req.JobTitle, int(jobType), location, startDate, endDate, workExperienceID, profileID)
@@ -222,17 +209,11 @@ func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64
 }
 
 func DeleteWorkExperience(ctx context.Context, profileID, workExperienceID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
+	if _, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets WHERE work_experience_id = $1`, workExperienceID); err != nil {
 		return err
 	}
 
-	if _, err := db.ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets WHERE work_experience_id = $1`, workExperienceID); err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `DELETE FROM profiles_work_experience WHERE id = $1 AND profile_id = $2`, workExperienceID, profileID)
+	result, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience WHERE id = $1 AND profile_id = $2`, workExperienceID, profileID)
 
 	if err != nil {
 		return err
@@ -253,18 +234,12 @@ func DeleteWorkExperience(ctx context.Context, profileID, workExperienceID int64
 
 func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID int64, req *AddWorkExperienceBulletRequest) (int64, error) {
 	if req.Bullet == "" {
-		return 0, fmt.Errorf("bullet is required")
-	}
-
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
+		return 0, invalidInput("bullet is required")
 	}
 
 	var owned bool
 
-	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles_work_experience WHERE id = $1 AND profile_id = $2)`,
+	if err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles_work_experience WHERE id = $1 AND profile_id = $2)`,
 		workExperienceID, profileID).Scan(&owned); err != nil {
 		return 0, err
 	}
@@ -275,7 +250,7 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 
 	var bulletID int64
 
-	err = db.QueryRowContext(ctx, insertStatements["profiles_work_experience_bullets"],
+	err := db().QueryRowContext(ctx, insertStatements["profiles_work_experience_bullets"],
 		workExperienceID, req.Bullet, req.Position).Scan(&bulletID)
 
 	if err != nil {
@@ -286,13 +261,7 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 }
 
 func DeleteWorkExperienceBullet(ctx context.Context, profileID, workExperienceID, bulletID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets
+	result, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets
 		WHERE id = $1 AND work_experience_id = $2
 		AND work_experience_id IN (SELECT id FROM profiles_work_experience WHERE profile_id = $3)`,
 		bulletID, workExperienceID, profileID)

@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +14,7 @@ import (
 
 	"main/database"
 	"main/jobs"
+	"main/relevance"
 )
 
 var datePostedLookback = map[string]time.Duration{
@@ -67,10 +66,9 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetJob(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, ok := pathID(w, r, "id", "job")
 
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job id")
+	if !ok {
 		return
 	}
 
@@ -84,65 +82,41 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 	job, err := database.GetJobByID(r.Context(), id, detailParams)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-
-		slog.Error("get job", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get job")
+		writeDBError(w, "get job", err, "job not found", "failed to get job")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, job)
 }
 
-func handleMarkJobApplied(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleMarkJobApplied(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job id")
 		return
 	}
 
 	if err := database.MarkJobApplied(r.Context(), profileID, jobID); err != nil {
-		slog.Error("mark job applied", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to mark job applied")
+		writeDBError(w, "mark job applied", err, "job not found", "failed to mark job applied")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
+	writeJSON(w, http.StatusOK, statusResponse("applied"))
 }
 
-func handleUnmarkJobApplied(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleUnmarkJobApplied(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job id")
 		return
 	}
 
 	if err := database.UnmarkJobApplied(r.Context(), profileID, jobID); err != nil {
-		slog.Error("unmark job applied", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to unmark job applied")
+		writeDBError(w, "unmark job applied", err, "job not found", "failed to unmark job applied")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "not_applied"})
+	writeJSON(w, http.StatusOK, statusResponse("not_applied"))
 }
 
 type jobSearchResponse struct {
@@ -168,7 +142,7 @@ func activeResumeSearchContext(ctx context.Context, profileID int64, logLabel st
 		return "", nil
 	}
 
-	return buildResumeSearchQuery(extraction), extraction.Embedding
+	return relevance.SearchQuery(extraction), extraction.Embedding
 }
 
 func parseJobSearchParams(r *http.Request) (*database.JobSearchParams, error) {

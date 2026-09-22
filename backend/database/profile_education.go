@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"fmt"
 )
 
 type ProfileEducation struct {
@@ -25,8 +24,8 @@ type AddEducationRequest struct {
 	EndDate    string   `json:"end_date"`
 }
 
-func listEducation(ctx context.Context, db *sql.DB, profileID int64) ([]ProfileEducation, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, school_name, major, degree, gpa, start_date, end_date
+func listEducation(ctx context.Context, profileID int64) ([]ProfileEducation, error) {
+	rows, err := db().QueryContext(ctx, `SELECT id, school_name, major, degree, gpa, start_date, end_date
 		FROM profiles_education WHERE profile_id = $1 ORDER BY start_date DESC NULLS LAST, id`, profileID)
 
 	if err != nil {
@@ -68,30 +67,24 @@ func listEducation(ctx context.Context, db *sql.DB, profileID int64) ([]ProfileE
 
 func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest) (int64, error) {
 	if req.SchoolName == "" || req.Major == "" || req.Degree == "" {
-		return 0, fmt.Errorf("school_name, major, and degree are required")
+		return 0, invalidInput("school_name, major, and degree are required")
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return 0, fmt.Errorf("invalid start_date: %w", err)
+		return 0, invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return 0, fmt.Errorf("invalid end_date: %w", err)
-	}
-
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
+		return 0, invalidInput("invalid end_date: %s", err)
 	}
 
 	var educationID int64
 
-	err = db.QueryRowContext(ctx, insertStatements["profiles_education"],
+	err = db().QueryRowContext(ctx, insertStatements["profiles_education"],
 		profileID, req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate).Scan(&educationID)
 
 	if err != nil {
@@ -103,28 +96,22 @@ func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest
 
 func UpdateEducation(ctx context.Context, profileID, educationID int64, req *AddEducationRequest) error {
 	if req.SchoolName == "" || req.Major == "" || req.Degree == "" {
-		return fmt.Errorf("school_name, major, and degree are required")
+		return invalidInput("school_name, major, and degree are required")
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return fmt.Errorf("invalid start_date: %w", err)
+		return invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return fmt.Errorf("invalid end_date: %w", err)
+		return invalidInput("invalid end_date: %s", err)
 	}
 
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `UPDATE profiles_education
+	result, err := db().ExecContext(ctx, `UPDATE profiles_education
 		SET school_name = $1, major = $2, degree = $3, gpa = $4, start_date = $5, end_date = $6
 		WHERE id = $7 AND profile_id = $8`,
 		req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate, educationID, profileID)
@@ -147,13 +134,7 @@ func UpdateEducation(ctx context.Context, profileID, educationID int64, req *Add
 }
 
 func DeleteEducation(ctx context.Context, profileID, educationID int64) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `DELETE FROM profiles_education WHERE id = $1 AND profile_id = $2`, educationID, profileID)
+	result, err := db().ExecContext(ctx, `DELETE FROM profiles_education WHERE id = $1 AND profile_id = $2`, educationID, profileID)
 
 	if err != nil {
 		return err

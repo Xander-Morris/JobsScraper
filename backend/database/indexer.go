@@ -106,12 +106,6 @@ const jobTagsColumn = `COALESCE((SELECT json_agg(t.tag ORDER BY jt.tag_id) FROM 
 	JOIN tags t ON t.id = jt.tag_id WHERE jt.job_id = j.id), '[]')`
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
 	from, whereArgs := buildJobSearchFromWhere(params)
 	query, args := buildJobSearchSelect(params, from, whereArgs)
 
@@ -122,11 +116,11 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		results, pageErr = queryJobs(ctx, db, query, args)
+		results, pageErr = queryJobs(ctx, query, args)
 	})
 
 	wg.Go(func() {
-		total, countErr = countJobSearchResults(ctx, db, from, whereArgs)
+		total, countErr = countJobSearchResults(ctx, from, whereArgs)
 	})
 
 	wg.Wait()
@@ -142,12 +136,6 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 }
 
 func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Job, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
 	args := []any{id}
 	matchScoreColumn := cmp.Or(resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery), "NULL::real")
 	appliedColumn := appliedExpr(&args, params.ProfileID)
@@ -155,7 +143,7 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, COALESCE(j.description, '')
 		FROM jobs j WHERE j.id = $1`, jobColumns, matchScoreColumn, jobTagsColumn, appliedColumn)
 
-	job, err := scanJob(db.QueryRowContext(ctx, query, args...), true)
+	job, err := scanJob(db().QueryRowContext(ctx, query, args...), true)
 
 	if err != nil {
 		return nil, err
@@ -164,8 +152,8 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	return &job, nil
 }
 
-func queryJobs(ctx context.Context, db *sql.DB, query string, args []any) ([]jobs.Job, error) {
-	rows, err := db.QueryContext(ctx, query, args...)
+func queryJobs(ctx context.Context, query string, args []any) ([]jobs.Job, error) {
+	rows, err := db().QueryContext(ctx, query, args...)
 
 	if err != nil {
 		return nil, err
@@ -188,11 +176,11 @@ func queryJobs(ctx context.Context, db *sql.DB, query string, args []any) ([]job
 	return results, rows.Err()
 }
 
-func countJobSearchResults(ctx context.Context, db *sql.DB, from string, args []any) (int, error) {
+func countJobSearchResults(ctx context.Context, from string, args []any) (int, error) {
 	var total int
 
 	query := "SELECT COUNT(*) " + from
-	err := db.QueryRowContext(ctx, query, args...).Scan(&total)
+	err := db().QueryRowContext(ctx, query, args...).Scan(&total)
 
 	return total, err
 }
@@ -399,13 +387,7 @@ func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 }
 
 func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := db.QueryContext(ctx, "SELECT tag FROM tags ORDER BY tag")
+	rows, err := db().QueryContext(ctx, "SELECT tag FROM tags ORDER BY tag")
 
 	if err != nil {
 		return nil, err

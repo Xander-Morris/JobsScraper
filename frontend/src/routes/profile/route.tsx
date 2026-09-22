@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { ApiError } from '@/src/api/client'
-import { useProfileQuery } from '@/src/api/profile'
+import { useProfileQuery } from '@/src/hooks/use-profile'
 import { AuthForms } from '@/src/components/auth/AuthForms'
 import { ProfileOutletProvider } from '@/src/components/profile/profile-context'
 import { Button } from '@/src/components/ui/button'
 import { Skeleton } from '@/src/components/ui/skeleton'
-import { useAuth } from '@/src/stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/profile')({ component: ProfileLayout })
 
@@ -28,8 +28,8 @@ function ProfileLayout() {
 }
 
 function ProfileContent() {
-  const { token, logout } = useAuth()
-  const { data: profile, error, isLoading, isError } = useProfileQuery(token)
+  const { logout } = useAuth()
+  const { data: profile, error, isLoading, isError } = useProfileQuery()
   const isInvalidSession = error instanceof ApiError && (error.status === 401 || error.status === 404)
 
   useEffect(() => {

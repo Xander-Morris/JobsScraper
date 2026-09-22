@@ -32,13 +32,7 @@ func EmbedPendingJobs(ctx context.Context) error {
 }
 
 func embedNextJobBatch(ctx context.Context) (int, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
-	}
-
-	rows, err := db.QueryContext(ctx,
+	rows, err := db().QueryContext(ctx,
 		`SELECT id, title, description FROM jobs WHERE embedding IS NULL AND coalesce(description, '') <> '' LIMIT $1`,
 		embedJobsBatchSize)
 
@@ -63,7 +57,7 @@ func embedNextJobBatch(ctx context.Context) (int, error) {
 	}
 
 	for i, id := range ids {
-		if _, err := db.ExecContext(ctx, `UPDATE jobs SET embedding = $1 WHERE id = $2`,
+		if _, err := db().ExecContext(ctx, `UPDATE jobs SET embedding = $1 WHERE id = $2`,
 			pgvector.NewVector(embeddings[i]), id); err != nil {
 			return 0, fmt.Errorf("save job embedding: %w", err)
 		}

@@ -5,17 +5,12 @@ import (
 	"log/slog"
 	"os"
 
+	"main/coldstart"
 	"main/database"
-	"main/utils"
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-
-	if err := utils.RequireEnv("DATABASE_CONNECTION"); err != nil {
-		slog.Error("migrate: env validation failed", "error", err)
-		os.Exit(1)
-	}
+	coldstart.Ensure("DATABASE_CONNECTION")
 
 	err := database.CreateTables()
 	database.CloseDb()

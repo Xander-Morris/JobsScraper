@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"main/utils"
-	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -42,17 +41,11 @@ func companyNameFromURL(url string) string {
 var _ JobSource = (*Himalayas)(nil)
 
 type Himalayas struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewHimalayas(userAgent string) *Himalayas {
-	return &Himalayas{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   himalayasEndpoint,
-	}
+	return &Himalayas{newFeed(userAgent, himalayasEndpoint)}
 }
 
 type himalayasResponse struct {
@@ -88,7 +81,7 @@ func (h *Himalayas) FetchJobs() ([]Job, error) {
 
 		var parsed himalayasResponse
 
-		if err := getJSON(h.HTTPClient, h.UserAgent, pageURL, &parsed); err != nil {
+		if err := h.getJSON(pageURL, &parsed); err != nil {
 			if len(result) > 0 {
 				slog.Warn("jobs: himalayas page failed, keeping earlier pages", "page", page, "error", err)
 				break

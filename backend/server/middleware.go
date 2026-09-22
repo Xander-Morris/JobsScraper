@@ -47,7 +47,12 @@ func parseProfileIDFromToken(tokenString string) (profileID int64, ok bool) {
 	return int64(id), true
 }
 
-func withAuth(next http.HandlerFunc) http.HandlerFunc {
+// authedHandler is a handler that only runs behind withAuth, so it takes the
+// caller's profileID as an argument instead of re-deriving it and repeating a
+// 401 branch the middleware already guarantees can't be reached.
+type authedHandler func(w http.ResponseWriter, r *http.Request, profileID int64)
+
+func withAuth(next authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tokenString, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 
@@ -64,7 +69,7 @@ func withAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		ctx := context.WithValue(r.Context(), profileIDContextKey, profileID)
-		next(w, r.WithContext(ctx))
+		next(w, r.WithContext(ctx), profileID)
 	}
 }
 

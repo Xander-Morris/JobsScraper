@@ -6,33 +6,33 @@ import {
   useJobQuery,
   useSaveTailoredResumeMutation,
   useTailoredResumeQuery
-} from '@/src/api/jobs'
-import { useProfileQuery, useResumeExtractionQuery } from '@/src/api/profile'
+} from '@/src/hooks/use-jobs'
+import { useProfileQuery, useResumeExtractionQuery } from '@/src/hooks/use-profile'
 import type { TailoredResumeContent } from '@/src/api/schemas'
 import ResumeEditor from '@/src/components/jobs/tailored-resume/resume-editor'
 import ResumePreview from '@/src/components/jobs/tailored-resume/resume-preview'
 import { Button } from '@/src/components/ui/button'
 import { Skeleton } from '@/src/components/ui/skeleton'
 import slugify from '@/src/lib/slugify'
-import { useAuth } from '@/src/stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/jobs/$jobId_/resume')({
   component: TailoredResumePage
 })
 
 function TailoredResumePage() {
+  const { isAuthenticated } = useAuth()
   const { jobId: rawJobId } = Route.useParams()
   const jobId = Number(rawJobId)
-  const { token } = useAuth()
-  const { data: job } = useJobQuery(jobId, token)
-  const { data: tailored, isLoading, isError, error } = useTailoredResumeQuery(token, jobId)
-  const { data: profile } = useProfileQuery(token)
+  const { data: job } = useJobQuery(jobId)
+  const { data: tailored, isLoading, isError, error } = useTailoredResumeQuery(jobId)
+  const { data: profile } = useProfileQuery()
   const activeResume = profile?.resumes?.find((resume) => resume.is_active) ?? null
-  const { data: extraction } = useResumeExtractionQuery(token, activeResume?.id ?? 0, {
+  const { data: extraction } = useResumeExtractionQuery(activeResume?.id ?? 0, {
     enabled: activeResume != null
   })
-  const save = useSaveTailoredResumeMutation(token, jobId)
-  const regenerate = useGenerateTailoredResumeMutation(token)
+  const save = useSaveTailoredResumeMutation(jobId)
+  const regenerate = useGenerateTailoredResumeMutation()
   const [draft, setDraft] = useState<TailoredResumeContent | null>(null)
 
   // Saving or regenerating replaces the query data, which resets the draft.
@@ -127,7 +127,7 @@ function TailoredResumePage() {
           </p>
         )}
 
-        {!token && <p className="mt-6 text-sm text-muted-foreground">Log in to view your tailored resume.</p>}
+        {!isAuthenticated && <p className="mt-6 text-sm text-muted-foreground">Log in to view your tailored resume.</p>}
 
         {tailored === null && (
           <p className="mt-6 text-sm text-muted-foreground">

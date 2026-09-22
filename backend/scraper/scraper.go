@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"main/database"
 	"main/jobs"
+	"main/schedule"
 	"sync"
 	"time"
 )
@@ -106,16 +107,6 @@ func runScraper(sources []jobs.JobSource) {
 	}
 }
 
-func runScraperSafely(sources []jobs.JobSource) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("scraper: panic during scrape cycle", "panic", r)
-		}
-	}()
-
-	runScraper(sources)
-}
-
 func allSources() []jobs.JobSource {
 	botAgent := "MyCustomScraperBot/1.0"
 
@@ -132,27 +123,21 @@ func allSources() []jobs.JobSource {
 	}
 }
 
+const jobName = "scrape"
+
+const scrapeInterval = 10 * time.Minute
+
 // RunScrapeCycle runs one fetch-all-sources-and-write pass, for cmd/cron.
 func RunScrapeCycle() {
-	runScraperSafely(allSources())
+	sources := allSources()
+
+	schedule.Once(jobName, func() { runScraper(sources) })
 }
 
-// StartScrapingJob fetches immediately, then every 10 minutes, until ctx is
-// cancelled. Run it in its own goroutine. On cancel it finishes any in-flight
-// cycle first instead of abandoning a write mid-flight.
+// StartScrapingJob fetches immediately, then every scrapeInterval, until ctx is
+// cancelled. Run it in its own goroutine.
 func StartScrapingJob(ctx context.Context) {
 	sources := allSources()
 
-	runScraperSafely(sources)
-	ticker := time.NewTicker(time.Minute * 10)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			runScraperSafely(sources)
-		}
-	}
+	schedule.Every(ctx, jobName, scrapeInterval, func() { runScraper(sources) })
 }

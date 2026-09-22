@@ -2,11 +2,8 @@ package server
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"main/database"
@@ -18,16 +15,9 @@ import (
 // the platform hard-killing the function mid-request.
 const generationTimeout = 45 * time.Second
 
-func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job id")
 		return
 	}
 
@@ -44,13 +34,7 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request) {
 
 	job, err := database.GetJobByID(r.Context(), jobID, database.JobDetailParams{})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-
-		slog.Error("generate application content: get job", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load job")
+		writeDBError(w, "generate application content: get job", err, "job not found", "failed to load job")
 		return
 	}
 

@@ -82,7 +82,7 @@ func handleConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
 
 	profileID, err := database.ResetPassword(r.Context(), req.Token, req.Password)
 	if err != nil {
-		if errors.Is(err, database.ErrInvalidProfile) {
+		if errors.Is(err, database.ErrInvalidInput) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

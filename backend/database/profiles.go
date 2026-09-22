@@ -73,7 +73,6 @@ func mustHashPassword(password string) string {
 	return hash
 }
 
-var ErrInvalidProfile = errors.New("invalid profile request")
 var errEmailVerificationTimeout = errors.New("email verification timed out")
 
 const emailVerificationTimeout = 8 * time.Second
@@ -100,16 +99,10 @@ func verifyEmail(email string) (*emailverifier.Result, error) {
 }
 
 func GetProfileByEmail(email string) (int64, string, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, "", err
-	}
-
 	var id int64
 	var password string
 
-	if err := db.QueryRow("SELECT id, password FROM profiles WHERE email=$1", email).Scan(&id, &password); err != nil {
+	if err := db().QueryRow("SELECT id, password FROM profiles WHERE email=$1", email).Scan(&id, &password); err != nil {
 		return 0, "", err
 	}
 
@@ -118,30 +111,24 @@ func GetProfileByEmail(email string) (int64, string, error) {
 
 func CreateProfile(req *ProfileRequest) (int64, error) {
 	if len(req.Email) == 0 || len(req.Password) == 0 {
-		return 0, fmt.Errorf("%w: email and password are required", ErrInvalidProfile)
+		return 0, invalidInput("email and password are required")
 	}
 	if len(req.Password) < 8 {
-		return 0, fmt.Errorf("%w: password must be at least 8 characters", ErrInvalidProfile)
+		return 0, invalidInput("password must be at least 8 characters")
 	}
 
 	result, err := verifyEmail(req.Email)
 	if errors.Is(err, errEmailVerificationTimeout) {
 		if !verifier.ParseAddress(req.Email).Valid {
-			return 0, fmt.Errorf("%w: email is invalid or undeliverable", ErrInvalidProfile)
+			return 0, invalidInput("email is invalid or undeliverable")
 		}
 	} else if err != nil {
 		return 0, fmt.Errorf("verify email: %w", err)
 	} else if !result.Syntax.Valid || !result.HasMxRecords || result.Disposable {
-		return 0, fmt.Errorf("%w: email is invalid or undeliverable", ErrInvalidProfile)
+		return 0, invalidInput("email is invalid or undeliverable")
 	}
 
-	db, err := GetDb()
-
-	if err != nil {
-		return 0, err
-	}
-
-	tx, err := db.Begin()
+	tx, err := db().Begin()
 
 	if err != nil {
 		return 0, err
@@ -159,7 +146,7 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 
 	if err := tx.QueryRow(insertStatements["profiles"], req.Email, hashedPassword).Scan(&profileID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("%w: email already registered", ErrInvalidProfile)
+			return 0, invalidInput("email already registered")
 		}
 
 		return 0, err
@@ -173,13 +160,8 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 }
 
 func ProfileExists(ctx context.Context, id int64) (bool, error) {
-	db, err := GetDb()
-	if err != nil {
-		return false, err
-	}
-
 	var exists bool
-	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles WHERE id = $1)`, id).Scan(&exists); err != nil {
+	if err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles WHERE id = $1)`, id).Scan(&exists); err != nil {
 		return false, err
 	}
 
@@ -187,15 +169,9 @@ func ProfileExists(ctx context.Context, id int64) (bool, error) {
 }
 
 func GetProfile(ctx context.Context, id int64) (*Profile, error) {
-	db, err := GetDb()
-
-	if err != nil {
-		return nil, err
-	}
-
 	profile := &Profile{ID: id}
 
-	row := db.QueryRowContext(ctx, `SELECT email, COALESCE(name, ''), COALESCE(address, ''),
+	row := db().QueryRowContext(ctx, `SELECT email, COALESCE(name, ''), COALESCE(address, ''),
 		COALESCE(linked_in, ''), COALESCE(github, ''), COALESCE(portfolio, ''), email_notifications_enabled
 		FROM profiles WHERE id = $1`, id)
 
@@ -204,7 +180,7 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 		return nil, err
 	}
 
-	education, err := listEducation(ctx, db, id)
+	education, err := listEducation(ctx, id)
 
 	if err != nil {
 		return nil, fmt.Errorf("list education: %w", err)
@@ -212,7 +188,7 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 
 	profile.Education = education
 
-	skills, err := listSkills(ctx, db, id)
+	skills, err := listSkills(ctx, id)
 
 	if err != nil {
 		return nil, fmt.Errorf("list skills: %w", err)
@@ -220,7 +196,7 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 
 	profile.Skills = skills
 
-	workExperience, err := listWorkExperience(ctx, db, id)
+	workExperience, err := listWorkExperience(ctx, id)
 
 	if err != nil {
 		return nil, fmt.Errorf("list work experience: %w", err)
@@ -240,13 +216,7 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 }
 
 func UpdateProfile(ctx context.Context, id int64, req *UpdateProfileRequest) error {
-	db, err := GetDb()
-
-	if err != nil {
-		return err
-	}
-
-	result, err := db.ExecContext(ctx, `UPDATE profiles SET name = $1, address = $2, linked_in = $3, github = $4,
+	result, err := db().ExecContext(ctx, `UPDATE profiles SET name = $1, address = $2, linked_in = $3, github = $4,
 		portfolio = $5, email_notifications_enabled = $6 WHERE id = $7`,
 		req.Name, req.Address, req.LinkedIn, req.GitHub, req.Portfolio, req.EmailNotifications, id)
 

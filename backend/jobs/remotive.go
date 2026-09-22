@@ -1,10 +1,7 @@
 package jobs
 
 import (
-	"encoding/json"
-	"fmt"
 	"main/utils"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -16,24 +13,18 @@ const remotiveEndpoint = "https://remotive.com/api/remote-jobs"
 var _ JobSource = (*Remotive)(nil)
 
 type Remotive struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewRemotive(userAgent string) *Remotive {
-	return &Remotive{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   remotiveEndpoint,
-	}
+	return &Remotive{newFeed(userAgent, remotiveEndpoint)}
 }
 
 type remotiveResponse struct {
-	Jobs []RemotiveJob `json:"jobs"`
+	Jobs []remotiveJob `json:"jobs"`
 }
 
-type RemotiveJob struct {
+type remotiveJob struct {
 	ID                        int    `json:"id"`
 	Title                     string `json:"title"`
 	CompanyName               string `json:"company_name"`
@@ -48,29 +39,10 @@ type RemotiveJob struct {
 }
 
 func (r *Remotive) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", r.Endpoint, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", r.UserAgent)
-	resp, err := r.HTTPClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("fetch remotive feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("remoteok feed returned status %d", resp.StatusCode)
-	}
-
 	var parsed remotiveResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode remotive feed: %w", err)
+	if err := r.getJSON(r.Endpoint, &parsed); err != nil {
+		return nil, err
 	}
 
 	rawJobs := parsed.Jobs
@@ -87,7 +59,7 @@ func (r *Remotive) FetchJobs() ([]Job, error) {
 	return result, nil
 }
 
-func (raw RemotiveJob) toJob() Job {
+func (raw remotiveJob) toJob() Job {
 	// job_type comes as e.g. "full_time"; spaced so it reads like other sources' type tags.
 	var tags = []string{raw.Category, strings.ReplaceAll(raw.JobType, "_", " ")}
 

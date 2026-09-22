@@ -1,12 +1,12 @@
 import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useJobQuery } from '../../api/jobs'
+import { useJobQuery } from '@/src/hooks/use-jobs'
 import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
 import { Badge } from '../../components/ui/badge'
 import { Skeleton } from '../../components/ui/skeleton'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
 import { cn } from '../../lib/utils'
-import { useAuth } from '../../stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/jobs/$jobId')({
   component: JobDetailPage
@@ -14,8 +14,8 @@ export const Route = createFileRoute('/jobs/$jobId')({
 
 function JobDetailPage() {
   const { jobId } = Route.useParams()
-  const { isAuthenticated, token } = useAuth()
-  const { data: job, isLoading, isError, error } = useJobQuery(Number(jobId), token)
+  const { isAuthenticated } = useAuth()
+  const { data: job, isLoading, isError, error } = useJobQuery(Number(jobId))
   const fitLabel = job ? matchFitLabel(job.match_score) : null
 
   return (
@@ -63,13 +63,8 @@ function JobDetailPage() {
             <OpenAndToggle job={job} />
           </header>
 
-          <div
-            className={cn(
-              'mt-8 grid items-start gap-8',
-              isAuthenticated && token && 'lg:grid-cols-[minmax(0,1fr)_22rem]'
-            )}
-          >
-            {isAuthenticated && token && (
+          <div className={cn('mt-8 grid items-start gap-8', isAuthenticated && 'lg:grid-cols-[minmax(0,1fr)_22rem]')}>
+            {isAuthenticated && (
               // Assist comes first on narrow screens and rides along in a
               // sticky rail on wide ones, so it never sits below the fold.
               <aside className="order-1 lg:order-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">

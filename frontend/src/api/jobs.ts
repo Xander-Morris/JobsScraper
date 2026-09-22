@@ -1,10 +1,9 @@
-import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { z } from 'zod'
 import { ApiError, apiFetch } from './client'
 import {
   generatedContentSchema,
   jobSchema,
   jobSearchResponseSchema,
+  statusResponseSchema,
   tailoredResumeSchema,
   type GeneratedContent,
   type Job,
@@ -12,8 +11,6 @@ import {
   type TailoredResume,
   type TailoredResumeContent
 } from './schemas'
-
-const statusResponseSchema = z.object({ status: z.string() })
 
 export interface JobSearchParams {
   q?: string
@@ -45,146 +42,45 @@ function buildJobSearchQuery(params: JobSearchParams): string {
   return search.toString()
 }
 
-export function fetchJobs(params: JobSearchParams = {}, token?: string | null): Promise<JobSearchResponse> {
+export function fetchJobs(params: JobSearchParams = {}): Promise<JobSearchResponse> {
   const qs = buildJobSearchQuery(params)
-  return apiFetch(`/api/jobs${qs ? `?${qs}` : ''}`, jobSearchResponseSchema, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined
-  })
+  return apiFetch(`/api/jobs${qs ? `?${qs}` : ''}`, jobSearchResponseSchema)
 }
 
-export function fetchJob(id: number, token?: string | null): Promise<Job> {
-  return apiFetch(`/api/jobs/${id}`, jobSchema, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined
-  })
+export function fetchJob(id: number): Promise<Job> {
+  return apiFetch(`/api/jobs/${id}`, jobSchema)
 }
 
-// Keyed on auth state, not the token: it rotates every reload. Logout clears ['jobs'].
-export function jobsQueryOptions(params: JobSearchParams, token?: string | null) {
-  return queryOptions({
-    queryKey: ['jobs', params, !!token],
-    queryFn: () => fetchJobs(params, token)
-  })
+export function markJobApplied(id: number) {
+  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, { method: 'POST' })
 }
 
-export function jobQueryOptions(id: number, token?: string | null) {
-  return queryOptions({
-    queryKey: ['jobs', id, !!token],
-    queryFn: () => fetchJob(id, token)
-  })
+export function unmarkJobApplied(id: number) {
+  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, { method: 'DELETE' })
 }
 
-export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean; token?: string | null } = {}) {
-  return useQuery({
-    ...jobsQueryOptions(params, options.token),
-    enabled: options.enabled,
-    placeholderData: keepPreviousData
-  })
+export function generateApplicationContent(jobId: number): Promise<GeneratedContent> {
+  return apiFetch(`/api/jobs/${jobId}/generate`, generatedContentSchema, { method: 'POST' })
 }
 
-export function useJobQuery(id: number, token?: string | null) {
-  return useQuery({ ...jobQueryOptions(id, token), enabled: Number.isFinite(id) })
-}
-
-export function markJobApplied(token: string, id: number) {
-  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` }
-  })
-}
-
-export function unmarkJobApplied(token: string, id: number) {
-  return apiFetch(`/api/jobs/${id}/apply`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` }
-  })
-}
-
-function useJobAppliedMutation(mutationFn: (id: number) => Promise<{ status: string }>) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jobs'] })
-    }
-  })
-}
-
-export function useMarkJobAppliedMutation(token: string | null) {
-  return useJobAppliedMutation((id: number) => markJobApplied(token!, id))
-}
-
-export function useUnmarkJobAppliedMutation(token: string | null) {
-  return useJobAppliedMutation((id: number) => unmarkJobApplied(token!, id))
-}
-
-export function generateApplicationContent(token: string, jobId: number): Promise<GeneratedContent> {
-  return apiFetch(`/api/jobs/${jobId}/generate`, generatedContentSchema, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` }
-  })
-}
-
-export function useGenerateApplicationContentMutation(token: string | null) {
-  return useMutation({
-    mutationFn: (jobId: number) => generateApplicationContent(token!, jobId)
-  })
-}
-
-const tailoredResumeKey = (jobId: number) => ['jobs', jobId, 'tailored-resume']
-
-export async function fetchTailoredResume(token: string, jobId: number): Promise<TailoredResume | null> {
+// A job with no tailored resume yet answers 404; that's an empty state, not an error.
+export async function fetchTailoredResume(jobId: number): Promise<TailoredResume | null> {
   try {
-    return await apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    return await apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema)
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null
     throw error
   }
 }
 
-export function generateTailoredResume(token: string, jobId: number): Promise<TailoredResume> {
-  return apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` }
-  })
+export function generateTailoredResume(jobId: number): Promise<TailoredResume> {
+  return apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema, { method: 'POST' })
 }
 
-export function saveTailoredResume(
-  token: string,
-  jobId: number,
-  content: TailoredResumeContent
-): Promise<TailoredResume> {
+export function saveTailoredResume(jobId: number, content: TailoredResumeContent): Promise<TailoredResume> {
   return apiFetch(`/api/jobs/${jobId}/tailored-resume`, tailoredResumeSchema, {
     method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(content)
-  })
-}
-
-export function useTailoredResumeQuery(token: string | null, jobId: number) {
-  return useQuery({
-    queryKey: tailoredResumeKey(jobId),
-    queryFn: () => fetchTailoredResume(token!, jobId),
-    enabled: !!token && Number.isFinite(jobId)
-  })
-}
-
-export function useGenerateTailoredResumeMutation(token: string | null) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (jobId: number) => generateTailoredResume(token!, jobId),
-    onSuccess: (data, jobId) => queryClient.setQueryData(tailoredResumeKey(jobId), data)
-  })
-}
-
-export function useSaveTailoredResumeMutation(token: string | null, jobId: number) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (content: TailoredResumeContent) => saveTailoredResume(token!, jobId, content),
-    onSuccess: (data) => queryClient.setQueryData(tailoredResumeKey(jobId), data)
   })
 }

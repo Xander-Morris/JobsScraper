@@ -3,7 +3,6 @@ package jobs
 import (
 	"fmt"
 	"main/utils"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -18,18 +17,14 @@ var leverBoards = []Board{
 var _ JobSource = (*Lever)(nil)
 
 type Lever struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
-	Boards     []Board
+	feed
+	Boards []Board
 }
 
 func NewLever(userAgent string) *Lever {
 	return &Lever{
-		HTTPClient: &http.Client{Timeout: 60 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   leverEndpoint,
-		Boards:     leverBoards,
+		feed:   newBoardFeed(userAgent, leverEndpoint),
+		Boards: leverBoards,
 	}
 }
 
@@ -59,7 +54,7 @@ func (l *Lever) FetchJobs() ([]Job, error) {
 	return fetchBoards("lever", l.Boards, func(board Board) ([]Job, error) {
 		var parsed []leverJob
 
-		if err := getJSON(l.HTTPClient, l.UserAgent, l.Endpoint+"/"+board.Slug+"?mode=json", &parsed); err != nil {
+		if err := l.getJSON(l.Endpoint+"/"+board.Slug+"?mode=json", &parsed); err != nil {
 			return nil, err
 		}
 

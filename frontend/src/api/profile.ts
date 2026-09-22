@@ -1,17 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { z } from 'zod'
-import { API_BASE_URL, ApiError, apiFetch } from './client'
+import { API_BASE_URL, ApiError, apiFetch, authHeaders } from './client'
 import {
   authResponseSchema,
+  idResponseSchema,
+  statusResponseSchema,
   profileSchema,
   resumeExtractionSchema,
   type AuthResponse,
   type Profile,
   type ResumeExtraction
 } from './schemas'
-
-const idResponseSchema = z.object({ id: z.number() })
-const statusResponseSchema = z.object({ status: z.string() })
 
 export interface UpdateProfileRequest {
   name: string
@@ -54,21 +51,12 @@ export interface ProfileCredentials {
   password: string
 }
 
-function authHeaders(token: string): HeadersInit {
-  return { Authorization: `Bearer ${token}` }
-}
-
-function jsonHeaders(token?: string): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? authHeaders(token) : {})
-  }
-}
+const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' }
 
 export function createProfile(email: string, password: string): Promise<AuthResponse> {
   return apiFetch('/api/profile/create', authResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: jsonHeaders,
     body: JSON.stringify({ email, password })
   })
 }
@@ -76,27 +64,15 @@ export function createProfile(email: string, password: string): Promise<AuthResp
 export function loginProfile(email: string, password: string): Promise<AuthResponse> {
   return apiFetch('/api/profile/login', authResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: jsonHeaders,
     body: JSON.stringify({ email, password })
-  })
-}
-
-export function useCreateProfileMutation() {
-  return useMutation({
-    mutationFn: ({ email, password }: ProfileCredentials) => createProfile(email, password)
-  })
-}
-
-export function useLoginMutation() {
-  return useMutation({
-    mutationFn: ({ email, password }: ProfileCredentials) => loginProfile(email, password)
   })
 }
 
 export function requestPasswordReset(email: string) {
   return apiFetch('/api/profile/password-reset', statusResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: jsonHeaders,
     body: JSON.stringify({ email })
   })
 }
@@ -104,123 +80,97 @@ export function requestPasswordReset(email: string) {
 export function confirmPasswordReset(token: string, password: string): Promise<AuthResponse> {
   return apiFetch('/api/profile/password-reset/confirm', authResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: jsonHeaders,
     body: JSON.stringify({ token, password })
   })
 }
 
-export function useRequestPasswordResetMutation() {
-  return useMutation({
-    mutationFn: (email: string) => requestPasswordReset(email)
-  })
+export function fetchProfile(): Promise<Profile> {
+  return apiFetch('/api/profile', profileSchema)
 }
 
-export function useConfirmPasswordResetMutation() {
-  return useMutation({
-    mutationFn: ({ token, password }: { token: string; password: string }) => confirmPasswordReset(token, password)
-  })
-}
-
-export function fetchProfile(token: string): Promise<Profile> {
-  return apiFetch('/api/profile', profileSchema, { headers: authHeaders(token) })
-}
-
-export function updateProfile(token: string, req: UpdateProfileRequest) {
+export function updateProfile(req: UpdateProfileRequest) {
   return apiFetch('/api/profile', statusResponseSchema, {
     method: 'PUT',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function addEducation(token: string, req: AddEducationRequest) {
+export function addEducation(req: AddEducationRequest) {
   return apiFetch('/api/profile/education', idResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function updateEducation(token: string, id: number, req: AddEducationRequest) {
+export function updateEducation(id: number, req: AddEducationRequest) {
   return apiFetch(`/api/profile/education/${id}`, statusResponseSchema, {
     method: 'PUT',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function deleteEducation(token: string, id: number) {
-  return apiFetch(`/api/profile/education/${id}`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: authHeaders(token)
-  })
+export function deleteEducation(id: number) {
+  return apiFetch(`/api/profile/education/${id}`, statusResponseSchema, { method: 'DELETE' })
 }
 
-export function addSkill(token: string, req: AddSkillRequest) {
+export function addSkill(req: AddSkillRequest) {
   return apiFetch('/api/profile/skills', idResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function deleteSkill(token: string, id: number) {
-  return apiFetch(`/api/profile/skills/${id}`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: authHeaders(token)
-  })
+export function deleteSkill(id: number) {
+  return apiFetch(`/api/profile/skills/${id}`, statusResponseSchema, { method: 'DELETE' })
 }
 
-export function addWorkExperience(token: string, req: AddWorkExperienceRequest) {
+export function addWorkExperience(req: AddWorkExperienceRequest) {
   return apiFetch('/api/profile/work-experience', idResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function updateWorkExperience(token: string, id: number, req: AddWorkExperienceRequest) {
+export function updateWorkExperience(id: number, req: AddWorkExperienceRequest) {
   return apiFetch(`/api/profile/work-experience/${id}`, statusResponseSchema, {
     method: 'PUT',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function deleteWorkExperience(token: string, id: number) {
-  return apiFetch(`/api/profile/work-experience/${id}`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: authHeaders(token)
-  })
+export function deleteWorkExperience(id: number) {
+  return apiFetch(`/api/profile/work-experience/${id}`, statusResponseSchema, { method: 'DELETE' })
 }
 
-export function addWorkExperienceBullet(token: string, workExperienceId: number, req: AddWorkExperienceBulletRequest) {
+export function addWorkExperienceBullet(workExperienceId: number, req: AddWorkExperienceBulletRequest) {
   return apiFetch(`/api/profile/work-experience/${workExperienceId}/bullets`, idResponseSchema, {
     method: 'POST',
-    headers: jsonHeaders(token),
+    headers: jsonHeaders,
     body: JSON.stringify(req)
   })
 }
 
-export function deleteWorkExperienceBullet(token: string, workExperienceId: number, id: number) {
+export function deleteWorkExperienceBullet(workExperienceId: number, id: number) {
   return apiFetch(`/api/profile/work-experience/${workExperienceId}/bullets/${id}`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: authHeaders(token)
+    method: 'DELETE'
   })
 }
 
-export function uploadResume(token: string, file: File) {
+export function uploadResume(file: File) {
   const body = new FormData()
   body.append('resume', file)
 
-  return apiFetch('/api/profile/resumes', idResponseSchema, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body
-  })
+  return apiFetch('/api/profile/resumes', idResponseSchema, { method: 'POST', body })
 }
 
-export function updateResume(token: string, id: number, update: File | string) {
+export function updateResume(id: number, update: File | string) {
   const body = new FormData()
   if (typeof update === 'string') {
     body.append('file_name', update)
@@ -228,44 +178,30 @@ export function updateResume(token: string, id: number, update: File | string) {
     body.append('resume', update)
   }
 
-  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, {
-    method: 'PUT',
-    headers: authHeaders(token),
-    body
-  })
+  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, { method: 'PUT', body })
 }
 
-export function deleteResume(token: string, id: number) {
-  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, {
-    method: 'DELETE',
-    headers: authHeaders(token)
-  })
+export function deleteResume(id: number) {
+  return apiFetch(`/api/profile/resumes/${id}`, statusResponseSchema, { method: 'DELETE' })
 }
 
-export function activateResume(token: string, id: number) {
-  return apiFetch(`/api/profile/resumes/${id}/activate`, statusResponseSchema, {
-    method: 'POST',
-    headers: authHeaders(token)
-  })
+export function activateResume(id: number) {
+  return apiFetch(`/api/profile/resumes/${id}/activate`, statusResponseSchema, { method: 'POST' })
 }
 
-export function fetchResumeExtraction(token: string, id: number): Promise<ResumeExtraction> {
-  return apiFetch(`/api/profile/resumes/${id}/extraction`, resumeExtractionSchema, {
-    headers: authHeaders(token)
-  })
+export function fetchResumeExtraction(id: number): Promise<ResumeExtraction> {
+  return apiFetch(`/api/profile/resumes/${id}/extraction`, resumeExtractionSchema)
 }
 
-export function triggerResumeExtraction(token: string, id: number) {
-  return apiFetch(`/api/profile/resumes/${id}/extraction`, statusResponseSchema, {
-    method: 'POST',
-    headers: authHeaders(token)
-  })
+export function triggerResumeExtraction(id: number) {
+  return apiFetch(`/api/profile/resumes/${id}/extraction`, statusResponseSchema, { method: 'POST' })
 }
 
-export async function downloadResume(token: string, id: number): Promise<Blob> {
+// Downloads bypass apiFetch: the response is a file, not a schema-checked JSON body.
+export async function downloadResume(id: number): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}/api/profile/resumes/${id}/download`, {
     credentials: 'include',
-    headers: authHeaders(token)
+    headers: authHeaders()
   })
 
   if (!response.ok) {
@@ -273,110 +209,4 @@ export async function downloadResume(token: string, id: number): Promise<Blob> {
   }
 
   return response.blob()
-}
-
-export function useProfileQuery(token: string | null) {
-  return useQuery({
-    queryKey: ['profile'],
-    queryFn: () => fetchProfile(token!),
-    enabled: !!token,
-    retry: (failureCount, error) =>
-      !(error instanceof ApiError && (error.status === 401 || error.status === 404)) && failureCount < 2
-  })
-}
-
-export function useProfileMutation<TArgs, TResult = unknown>(mutationFn: (args: TArgs) => Promise<TResult>) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
-    }
-  })
-}
-
-export function useUpdateProfileMutation(token: string | null) {
-  return useProfileMutation((req: UpdateProfileRequest) => updateProfile(token!, req))
-}
-
-export function useAddEducationMutation(token: string | null) {
-  return useProfileMutation((req: AddEducationRequest) => addEducation(token!, req))
-}
-
-export function useDeleteEducationMutation(token: string | null) {
-  return useProfileMutation((id: number) => deleteEducation(token!, id))
-}
-
-export function useAddSkillMutation(token: string | null) {
-  return useProfileMutation((req: AddSkillRequest) => addSkill(token!, req))
-}
-
-export function useDeleteSkillMutation(token: string | null) {
-  return useProfileMutation((id: number) => deleteSkill(token!, id))
-}
-
-export function useAddWorkExperienceMutation(token: string | null) {
-  return useProfileMutation((req: AddWorkExperienceRequest) => addWorkExperience(token!, req))
-}
-
-export function useDeleteWorkExperienceMutation(token: string | null) {
-  return useProfileMutation((id: number) => deleteWorkExperience(token!, id))
-}
-
-export function useAddWorkExperienceBulletMutation(token: string | null) {
-  return useProfileMutation(
-    ({ workExperienceId, req }: { workExperienceId: number; req: AddWorkExperienceBulletRequest }) =>
-      addWorkExperienceBullet(token!, workExperienceId, req)
-  )
-}
-
-export function useDeleteWorkExperienceBulletMutation(token: string | null) {
-  return useProfileMutation(({ workExperienceId, id }: { workExperienceId: number; id: number }) =>
-    deleteWorkExperienceBullet(token!, workExperienceId, id)
-  )
-}
-
-export function useUploadResumeMutation(token: string | null) {
-  return useProfileMutation((file: File) => uploadResume(token!, file))
-}
-
-export function useUpdateResumeMutation(token: string | null) {
-  return useProfileMutation(({ id, update }: { id: number; update: File | string }) => updateResume(token!, id, update))
-}
-
-export function useActivateResumeMutation(token: string | null) {
-  return useProfileMutation((id: number) => activateResume(token!, id))
-}
-
-export function useDeleteResumeMutation(token: string | null) {
-  return useProfileMutation((id: number) => deleteResume(token!, id))
-}
-
-export function useDownloadResumeMutation(token: string | null) {
-  return useMutation({
-    mutationFn: (id: number) => downloadResume(token!, id)
-  })
-}
-
-export function useResumeExtractionQuery(token: string | null, resumeId: number, options: { enabled: boolean }) {
-  return useQuery({
-    queryKey: ['profile', 'resume', resumeId, 'extraction'],
-    queryFn: () => fetchResumeExtraction(token!, resumeId),
-    enabled: options.enabled && !!token,
-    retry: (failureCount, error) => error instanceof ApiError && error.status === 404 && failureCount < 30,
-    retryDelay: 2000,
-    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 2000 : false)
-  })
-}
-
-export function useTriggerResumeExtractionMutation(token: string | null) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (resumeId: number) => triggerResumeExtraction(token!, resumeId),
-    onSuccess: (_data, resumeId) => {
-      queryClient.invalidateQueries({ queryKey: ['profile', 'resume', resumeId, 'extraction'] })
-    }
-  })
 }

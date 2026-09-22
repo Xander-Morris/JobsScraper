@@ -8,8 +8,8 @@ import (
 
 	"main/coldstart"
 	"main/database"
+	"main/digest"
 	"main/scraper"
-	"main/server"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 
 	jobs := map[string]func(){
 		"scrape": scraper.RunScrapeCycle,
-		"digest": server.RunDigestCycle,
+		"digest": digest.RunCycle,
 	}
 
 	run, ok := jobs[*job]
@@ -27,7 +27,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	coldstart.Ensure()
+	coldstart.Ensure("DATABASE_CONNECTION", "SECRET_KEY")
 	defer database.CloseDb()
 
 	run()

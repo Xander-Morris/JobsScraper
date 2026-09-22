@@ -1,8 +1,7 @@
-import { useGenerateApplicationContentMutation } from '@/src/api/jobs'
-import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '@/src/api/profile'
+import { useGenerateApplicationContentMutation } from '@/src/hooks/use-jobs'
+import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '@/src/hooks/use-profile'
 import type { Job } from '@/src/api/schemas'
 import { matchSkills } from '@/src/lib/skills'
-import { useAuth } from '@/src/stores/profile-store'
 import { SparklesIcon } from 'lucide-react'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader } from '../../ui/card'
@@ -14,14 +13,13 @@ import SectionHeading from './section-heading'
 import TailoredResumeSection from './tailored-resume-section'
 
 export default function JobApplyPanel({ job }: { job: Job }) {
-  const { token } = useAuth()
-  const { data: profile, isLoading: profileLoading } = useProfileQuery(token)
+  const { data: profile, isLoading: profileLoading } = useProfileQuery()
   const activeResume = profile?.resumes?.find((resume) => resume.is_active) ?? null
-  const { data: extraction } = useResumeExtractionQuery(token, activeResume?.id ?? 0, {
+  const { data: extraction } = useResumeExtractionQuery(activeResume?.id ?? 0, {
     enabled: activeResume != null
   })
-  const downloadResume = useDownloadResumeMutation(token)
-  const generateContent = useGenerateApplicationContentMutation(token)
+  const downloadResume = useDownloadResumeMutation()
+  const generateContent = useGenerateApplicationContentMutation()
   const downloadError = downloadResume.error instanceof Error ? downloadResume.error.message : null
   const generateError = generateContent.error instanceof Error ? generateContent.error.message : null
   const resumeReady = extraction?.status === 'completed'
@@ -53,12 +51,7 @@ export default function JobApplyPanel({ job }: { job: Job }) {
 
         <ResumeSection activeResume={activeResume} downloadResume={downloadResume} />
         <FitSection matched={matched} missing={missing} />
-        <TailoredResumeSection
-          job={job}
-          token={token}
-          hasActiveResume={activeResume != null}
-          resumeReady={resumeReady}
-        />
+        <TailoredResumeSection job={job} hasActiveResume={activeResume != null} resumeReady={resumeReady} />
 
         <section className="space-y-2 border-t border-border pt-3">
           <SectionHeading step={4} title="Cover letter" />

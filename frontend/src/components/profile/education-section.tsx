@@ -1,16 +1,14 @@
-import { useAddEducationMutation, useDeleteEducationMutation } from '@/src/api/profile'
+import { useAddEducationMutation, useDeleteEducationMutation } from '@/src/hooks/use-profile'
 import type { Education } from '@/src/api/schemas'
 import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
-import { useAuth } from '@/src/stores/profile-store'
 import { useId, useState } from 'react'
 
 export function EducationSection({ education }: { education: Education[] }) {
-  const { token } = useAuth()
-  const addEducation = useAddEducationMutation(token)
-  const deleteEducation = useDeleteEducationMutation(token)
+  const addEducation = useAddEducationMutation()
+  const deleteEducation = useDeleteEducationMutation()
   const [schoolName, setSchoolName] = useState('')
   const [major, setMajor] = useState('')
   const [degree, setDegree] = useState('')

@@ -3,7 +3,7 @@ import {
   useAddWorkExperienceMutation,
   useDeleteWorkExperienceBulletMutation,
   useDeleteWorkExperienceMutation
-} from '@/src/api/profile'
+} from '@/src/hooks/use-profile'
 import type { JobType, WorkExperience } from '@/src/api/schemas'
 import { Button, buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
@@ -16,7 +16,6 @@ import {
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
-import { useAuth } from '@/src/stores/profile-store'
 import { ChevronDownIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 
@@ -28,9 +27,8 @@ const jobTypeOptions: { value: JobType; label: string }[] = [
 ]
 
 export function WorkExperienceSection({ workExperience }: { workExperience: WorkExperience[] }) {
-  const { token } = useAuth()
-  const addWorkExperience = useAddWorkExperienceMutation(token)
-  const deleteWorkExperience = useDeleteWorkExperienceMutation(token)
+  const addWorkExperience = useAddWorkExperienceMutation()
+  const deleteWorkExperience = useDeleteWorkExperienceMutation()
   const [company, setCompany] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [jobType, setJobType] = useState<JobType>('internship')
@@ -141,9 +139,8 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
 }
 
 function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDelete: () => void }) {
-  const { token } = useAuth()
-  const addBullet = useAddWorkExperienceBulletMutation(token)
-  const deleteBullet = useDeleteWorkExperienceBulletMutation(token)
+  const addBullet = useAddWorkExperienceBulletMutation()
+  const deleteBullet = useDeleteWorkExperienceBulletMutation()
   const [bullet, setBullet] = useState('')
   const id = useId()
 

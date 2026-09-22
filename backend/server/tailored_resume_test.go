@@ -13,25 +13,12 @@ import (
 	"main/llm"
 )
 
-func TestHandleGetTailoredResumeUnauthorized(t *testing.T) {
-	r := httptest.NewRequest("GET", "/api/jobs/1/tailored-resume", nil)
-	r.SetPathValue("id", "1")
-	rec := httptest.NewRecorder()
-
-	handleGetTailoredResume(rec, r)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestHandleGetTailoredResumeInvalidJobID(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/jobs/abc/tailored-resume", nil)
 	r.SetPathValue("id", "abc")
-	r = withProfileID(r, 1)
 	rec := httptest.NewRecorder()
 
-	handleGetTailoredResume(rec, r)
+	handleGetTailoredResume(rec, r, 1)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -42,10 +29,9 @@ func TestHandleUpdateTailoredResumeTooLarge(t *testing.T) {
 	body := `{"summary":"` + strings.Repeat("a", maxTailoredResumeSize) + `"}`
 	r := httptest.NewRequest("PUT", "/api/jobs/1/tailored-resume", strings.NewReader(body))
 	r.SetPathValue("id", "1")
-	r = withProfileID(r, 1)
 	rec := httptest.NewRecorder()
 
-	handleUpdateTailoredResume(rec, r)
+	handleUpdateTailoredResume(rec, r, 1)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
@@ -58,10 +44,9 @@ func TestHandleGetTailoredResumeNotFound(t *testing.T) {
 
 	r := httptest.NewRequest("GET", "/api/jobs/x/tailored-resume", nil)
 	r.SetPathValue("id", strconv.FormatInt(jobID, 10))
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleGetTailoredResume(rec, r)
+	handleGetTailoredResume(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
@@ -78,10 +63,9 @@ func TestHandleGenerateTailoredResumeNoActiveResume(t *testing.T) {
 
 	r := httptest.NewRequest("POST", "/api/jobs/1/tailored-resume", nil)
 	r.SetPathValue("id", "1")
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleGenerateTailoredResume(rec, r)
+	handleGenerateTailoredResume(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
@@ -93,10 +77,9 @@ func TestHandleGenerateTailoredResumeJobNotFound(t *testing.T) {
 
 	r := httptest.NewRequest("POST", "/api/jobs/999999999/tailored-resume", nil)
 	r.SetPathValue("id", "999999999")
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleGenerateTailoredResume(rec, r)
+	handleGenerateTailoredResume(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
@@ -109,10 +92,9 @@ func TestHandleUpdateTailoredResumeNotFound(t *testing.T) {
 
 	r := httptest.NewRequest("PUT", "/api/jobs/x/tailored-resume", strings.NewReader(`{"summary":"edited"}`))
 	r.SetPathValue("id", strconv.FormatInt(jobID, 10))
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleUpdateTailoredResume(rec, r)
+	handleUpdateTailoredResume(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
@@ -135,10 +117,9 @@ func TestHandleUpdateTailoredResumeRoundTrip(t *testing.T) {
 
 	r := httptest.NewRequest("PUT", "/api/jobs/x/tailored-resume", strings.NewReader(`{"full_name":"Ada Lovelace","summary":"edited"}`))
 	r.SetPathValue("id", strconv.FormatInt(jobID, 10))
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleUpdateTailoredResume(rec, r)
+	handleUpdateTailoredResume(rec, r, profileID)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())

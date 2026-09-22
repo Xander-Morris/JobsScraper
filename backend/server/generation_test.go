@@ -36,29 +36,12 @@ func newTestProfileWithActiveResume(t *testing.T, email string) int64 {
 	return profileID
 }
 
-func withProfileID(r *http.Request, profileID int64) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), profileIDContextKey, profileID))
-}
-
-func TestHandleGenerateApplicationContentUnauthorized(t *testing.T) {
-	r := httptest.NewRequest("POST", "/api/jobs/1/generate", nil)
-	r.SetPathValue("id", "1")
-	rec := httptest.NewRecorder()
-
-	handleGenerateApplicationContent(rec, r)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestHandleGenerateApplicationContentInvalidJobID(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/jobs/abc/generate", nil)
 	r.SetPathValue("id", "abc")
-	r = withProfileID(r, 1)
 	rec := httptest.NewRecorder()
 
-	handleGenerateApplicationContent(rec, r)
+	handleGenerateApplicationContent(rec, r, 1)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -75,10 +58,9 @@ func TestHandleGenerateApplicationContentNoActiveResume(t *testing.T) {
 
 	r := httptest.NewRequest("POST", "/api/jobs/1/generate", nil)
 	r.SetPathValue("id", "1")
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleGenerateApplicationContent(rec, r)
+	handleGenerateApplicationContent(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
@@ -90,10 +72,9 @@ func TestHandleGenerateApplicationContentJobNotFound(t *testing.T) {
 
 	r := httptest.NewRequest("POST", "/api/jobs/999999999/generate", nil)
 	r.SetPathValue("id", "999999999")
-	r = withProfileID(r, profileID)
 	rec := httptest.NewRecorder()
 
-	handleGenerateApplicationContent(rec, r)
+	handleGenerateApplicationContent(rec, r, profileID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())

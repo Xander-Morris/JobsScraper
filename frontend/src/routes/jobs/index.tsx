@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo } from 'react'
-import { jobsQueryOptions, useJobsQuery, type JobSearchParams } from '../../api/jobs'
+import { jobsQueryOptions, useJobsQuery } from '@/src/hooks/use-jobs'
+import { type JobSearchParams } from '@/src/api/jobs'
 import { AuthForms } from '../../components/auth/AuthForms'
 import { JobCard } from '../../components/jobs/job-card'
 import Pagination from '../../components/pagination'
@@ -9,7 +10,7 @@ import { SearchFilters } from '../../components/search-filters'
 import { Skeleton } from '../../components/ui/skeleton'
 import { jobSearchSchema, type JobSearchState } from '../../lib/job-search'
 import { cn } from '../../lib/utils'
-import { useAuth } from '../../stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 
 const PAGE_SIZE = 20
 
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/jobs/')({
 })
 
 function JobsPage() {
-  const { isAuthenticated, isInitializing, token } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const queryClient = useQueryClient()
@@ -40,18 +41,17 @@ function JobsPage() {
     [search]
   )
 
-  const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, {
-    enabled: isAuthenticated,
-    token
-  })
+  const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, { enabled: isAuthenticated })
 
   const hasNextPage = !!data && !isPlaceholderData && (params.offset ?? 0) + PAGE_SIZE < data.total
 
   // Next page is usually the next click.
   useEffect(() => {
     if (!hasNextPage) return
-    void queryClient.prefetchQuery(jobsQueryOptions({ ...params, offset: (params.offset ?? 0) + PAGE_SIZE }, token))
-  }, [hasNextPage, params, queryClient, token])
+    void queryClient.prefetchQuery(
+      jobsQueryOptions({ ...params, offset: (params.offset ?? 0) + PAGE_SIZE }, isAuthenticated)
+    )
+  }, [hasNextPage, isAuthenticated, params, queryClient])
 
   function updateFilters(next: JobSearchState) {
     navigate({ search: { ...next, page: 1 } })

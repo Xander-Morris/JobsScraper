@@ -9,7 +9,6 @@ import (
 	"main/utils"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -133,13 +132,7 @@ func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 	profileID, err := database.CreateProfile(req)
 
 	if err != nil {
-		if errors.Is(err, database.ErrInvalidProfile) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		slog.Error("create profile", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not create profile")
+		writeDBError(w, "create profile", err, "profile not found", "could not create profile")
 		return
 	}
 
@@ -217,38 +210,18 @@ func handleLogoutProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func handleGetProfile(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleGetProfile(w http.ResponseWriter, r *http.Request, profileID int64) {
 	profile, err := database.GetProfile(r.Context(), profileID)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "profile not found")
-			return
-		}
-
-		slog.Error("get profile", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get profile")
+		writeDBError(w, "get profile", err, "profile not found", "failed to get profile")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, profile)
 }
 
-func handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleUpdateProfile(w http.ResponseWriter, r *http.Request, profileID int64) {
 	req := &database.UpdateProfileRequest{}
 
 	if err := decodeJSON(w, r, req); err != nil {
@@ -257,27 +230,14 @@ func handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.UpdateProfile(r.Context(), profileID, req); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "profile not found")
-			return
-		}
-
-		slog.Error("update profile", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		writeDBError(w, "update profile", err, "profile not found", "failed to update profile")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	writeJSON(w, http.StatusOK, statusResponse("updated"))
 }
 
-func handleAddEducation(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleAddEducation(w http.ResponseWriter, r *http.Request, profileID int64) {
 	req := &database.AddEducationRequest{}
 
 	if err := decodeJSON(w, r, req); err != nil {
@@ -288,25 +248,17 @@ func handleAddEducation(w http.ResponseWriter, r *http.Request) {
 	id, err := database.AddEducation(r.Context(), profileID, req)
 
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "add education", err, "profile not found", "failed to add education entry")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-func handleUpdateEducation(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleUpdateEducation(w http.ResponseWriter, r *http.Request, profileID int64) {
+	id, ok := pathID(w, r, "id", "education")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid education id")
 		return
 	}
 
@@ -318,55 +270,29 @@ func handleUpdateEducation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.UpdateEducation(r.Context(), profileID, id, req); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "education entry not found")
-			return
-		}
-
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "update education", err, "education entry not found", "failed to update education entry")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	writeJSON(w, http.StatusOK, statusResponse("updated"))
 }
 
-func handleDeleteEducation(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDeleteEducation(w http.ResponseWriter, r *http.Request, profileID int64) {
+	id, ok := pathID(w, r, "id", "education")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid education id")
 		return
 	}
 
 	if err := database.DeleteEducation(r.Context(), profileID, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "education entry not found")
-			return
-		}
-
-		slog.Error("delete education", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete education entry")
+		writeDBError(w, "delete education", err, "education entry not found", "failed to delete education entry")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, statusResponse("deleted"))
 }
 
-func handleAddSkill(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleAddSkill(w http.ResponseWriter, r *http.Request, profileID int64) {
 	req := &database.AddSkillRequest{}
 
 	if err := decodeJSON(w, r, req); err != nil {
@@ -377,50 +303,29 @@ func handleAddSkill(w http.ResponseWriter, r *http.Request) {
 	id, err := database.AddSkill(r.Context(), profileID, req)
 
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "add skill", err, "profile not found", "failed to add skill")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-func handleDeleteSkill(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDeleteSkill(w http.ResponseWriter, r *http.Request, profileID int64) {
+	id, ok := pathID(w, r, "id", "skill")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid skill id")
 		return
 	}
 
 	if err := database.DeleteSkill(r.Context(), profileID, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "skill not found")
-			return
-		}
-
-		slog.Error("delete skill", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete skill")
+		writeDBError(w, "delete skill", err, "skill not found", "failed to delete skill")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, statusResponse("deleted"))
 }
 
-func handleAddWorkExperience(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
-
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
+func handleAddWorkExperience(w http.ResponseWriter, r *http.Request, profileID int64) {
 	req := &database.AddWorkExperienceRequest{}
 
 	if err := decodeJSON(w, r, req); err != nil {
@@ -431,25 +336,17 @@ func handleAddWorkExperience(w http.ResponseWriter, r *http.Request) {
 	id, err := database.AddWorkExperience(r.Context(), profileID, req)
 
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "add work experience", err, "profile not found", "failed to add work experience entry")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-func handleUpdateWorkExperience(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleUpdateWorkExperience(w http.ResponseWriter, r *http.Request, profileID int64) {
+	id, ok := pathID(w, r, "id", "work experience")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid work experience id")
 		return
 	}
 
@@ -461,59 +358,32 @@ func handleUpdateWorkExperience(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.UpdateWorkExperience(r.Context(), profileID, id, req); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "work experience entry not found")
-			return
-		}
-
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "update work experience", err, "work experience entry not found", "failed to update work experience entry")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	writeJSON(w, http.StatusOK, statusResponse("updated"))
 }
 
-func handleDeleteWorkExperience(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDeleteWorkExperience(w http.ResponseWriter, r *http.Request, profileID int64) {
+	id, ok := pathID(w, r, "id", "work experience")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid work experience id")
 		return
 	}
 
 	if err := database.DeleteWorkExperience(r.Context(), profileID, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "work experience entry not found")
-			return
-		}
-
-		slog.Error("delete work experience", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete work experience entry")
+		writeDBError(w, "delete work experience", err, "work experience entry not found", "failed to delete work experience entry")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, statusResponse("deleted"))
 }
 
-func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request, profileID int64) {
+	workExperienceID, ok := pathID(w, r, "workExperienceId", "work experience")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	workExperienceID, err := strconv.ParseInt(r.PathValue("workExperienceId"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid work experience id")
 		return
 	}
 
@@ -527,50 +397,30 @@ func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
 	id, err := database.AddWorkExperienceBullet(r.Context(), profileID, workExperienceID, req)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "work experience entry not found")
-			return
-		}
-
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeDBError(w, "add work experience bullet", err, "work experience entry not found", "failed to add bullet")
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-func handleDeleteWorkExperienceBullet(w http.ResponseWriter, r *http.Request) {
-	profileID, ok := profileIDFromContext(r.Context())
+func handleDeleteWorkExperienceBullet(w http.ResponseWriter, r *http.Request, profileID int64) {
+	workExperienceID, ok := pathID(w, r, "workExperienceId", "work experience")
 
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	workExperienceID, err := strconv.ParseInt(r.PathValue("workExperienceId"), 10, 64)
+	id, ok := pathID(w, r, "id", "bullet")
 
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid work experience id")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid bullet id")
+	if !ok {
 		return
 	}
 
 	if err := database.DeleteWorkExperienceBullet(r.Context(), profileID, workExperienceID, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "bullet not found")
-			return
-		}
-
-		slog.Error("delete work experience bullet", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete bullet")
+		writeDBError(w, "delete work experience bullet", err, "bullet not found", "failed to delete bullet")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, statusResponse("deleted"))
 }

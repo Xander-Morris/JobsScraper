@@ -1,4 +1,6 @@
-package server
+// Package relevance turns a parsed resume into the text query job search and
+// the digest rank postings against.
+package relevance
 
 import (
 	"regexp"
@@ -11,7 +13,9 @@ const maxResumeQueryTerms = 40
 
 var termSplitPattern = regexp.MustCompile(`[,;:|/&]+|\band\b`)
 
-func buildResumeSearchQuery(extraction database.ResumeExtraction) string {
+// SearchQuery builds an OR-joined term query from a resume's skills, majors,
+// job titles and project technologies.
+func SearchQuery(extraction database.ResumeExtraction) string {
 	var terms []string
 
 	for _, skill := range extraction.Skills {

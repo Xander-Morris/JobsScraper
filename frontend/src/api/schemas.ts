@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { decodeHtmlEntities } from '../lib/html'
 
+// The two shapes every mutating endpoint answers with.
+export const idResponseSchema = z.object({ id: z.number() })
+export const statusResponseSchema = z.object({ status: z.string() })
+
 export const workplaceTypeSchema = z.enum(['unknown', 'remote', 'hybrid', 'in_person'])
 export type WorkplaceType = z.infer<typeof workplaceTypeSchema>
 

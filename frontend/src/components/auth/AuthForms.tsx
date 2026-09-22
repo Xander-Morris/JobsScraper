@@ -1,8 +1,8 @@
-import { useCreateProfileMutation, useLoginMutation, useRequestPasswordResetMutation } from '@/src/api/profile'
+import { useCreateProfileMutation, useLoginMutation, useRequestPasswordResetMutation } from '@/src/hooks/use-profile'
 import { Button } from '@/src/components/ui/button'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
-import { useAuth } from '@/src/stores/profile-store'
+import { useAuth } from '@/src/stores/auth-store'
 import { useId, useState, type SubmitEvent } from 'react'
 
 export function AuthForms({ prompt }: { prompt?: string } = {}) {

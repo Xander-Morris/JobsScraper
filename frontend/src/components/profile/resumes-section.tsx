@@ -6,8 +6,9 @@ import {
   useTriggerResumeExtractionMutation,
   useUpdateResumeMutation,
   useUploadResumeMutation
-} from '@/src/api/profile'
-import { useApplyResumeExtractionMutation, type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
+} from '@/src/hooks/use-profile'
+import { useApplyResumeExtractionMutation } from '@/src/hooks/use-profile'
+import { type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
 import type { Profile, Resume } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
@@ -15,7 +16,6 @@ import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { cn } from '@/src/lib/utils'
-import { useAuth } from '@/src/stores/profile-store'
 import { DownloadIcon, FileTextIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 
@@ -23,9 +23,8 @@ const acceptedResumeTypes =
   '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 export function ResumesSection({ resumes, profile }: { resumes: Resume[]; profile: Profile }) {
-  const { token } = useAuth()
-  const uploadResume = useUploadResumeMutation(token)
-  const triggerExtraction = useTriggerResumeExtractionMutation(token)
+  const uploadResume = useUploadResumeMutation()
+  const triggerExtraction = useTriggerResumeExtractionMutation()
   const [file, setFile] = useState<File | null>(null)
   const id = useId()
   const error = uploadResume.error instanceof Error ? uploadResume.error.message : null
@@ -94,12 +93,11 @@ function splitFileName(fileName: string): [string, string] {
 }
 
 function ResumeEntry({ resume, profile }: { resume: Resume; profile: Profile }) {
-  const { token } = useAuth()
-  const updateResume = useUpdateResumeMutation(token)
-  const triggerExtraction = useTriggerResumeExtractionMutation(token)
-  const deleteResume = useDeleteResumeMutation(token)
-  const activateResume = useActivateResumeMutation(token)
-  const downloadResume = useDownloadResumeMutation(token)
+  const updateResume = useUpdateResumeMutation()
+  const triggerExtraction = useTriggerResumeExtractionMutation()
+  const deleteResume = useDeleteResumeMutation()
+  const activateResume = useActivateResumeMutation()
+  const downloadResume = useDownloadResumeMutation()
   const [baseName, extension] = splitFileName(resume.file_name)
   const [fileName, setFileName] = useState(baseName)
   const replaceId = useId()
@@ -208,10 +206,9 @@ function ResumeEntry({ resume, profile }: { resume: Resume; profile: Profile }) 
 }
 
 function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profile: Profile }) {
-  const { token } = useAuth()
-  const { data, isLoading } = useResumeExtractionQuery(token, resumeId, { enabled: true })
-  const retryExtraction = useTriggerResumeExtractionMutation(token)
-  const applyExtraction = useApplyResumeExtractionMutation(token)
+  const { data, isLoading } = useResumeExtractionQuery(resumeId, { enabled: true })
+  const retryExtraction = useTriggerResumeExtractionMutation()
+  const applyExtraction = useApplyResumeExtractionMutation()
   const applyResult = applyExtraction.data ?? null
   const applyError = applyExtraction.error instanceof Error ? applyExtraction.error.message : null
 

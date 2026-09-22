@@ -2,11 +2,9 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"main/database"
@@ -15,40 +13,18 @@ import (
 
 const maxTailoredResumeSize = 64 << 10 // 64 KiB
 
-func tailoredResumeTarget(w http.ResponseWriter, r *http.Request) (profileID, jobID int64, ok bool) {
-	profileID, ok = profileIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return 0, 0, false
-	}
-
-	jobID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid job id")
-		return 0, 0, false
-	}
-
-	return profileID, jobID, true
-}
-
 func writeTailoredResume(w http.ResponseWriter, r *http.Request, profileID, jobID int64) {
 	tailored, err := database.GetTailoredResume(r.Context(), profileID, jobID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "no tailored resume for this job")
-			return
-		}
-
-		slog.Error("get tailored resume", "profile_id", profileID, "job_id", jobID, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load tailored resume")
+		writeDBError(w, "get tailored resume", err, "no tailored resume for this job", "failed to load tailored resume")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, tailored)
 }
 
-func handleGetTailoredResume(w http.ResponseWriter, r *http.Request) {
-	profileID, jobID, ok := tailoredResumeTarget(w, r)
+func handleGetTailoredResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 	if !ok {
 		return
 	}
@@ -56,8 +32,8 @@ func handleGetTailoredResume(w http.ResponseWriter, r *http.Request) {
 	writeTailoredResume(w, r, profileID, jobID)
 }
 
-func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request) {
-	profileID, jobID, ok := tailoredResumeTarget(w, r)
+func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 	if !ok {
 		return
 	}
@@ -75,13 +51,7 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request) {
 
 	job, err := database.GetJobByID(r.Context(), jobID, database.JobDetailParams{})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-
-		slog.Error("tailor resume: get job", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load job")
+		writeDBError(w, "tailor resume: get job", err, "job not found", "failed to load job")
 		return
 	}
 
@@ -126,8 +96,8 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request) {
 	writeTailoredResume(w, r, profileID, jobID)
 }
 
-func handleUpdateTailoredResume(w http.ResponseWriter, r *http.Request) {
-	profileID, jobID, ok := tailoredResumeTarget(w, r)
+func handleUpdateTailoredResume(w http.ResponseWriter, r *http.Request, profileID int64) {
+	jobID, ok := pathID(w, r, "id", "job")
 	if !ok {
 		return
 	}
@@ -147,13 +117,7 @@ func handleUpdateTailoredResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.UpdateTailoredResumeContent(r.Context(), profileID, jobID, content); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "no tailored resume for this job")
-			return
-		}
-
-		slog.Error("update tailored resume", "profile_id", profileID, "job_id", jobID, "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save tailored resume")
+		writeDBError(w, "update tailored resume", err, "no tailored resume for this job", "failed to save tailored resume")
 		return
 	}
 

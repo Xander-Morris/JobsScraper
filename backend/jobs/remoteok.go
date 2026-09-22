@@ -1,10 +1,7 @@
 package jobs
 
 import (
-	"encoding/json"
-	"fmt"
 	"main/utils"
-	"net/http"
 	"time"
 )
 
@@ -13,17 +10,11 @@ const remoteOKEndpoint = "https://remoteok.com/api"
 var _ JobSource = (*RemoteOK)(nil)
 
 type RemoteOK struct {
-	HTTPClient *http.Client
-	UserAgent  string
-	Endpoint   string
+	feed
 }
 
 func NewRemoteOK(userAgent string) *RemoteOK {
-	return &RemoteOK{
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		UserAgent:  userAgent,
-		Endpoint:   remoteOKEndpoint,
-	}
+	return &RemoteOK{newFeed(userAgent, remoteOKEndpoint)}
 }
 
 type remoteOKJob struct {
@@ -40,29 +31,10 @@ type remoteOKJob struct {
 }
 
 func (r *RemoteOK) FetchJobs() ([]Job, error) {
-	req, err := http.NewRequest("GET", r.Endpoint, nil)
-
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", r.UserAgent)
-	resp, err := r.HTTPClient.Do(req)
-
-	if err != nil {
-		return nil, fmt.Errorf("fetch remoteok feed: %w", err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("remoteok feed returned status %d", resp.StatusCode)
-	}
-
 	var rawJobs []remoteOKJob
 
-	if err := json.NewDecoder(resp.Body).Decode(&rawJobs); err != nil {
-		return nil, fmt.Errorf("decode remoteok feed: %w", err)
+	if err := r.getJSON(r.Endpoint, &rawJobs); err != nil {
+		return nil, err
 	}
 
 	result := make([]Job, 0, len(rawJobs))
