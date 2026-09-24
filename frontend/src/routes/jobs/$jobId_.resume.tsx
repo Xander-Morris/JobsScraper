@@ -2,6 +2,8 @@ import { createFileRoute, Link, useBlocker } from '@tanstack/react-router'
 import { PrinterIcon, SaveIcon, SparklesIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
+  jobQueryOptions,
+  tailoredResumeQueryOptions,
   useGenerateTailoredResumeMutation,
   useJobQuery,
   useSaveTailoredResumeMutation,
@@ -17,11 +19,17 @@ import slugify from '@/src/lib/slugify'
 import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/jobs/$jobId_/resume')({
+  loader: ({ context: { auth, queryClient }, params }) => {
+    if (!auth.isAuthenticated) return
+    const jobId = Number(params.jobId)
+    void queryClient.prefetchQuery(tailoredResumeQueryOptions(jobId))
+    void queryClient.prefetchQuery(jobQueryOptions(jobId, true))
+  },
   component: TailoredResumePage
 })
 
 function TailoredResumePage() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
   const { jobId: rawJobId } = Route.useParams()
   const jobId = Number(rawJobId)
   const { data: job } = useJobQuery(jobId)
@@ -127,7 +135,9 @@ function TailoredResumePage() {
           </p>
         )}
 
-        {!isAuthenticated && <p className="mt-6 text-sm text-muted-foreground">Log in to view your tailored resume.</p>}
+        {!isAuthenticated && !isInitializing && (
+          <p className="mt-6 text-sm text-muted-foreground">Log in to view your tailored resume.</p>
+        )}
 
         {tailored === null && (
           <p className="mt-6 text-sm text-muted-foreground">
@@ -135,7 +145,7 @@ function TailoredResumePage() {
           </p>
         )}
 
-        {isLoading && (
+        {(isInitializing || isLoading) && (
           <div className="mt-6 space-y-3" aria-label="Loading tailored resume">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />

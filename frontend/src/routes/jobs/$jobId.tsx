@@ -1,6 +1,7 @@
 import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useJobQuery } from '@/src/hooks/use-jobs'
+import { jobQueryOptions, useJobQuery } from '@/src/hooks/use-jobs'
+import { profileQueryOptions } from '@/src/hooks/use-profile'
 import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
 import { Badge } from '../../components/ui/badge'
 import { Skeleton } from '../../components/ui/skeleton'
@@ -9,13 +10,18 @@ import { cn } from '../../lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/jobs/$jobId')({
+  loader: ({ context: { auth, queryClient }, params }) => {
+    if (auth.isInitializing) return
+    void queryClient.prefetchQuery(jobQueryOptions(Number(params.jobId), auth.isAuthenticated))
+    if (auth.isAuthenticated) void queryClient.prefetchQuery(profileQueryOptions)
+  },
   component: JobDetailPage
 })
 
 function JobDetailPage() {
   const { jobId } = Route.useParams()
   const { isAuthenticated } = useAuth()
-  const { data: job, isLoading, isError, error } = useJobQuery(Number(jobId))
+  const { data: job, isPending, isError, error } = useJobQuery(Number(jobId))
   const fitLabel = job ? matchFitLabel(job.match_score) : null
 
   return (
@@ -24,7 +30,7 @@ function JobDetailPage() {
         ← Back to jobs
       </Link>
 
-      {isLoading && (
+      {isPending && (
         <div className="mt-6 space-y-3" aria-label="Loading job">
           <Skeleton className="h-8 w-2/3" />
           <Skeleton className="h-4 w-1/3" />
@@ -65,8 +71,6 @@ function JobDetailPage() {
 
           <div className={cn('mt-8 grid items-start gap-8', isAuthenticated && 'lg:grid-cols-[minmax(0,1fr)_22rem]')}>
             {isAuthenticated && (
-              // Assist comes first on narrow screens and rides along in a
-              // sticky rail on wide ones, so it never sits below the fold.
               <aside className="order-1 lg:order-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
                 <JobApplyPanel job={job} />
               </aside>

@@ -14,8 +14,27 @@ import { useAuth } from '@/src/stores/auth-store'
 
 const PAGE_SIZE = 20
 
+function toJobSearchParams(search: JobSearchState): JobSearchParams {
+  return {
+    q: search.q,
+    workplaceType: search.workplaceType,
+    jobType: search.jobType,
+    minSalary: search.minSalary,
+    maxSalary: search.maxSalary,
+    datePosted: search.datePosted,
+    tags: search.tags,
+    sort: search.sort,
+    limit: PAGE_SIZE,
+    offset: ((search.page ?? 1) - 1) * PAGE_SIZE
+  }
+}
+
 export const Route = createFileRoute('/jobs/')({
   validateSearch: jobSearchSchema,
+  loaderDeps: ({ search }) => search,
+  loader: ({ context: { auth, queryClient }, deps }) => {
+    if (auth.isAuthenticated) void queryClient.prefetchQuery(jobsQueryOptions(toJobSearchParams(deps), true))
+  },
   component: JobsPage
 })
 
@@ -25,21 +44,7 @@ function JobsPage() {
   const navigate = Route.useNavigate()
   const queryClient = useQueryClient()
 
-  const params = useMemo<JobSearchParams>(
-    () => ({
-      q: search.q,
-      workplaceType: search.workplaceType,
-      jobType: search.jobType,
-      minSalary: search.minSalary,
-      maxSalary: search.maxSalary,
-      datePosted: search.datePosted,
-      tags: search.tags,
-      sort: search.sort,
-      limit: PAGE_SIZE,
-      offset: ((search.page ?? 1) - 1) * PAGE_SIZE
-    }),
-    [search]
-  )
+  const params = useMemo(() => toJobSearchParams(search), [search])
 
   const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, { enabled: isAuthenticated })
 

@@ -16,7 +16,7 @@ const initialRefresh = refreshAccessToken()
 
 type AuthMessage = { type: 'login'; token: string } | { type: 'logout' }
 
-interface ProfileAuthContextValue {
+export interface ProfileAuthContextValue {
   token: string | null
   isAuthenticated: boolean
   isInitializing: boolean

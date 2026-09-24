@@ -5,7 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import './index.css'
 import { routeTree } from './routeTree.gen'
-import { ProfileAuthProvider } from '@/src/stores/auth-store'
+import { ProfileAuthProvider, useAuth } from '@/src/stores/auth-store'
 import { initTheme } from './lib/theme'
 
 initTheme()
@@ -22,7 +22,13 @@ const queryClient = new QueryClient({
   }
 })
 
-const router = createRouter({ routeTree })
+const router = createRouter({
+  routeTree,
+  context: { queryClient, auth: undefined! },
+  // Loaders prefetch on hover; staleTime 0 defers caching to React Query.
+  defaultPreload: 'intent',
+  defaultPreloadStaleTime: 0
+})
 
 declare module '@tanstack/react-router' {
   interface Register {
@@ -30,11 +36,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+function App() {
+  const auth = useAuth()
+  return <RouterProvider router={router} context={{ auth }} />
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ProfileAuthProvider>
-        <RouterProvider router={router} />
+        <App />
       </ProfileAuthProvider>
       <ReactQueryDevtools />
     </QueryClientProvider>

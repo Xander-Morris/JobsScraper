@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/src/api/client'
 import {
   activateResume,
@@ -56,16 +56,17 @@ export function useConfirmPasswordResetMutation() {
   })
 }
 
+export const profileQueryOptions = queryOptions({
+  queryKey: queryKeys.profile,
+  queryFn: fetchProfile,
+  retry: (failureCount, error) =>
+    !(error instanceof ApiError && (error.status === 401 || error.status === 404)) && failureCount < 2
+})
+
 export function useProfileQuery() {
   const { isAuthenticated } = useAuth()
 
-  return useQuery({
-    queryKey: queryKeys.profile,
-    queryFn: fetchProfile,
-    enabled: isAuthenticated,
-    retry: (failureCount, error) =>
-      !(error instanceof ApiError && (error.status === 401 || error.status === 404)) && failureCount < 2
-  })
+  return useQuery({ ...profileQueryOptions, enabled: isAuthenticated })
 }
 
 // useProfileMutation refetches the profile on success, since every one of these

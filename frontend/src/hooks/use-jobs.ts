@@ -30,6 +30,13 @@ export function jobQueryOptions(id: number, isAuthenticated: boolean) {
   })
 }
 
+export function tailoredResumeQueryOptions(jobId: number) {
+  return queryOptions({
+    queryKey: queryKeys.tailoredResume(jobId),
+    queryFn: () => fetchTailoredResume(jobId)
+  })
+}
+
 export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: boolean } = {}) {
   const { isAuthenticated } = useAuth()
 
@@ -41,9 +48,10 @@ export function useJobsQuery(params: JobSearchParams = {}, options: { enabled?: 
 }
 
 export function useJobQuery(id: number) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
 
-  return useQuery({ ...jobQueryOptions(id, isAuthenticated), enabled: Number.isFinite(id) })
+  // Waits out auth init so the anonymous and authed keys don't both fetch.
+  return useQuery({ ...jobQueryOptions(id, isAuthenticated), enabled: Number.isFinite(id) && !isInitializing })
 }
 
 function useJobAppliedMutation(mutationFn: (id: number) => Promise<{ status: string }>) {
@@ -72,11 +80,7 @@ export function useGenerateApplicationContentMutation() {
 export function useTailoredResumeQuery(jobId: number) {
   const { isAuthenticated } = useAuth()
 
-  return useQuery({
-    queryKey: queryKeys.tailoredResume(jobId),
-    queryFn: () => fetchTailoredResume(jobId),
-    enabled: isAuthenticated && Number.isFinite(jobId)
-  })
+  return useQuery({ ...tailoredResumeQueryOptions(jobId), enabled: isAuthenticated && Number.isFinite(jobId) })
 }
 
 export function useGenerateTailoredResumeMutation() {

@@ -1,14 +1,19 @@
 import { useEffect } from 'react'
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { ApiError } from '@/src/api/client'
-import { useProfileQuery } from '@/src/hooks/use-profile'
+import { profileQueryOptions, useProfileQuery } from '@/src/hooks/use-profile'
 import { AuthForms } from '@/src/components/auth/AuthForms'
 import { ProfileOutletProvider } from '@/src/components/profile/profile-context'
 import { Button } from '@/src/components/ui/button'
 import { Skeleton } from '@/src/components/ui/skeleton'
 import { useAuth } from '@/src/stores/auth-store'
 
-export const Route = createFileRoute('/profile')({ component: ProfileLayout })
+export const Route = createFileRoute('/profile')({
+  loader: ({ context: { auth, queryClient } }) => {
+    if (auth.isAuthenticated) void queryClient.prefetchQuery(profileQueryOptions)
+  },
+  component: ProfileLayout
+})
 
 const tabs = [
   { to: '/profile/basic', label: 'Basic info' },
@@ -48,7 +53,7 @@ function ProfileContent() {
     )
   }
 
-  if (isLoading || !profile) return <p className="mt-10 text-muted-foreground">Loading profile…</p>
+  if (isLoading || !profile) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-3xl rounded-xl" />
 
   return (
     <div className="mx-auto mt-8 max-w-2xl text-left mb-4">

@@ -5,6 +5,7 @@ import { matchSkills } from '@/src/lib/skills'
 import { SparklesIcon } from 'lucide-react'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader } from '../../ui/card'
+import { Skeleton } from '../../ui/skeleton'
 import ContactSection, { type ContactField } from './contact-section'
 import CoverLetterSection from './cover-letter-section'
 import FitSection from './fit-section'
@@ -25,7 +26,8 @@ export default function JobApplyPanel({ job }: { job: Job }) {
   const resumeReady = extraction?.status === 'completed'
   const { matched, missing } = matchSkills(job.tags, job.description, extraction?.skills)
 
-  if (profileLoading || !profile) return null
+  if (profileLoading) return <Skeleton className="h-64 w-full rounded-xl" />
+  if (!profile) return null
 
   const fields: ContactField[] = [
     { label: 'Name', value: profile.name },
