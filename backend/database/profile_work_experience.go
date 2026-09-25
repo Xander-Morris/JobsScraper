@@ -36,6 +36,10 @@ type AddWorkExperienceBulletRequest struct {
 	Position int    `json:"position"`
 }
 
+type UpdateWorkExperienceBulletRequest struct {
+	Bullet string `json:"bullet"`
+}
+
 func listWorkExperienceBullets(ctx context.Context, workExperienceID int64) ([]ProfileWorkExperienceBullet, error) {
 	rows, err := db().QueryContext(ctx, `SELECT id, bullet, position FROM profiles_work_experience_bullets
 		WHERE work_experience_id = $1 ORDER BY position, id`, workExperienceID)
@@ -258,6 +262,33 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 	}
 
 	return bulletID, nil
+}
+
+func UpdateWorkExperienceBullet(ctx context.Context, profileID, workExperienceID, bulletID int64, req *UpdateWorkExperienceBulletRequest) error {
+	if req.Bullet == "" {
+		return invalidInput("bullet is required")
+	}
+
+	result, err := db().ExecContext(ctx, `UPDATE profiles_work_experience_bullets SET bullet = $1
+		WHERE id = $2 AND work_experience_id = $3
+		AND work_experience_id IN (SELECT id FROM profiles_work_experience WHERE profile_id = $4)`,
+		req.Bullet, bulletID, workExperienceID, profileID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 func DeleteWorkExperienceBullet(ctx context.Context, profileID, workExperienceID, bulletID int64) error {

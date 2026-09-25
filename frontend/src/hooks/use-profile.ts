@@ -19,8 +19,10 @@ import {
   loginProfile,
   requestPasswordReset,
   triggerResumeExtraction,
+  updateEducation,
   updateProfile,
   updateResume,
+  updateWorkExperienceBullet,
   uploadResume,
   type AddEducationRequest,
   type AddSkillRequest,
@@ -90,6 +92,10 @@ export function useAddEducationMutation() {
   return useProfileMutation((req: AddEducationRequest) => addEducation(req))
 }
 
+export function useUpdateEducationMutation() {
+  return useProfileMutation(({ id, req }: { id: number; req: AddEducationRequest }) => updateEducation(id, req))
+}
+
 export function useDeleteEducationMutation() {
   return useProfileMutation((id: number) => deleteEducation(id))
 }
@@ -114,6 +120,13 @@ export function useAddWorkExperienceBulletMutation() {
   return useProfileMutation(
     ({ workExperienceId, req }: { workExperienceId: number; req: AddWorkExperienceBulletRequest }) =>
       addWorkExperienceBullet(workExperienceId, req)
+  )
+}
+
+export function useUpdateWorkExperienceBulletMutation() {
+  return useProfileMutation(
+    ({ workExperienceId, id, bullet }: { workExperienceId: number; id: number; bullet: string }) =>
+      updateWorkExperienceBullet(workExperienceId, id, bullet)
   )
 }
 

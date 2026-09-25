@@ -157,6 +157,14 @@ export function addWorkExperienceBullet(workExperienceId: number, req: AddWorkEx
   })
 }
 
+export function updateWorkExperienceBullet(workExperienceId: number, id: number, bullet: string) {
+  return apiFetch(`/api/profile/work-experience/${workExperienceId}/bullets/${id}`, statusResponseSchema, {
+    method: 'PUT',
+    headers: jsonHeaders,
+    body: JSON.stringify({ bullet })
+  })
+}
+
 export function deleteWorkExperienceBullet(workExperienceId: number, id: number) {
   return apiFetch(`/api/profile/work-experience/${workExperienceId}/bullets/${id}`, statusResponseSchema, {
     method: 'DELETE'

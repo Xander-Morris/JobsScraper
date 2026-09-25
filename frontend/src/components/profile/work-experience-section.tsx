@@ -2,10 +2,11 @@ import {
   useAddWorkExperienceBulletMutation,
   useAddWorkExperienceMutation,
   useDeleteWorkExperienceBulletMutation,
-  useDeleteWorkExperienceMutation
+  useDeleteWorkExperienceMutation,
+  useUpdateWorkExperienceBulletMutation
 } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
-import { jobTypeSchema, type JobType, type WorkExperience } from '@/src/api/schemas'
+import { jobTypeSchema, type JobType, type WorkExperience, type WorkExperienceBullet } from '@/src/api/schemas'
 import { Button, buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import {
@@ -17,6 +18,7 @@ import {
 import { cn } from '@/src/lib/utils'
 import { revalidateLogic } from '@tanstack/react-form'
 import { ChevronDownIcon } from 'lucide-react'
+import { useState } from 'react'
 import { z } from 'zod'
 
 const jobTypeOptions: { value: JobType; label: string }[] = [
@@ -126,7 +128,6 @@ export function WorkExperienceSection({ workExperience }: { workExperience: Work
 
 function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDelete: () => void }) {
   const addBullet = useAddWorkExperienceBulletMutation()
-  const deleteBullet = useDeleteWorkExperienceBulletMutation()
 
   const form = useAppForm({
     defaultValues: { bullet: '' },
@@ -158,17 +159,7 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
       {(entry.bullets ?? []).length > 0 && (
         <ul className="mt-2 space-y-1 text-sm">
           {(entry.bullets ?? []).map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-2">
-              <span>• {item.bullet}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => deleteBullet.mutate({ workExperienceId: entry.id, id: item.id })}
-              >
-                Remove
-              </Button>
-            </li>
+            <BulletItem key={item.id} workExperienceId={entry.id} item={item} />
           ))}
         </ul>
       )}
@@ -181,5 +172,81 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
         </form.Form>
       </form.AppForm>
     </div>
+  )
+}
+
+function BulletItem({ workExperienceId, item }: { workExperienceId: number; item: WorkExperienceBullet }) {
+  const updateBullet = useUpdateWorkExperienceBulletMutation()
+  const deleteBullet = useDeleteWorkExperienceBulletMutation()
+  const [isEditing, setIsEditing] = useState(false)
+
+  const form = useAppForm({
+    defaultValues: { bullet: item.bullet },
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: z.object({ bullet: required }) },
+    onSubmit: async ({ value }) => {
+      const bullet = value.bullet.trim()
+      // skip request when nothing changed
+      if (bullet !== item.bullet) {
+        await updateBullet.mutateAsync({ workExperienceId, id: item.id, bullet })
+      }
+      setIsEditing(false)
+    }
+  })
+
+  function handleCancel() {
+    form.reset({ bullet: item.bullet })
+    setIsEditing(false)
+  }
+
+  if (isEditing) {
+    return (
+      <li>
+        <form.AppForm>
+          <form.Form className="flex items-start gap-2">
+            <form.AppField name="bullet">
+              {(f) => <f.TextField label="Bullet point" srOnlyLabel className="flex-1" autoFocus />}
+            </form.AppField>
+            <form.SubmitButton size="sm">Save</form.SubmitButton>
+            <Button type="button" variant="ghost" size="sm" onClick={handleCancel}>
+              Cancel
+            </Button>
+          </form.Form>
+        </form.AppForm>
+        {updateBullet.error && (
+          <p role="alert" className="mt-1 text-xs text-destructive">
+            {updateBullet.error.message}
+          </p>
+        )}
+      </li>
+    )
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-2">
+      <span>• {item.bullet}</span>
+      <div className="flex gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            form.reset({ bullet: item.bullet })
+            setIsEditing(true)
+          }}
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => deleteBullet.mutate({ workExperienceId, id: item.id })}
+          disabled={deleteBullet.isPending}
+        >
+          Remove
+        </Button>
+      </div>
+    </li>
   )
 }

@@ -404,6 +404,34 @@ func handleAddWorkExperienceBullet(w http.ResponseWriter, r *http.Request, profi
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
+func handleUpdateWorkExperienceBullet(w http.ResponseWriter, r *http.Request, profileID int64) {
+	workExperienceID, ok := pathID(w, r, "workExperienceId", "work experience")
+
+	if !ok {
+		return
+	}
+
+	id, ok := pathID(w, r, "id", "bullet")
+
+	if !ok {
+		return
+	}
+
+	req := &database.UpdateWorkExperienceBulletRequest{}
+
+	if err := decodeJSON(w, r, req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	if err := database.UpdateWorkExperienceBullet(r.Context(), profileID, workExperienceID, id, req); err != nil {
+		writeDBError(w, "update work experience bullet", err, "bullet not found", "failed to update bullet")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, statusResponse("updated"))
+}
+
 func handleDeleteWorkExperienceBullet(w http.ResponseWriter, r *http.Request, profileID int64) {
 	workExperienceID, ok := pathID(w, r, "workExperienceId", "work experience")
 
