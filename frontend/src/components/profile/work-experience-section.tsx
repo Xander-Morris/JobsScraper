@@ -152,7 +152,7 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
             {entry.start_date ? ` · ${entry.start_date} – ${entry.end_date ?? 'present'}` : ''}
           </p>
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={onDelete}>
+        <Button type="button" size="sm" onClick={onDelete}>
           Remove
         </Button>
       </div>
@@ -208,7 +208,7 @@ function BulletItem({ workExperienceId, item }: { workExperienceId: number; item
               {(f) => <f.TextField label="Bullet point" srOnlyLabel className="flex-1" autoFocus />}
             </form.AppField>
             <form.SubmitButton size="sm">Save</form.SubmitButton>
-            <Button type="button" variant="ghost" size="sm" onClick={handleCancel}>
+            <Button type="button" size="sm" onClick={handleCancel}>
               Cancel
             </Button>
           </form.Form>
@@ -228,7 +228,6 @@ function BulletItem({ workExperienceId, item }: { workExperienceId: number; item
       <div className="flex gap-1">
         <Button
           type="button"
-          variant="ghost"
           size="sm"
           onClick={() => {
             form.reset({ bullet: item.bullet })
@@ -239,7 +238,6 @@ function BulletItem({ workExperienceId, item }: { workExperienceId: number; item
         </Button>
         <Button
           type="button"
-          variant="ghost"
           size="sm"
           onClick={() => deleteBullet.mutate({ workExperienceId, id: item.id })}
           disabled={deleteBullet.isPending}
