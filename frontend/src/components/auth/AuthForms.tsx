@@ -72,7 +72,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
             <div
               role="group"
               aria-label="Authentication mode"
-              className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1 text-sm"
+              className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-border bg-black/40 p-1 text-sm"
             >
               {(['login', 'signup'] as const).map((m) => (
                 <button
@@ -80,7 +80,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
                   type="button"
                   aria-pressed={mode === m}
                   onClick={() => setMode(m)}
-                  className="h-8 rounded-md font-medium text-muted-foreground transition-colors outline-none hover:text-heading focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-raised aria-pressed:text-heading aria-pressed:shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]"
+                  className="h-8 rounded-md font-medium text-muted-foreground/80 transition-colors outline-none hover:text-heading focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent-bg aria-pressed:text-primary aria-pressed:ring-1 aria-pressed:ring-accent-border"
                 >
                   {m === 'login' ? 'Log in' : 'Sign up'}
                 </button>
