@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useBlocker } from '@tanstack/react-router'
-import { PrinterIcon, SaveIcon, SparklesIcon } from 'lucide-react'
+import { ArrowLeftIcon, PrinterIcon, SaveIcon, SparklesIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   jobQueryOptions,
@@ -75,22 +75,23 @@ function TailoredResumePage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10 text-left print:m-0 print:max-w-none print:p-0">
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 print:m-0 print:max-w-none print:p-0">
       <div className="print:hidden">
         <Link
           to="/jobs/$jobId"
           params={{ jobId: rawJobId }}
-          className="text-sm text-muted-foreground no-underline hover:text-brand"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground no-underline hover:text-heading"
         >
-          ← Back to job
+          <ArrowLeftIcon aria-hidden="true" className="size-4" />
+          Back to job
         </Link>
 
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-heading">Tailored resume</h1>
+            <h1 className="text-3xl font-medium tracking-[-0.03em]">Tailored resume</h1>
             {job && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {job.title} · {job.company}
+              <p className="mt-2 text-sm text-muted-foreground">
+                {job.title} at {job.company}
               </p>
             )}
           </div>
@@ -118,7 +119,10 @@ function TailoredResumePage() {
         </div>
 
         {tailored?.stale && (
-          <p role="status" className="mt-4 rounded-md border border-border bg-muted p-3 text-sm">
+          <p
+            role="status"
+            className="mt-4 rounded-lg border border-accent-border bg-accent-bg p-3 text-sm text-primary"
+          >
             Your resume changed since this was tailored. Regenerate to pick up the changes.
           </p>
         )}

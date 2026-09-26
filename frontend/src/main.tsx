@@ -6,9 +6,6 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import './index.css'
 import { routeTree } from './routeTree.gen'
 import { ProfileAuthProvider, useAuth } from '@/src/stores/auth-store'
-import { initTheme } from './lib/theme'
-
-initTheme()
 
 // Without a staleTime, every remount and window refocus refetches from
 // scratch even when nothing changed - e.g. tabbing back to the jobs list.

@@ -1,5 +1,6 @@
 import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { ArrowLeftIcon, MapPinIcon } from 'lucide-react'
 import { jobQueryOptions, useJobQuery } from '@/src/hooks/use-jobs'
 import { profileQueryOptions } from '@/src/hooks/use-profile'
 import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
@@ -25,9 +26,13 @@ function JobDetailPage() {
   const fitLabel = job ? matchFitLabel(job.match_score) : null
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10 text-left">
-      <Link to="/jobs" className="text-sm text-muted-foreground no-underline hover:text-brand">
-        ← Back to jobs
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <Link
+        to="/jobs"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground no-underline hover:text-heading"
+      >
+        <ArrowLeftIcon aria-hidden="true" className="size-4" />
+        Back to jobs
       </Link>
 
       {isPending && (
@@ -44,14 +49,20 @@ function JobDetailPage() {
       )}
 
       {job && (
-        <article className="mt-4">
-          <header>
-            <h1 className="text-2xl font-semibold text-heading">{job.title}</h1>
-            <p className="mt-1 text-muted-foreground">
-              {job.company} · {job.location}
+        <article className="mt-6">
+          <header className="border-b border-border pb-8">
+            <h1 className="max-w-3xl text-3xl font-medium tracking-[-0.03em] sm:text-4xl">{job.title}</h1>
+            <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+              <span className="text-secondary-foreground">{job.company}</span>
+              {job.location && (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPinIcon aria-hidden="true" className="size-4 opacity-70" />
+                  {job.location}
+                </span>
+              )}
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-1.5 pb-2">
+            <div className="mt-5 mb-6 flex flex-wrap items-center gap-1.5">
               {fitLabel && <Badge variant="default">{fitLabel}</Badge>}
               {job.applied && <Badge variant="outline">Applied</Badge>}
               <Badge variant="secondary">{formatWorkplaceType(job.workplace_type)}</Badge>
@@ -69,16 +80,16 @@ function JobDetailPage() {
             <OpenAndToggle job={job} />
           </header>
 
-          <div className={cn('mt-8 grid items-start gap-8', isAuthenticated && 'lg:grid-cols-[minmax(0,1fr)_22rem]')}>
+          <div className={cn('mt-8 grid items-start gap-10', isAuthenticated && 'lg:grid-cols-[minmax(0,1fr)_22rem]')}>
             {isAuthenticated && (
-              <aside className="order-1 lg:order-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+              <aside className="order-1 lg:sticky lg:top-20 lg:order-2 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
                 <JobApplyPanel job={job} />
               </aside>
             )}
 
             <section className="order-2 lg:order-1">
-              <h2 className="text-sm font-semibold text-heading">Job description</h2>
-              <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+              <h2 className="text-sm font-medium text-muted-foreground">Job description</h2>
+              <p className="mt-3 max-w-[68ch] text-[15px] leading-7 whitespace-pre-wrap text-secondary-foreground">
                 {job.description}
               </p>
             </section>

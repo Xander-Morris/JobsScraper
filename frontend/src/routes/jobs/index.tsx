@@ -66,33 +66,38 @@ function JobsPage() {
 
   if (isInitializing) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="text-2xl font-semibold text-heading">Jobs</h1>
-        <Skeleton className="mt-6 h-24 w-full rounded-xl" />
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <PageTitle />
+        <Skeleton className="mt-8 h-11 w-full rounded-lg" />
       </div>
     )
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="text-2xl font-semibold text-heading">Jobs</h1>
-        <AuthForms prompt="Log in to view job listings." />
-      </div>
-    )
-  }
+  if (!isAuthenticated) return <AuthForms prompt="Log in to browse job listings." />
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="text-2xl font-semibold text-heading">Jobs</h1>
+    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+      <div className="flex items-end justify-between gap-4">
+        <PageTitle />
+        {data && (
+          <p className="pb-1 text-sm text-muted-foreground tabular-nums">
+            {data.total.toLocaleString()} result{data.total === 1 ? '' : 's'}
+          </p>
+        )}
+      </div>
 
       <SearchFilters search={search} onChange={updateFilters} />
 
       {isLoading && (
-        <ul className="mt-6 space-y-2" aria-label="Loading jobs">
+        <ul
+          className="mt-6 divide-y divide-border overflow-hidden rounded-xl border border-border"
+          aria-label="Loading jobs"
+        >
           {Array.from({ length: 5 }).map((_, i) => (
-            <li key={i}>
-              <Skeleton className="h-24 w-full rounded-xl" />
+            <li key={i} className="space-y-2.5 px-5 py-4">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3.5 w-1/3" />
+              <Skeleton className="h-5 w-2/3" />
             </li>
           ))}
         </ul>
@@ -104,16 +109,19 @@ function JobsPage() {
       )}
 
       {data && data.jobs.length === 0 && (
-        <p className="mt-6 text-sm text-muted-foreground">No jobs match those filters.</p>
+        <div className="mt-6 rounded-xl border border-dashed border-input px-6 py-12 text-center">
+          <p className="font-medium text-heading">No jobs match those filters</p>
+          <p className="mt-1 text-sm text-muted-foreground">Try widening the salary range or removing a tag.</p>
+        </div>
       )}
 
       {data && data.jobs.length > 0 && (
         <>
-          <p className="mt-6 text-xs text-muted-foreground">
-            {data.total} result{data.total === 1 ? '' : 's'}
-          </p>
           <ul
-            className={cn('mt-2 space-y-2 transition-opacity', isPlaceholderData && 'opacity-60')}
+            className={cn(
+              'mt-6 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card/50 transition-opacity',
+              isPlaceholderData && 'opacity-60'
+            )}
             aria-busy={isPlaceholderData}
           >
             {data.jobs.map((job) => (
@@ -131,4 +139,8 @@ function JobsPage() {
       )}
     </div>
   )
+}
+
+function PageTitle() {
+  return <h1 className="text-3xl font-medium tracking-[-0.03em]">Jobs</h1>
 }

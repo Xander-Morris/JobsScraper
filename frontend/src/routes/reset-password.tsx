@@ -1,3 +1,4 @@
+import { AuthPanel } from '@/src/components/auth/AuthForms'
 import { useConfirmPasswordResetMutation } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
 import { errorMessage } from '@/src/lib/utils'
@@ -34,22 +35,22 @@ function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="mx-auto mt-10 max-w-sm text-left">
+      <AuthPanel className="mt-20">
         <p role="alert" className="text-sm text-muted-foreground">
           This reset link is incomplete. Request a new one from the log in page.
         </p>
-        <Link to="/profile" className="mt-4 inline-block text-sm">
+        <Link to="/profile" className="mt-4 inline-block text-sm text-primary hover:underline">
           Go to log in
         </Link>
-      </div>
+      </AuthPanel>
     )
   }
 
   const error = errorMessage(mutation.error)
 
   return (
-    <div className="mx-auto mt-10 max-w-sm text-left">
-      <h2 className="mb-4 text-base font-semibold text-heading">Set a new password</h2>
+    <AuthPanel className="mt-20">
+      <h1 className="mb-4 text-lg font-semibold tracking-tight">Set a new password</h1>
       <form.AppForm>
         <form.Form className="space-y-3">
           <form.AppField name="password">
@@ -68,9 +69,11 @@ function ResetPasswordPage() {
               </Link>
             </p>
           )}
-          <form.SubmitButton>Reset password</form.SubmitButton>
+          <form.SubmitButton size="lg" className="w-full">
+            Reset password
+          </form.SubmitButton>
         </form.Form>
       </form.AppForm>
-    </div>
+    </AuthPanel>
   )
 }

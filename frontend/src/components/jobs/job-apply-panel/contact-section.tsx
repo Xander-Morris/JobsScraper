@@ -14,10 +14,10 @@ function CopyField({ label, value }: ContactField) {
       type="button"
       onClick={() => void copy(value)}
       aria-label={`Copy ${label}`}
-      className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted"
+      className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-white/[0.04]"
     >
       <span className="min-w-0">
-        <span className="block text-[0.7rem] uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className="block text-[0.7rem] text-muted-foreground">{label}</span>
         <span className="block truncate text-xs">{value}</span>
       </span>
       {copied ? (

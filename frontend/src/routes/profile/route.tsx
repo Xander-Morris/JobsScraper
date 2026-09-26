@@ -26,7 +26,7 @@ const tabs = [
 function ProfileLayout() {
   const { isAuthenticated, isInitializing } = useAuth()
 
-  if (isInitializing) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-3xl rounded-xl" />
+  if (isInitializing) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-2xl rounded-xl" />
   if (!isAuthenticated) return <AuthForms />
 
   return <ProfileContent />
@@ -43,33 +43,39 @@ function ProfileContent() {
     }
   }, [isInvalidSession, logout])
 
-  if (isInvalidSession) return <p className="mt-10 text-muted-foreground">Signing you out...</p>
+  if (isInvalidSession) return <p className="mt-10 text-center text-muted-foreground">Signing you out…</p>
 
   if (isError) {
     return (
-      <p role="alert" className="mt-10 text-muted-foreground">
+      <p role="alert" className="mt-10 text-center text-muted-foreground">
         Unable to load your profile. Please try again.
       </p>
     )
   }
 
-  if (isLoading || !profile) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-3xl rounded-xl" />
+  if (isLoading || !profile) return <Skeleton className="mx-auto mt-10 h-24 w-full max-w-2xl rounded-xl" />
 
   return (
-    <div className="mx-auto mt-8 max-w-2xl text-left mb-4">
-      <div className="flex items-center justify-between">
-        <h2>{profile.email}</h2>
-        <Button type="button" variant="ghost" size="sm" onClick={() => logout()}>
+    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-medium tracking-[-0.03em]">Profile</h1>
+          <p className="mt-1 truncate text-sm text-muted-foreground">{profile.email}</p>
+        </div>
+        <Button type="button" variant="ghost" size="sm" className="md:hidden" onClick={() => logout()}>
           Log out
         </Button>
       </div>
 
-      <nav aria-label="Profile sections" className="mt-4 flex gap-4 border-b border-border text-sm">
+      <nav
+        aria-label="Profile sections"
+        className="mt-8 flex gap-6 overflow-x-auto border-b border-border text-sm [scrollbar-width:none]"
+      >
         {tabs.map((tab) => (
           <Link
             key={tab.to}
             to={tab.to}
-            className="border-b-2 border-transparent pb-2 text-muted-foreground no-underline hover:text-heading [&.active]:border-heading [&.active]:font-semibold [&.active]:text-heading"
+            className="-mb-px shrink-0 border-b-2 border-transparent pb-3 text-muted-foreground no-underline transition-colors hover:text-heading [&.active]:border-primary [&.active]:text-heading"
           >
             {tab.label}
           </Link>

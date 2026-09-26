@@ -1,4 +1,4 @@
-import { ChevronDownIcon, XIcon } from 'lucide-react'
+import { ChevronDownIcon, SearchIcon, XIcon } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTagsQuery } from '@/src/hooks/use-tags'
 import type { JobSearchState } from '../lib/job-search'
@@ -35,11 +35,13 @@ const DATE_POSTED_OPTIONS: { value: JobSearchState['datePosted'] | ''; label: st
 ]
 
 const JOB_TYPE_OPTIONS: { value: JobSearchState['jobType'] | ''; label: string }[] = [
-  { value: '', label: 'All' },
+  { value: '', label: 'Any job type' },
   { value: 'intern', label: 'Intern' },
   { value: 'part_time', label: 'Part-Time' },
   { value: 'full_time', label: 'Full-Time' }
 ]
+
+const triggerClass = 'min-w-36 justify-between font-normal text-secondary-foreground'
 
 function formatSalaryThousands(value: number): string {
   return value >= 1000 ? `$${Math.round(value / 1000)}k` : `$${value}`
@@ -56,7 +58,7 @@ function WorkplaceTypeFilter({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), triggerClass)}>
         {label}
         <ChevronDownIcon className="opacity-50" />
       </DropdownMenuTrigger>
@@ -85,7 +87,7 @@ function DatePostedFilter({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), triggerClass)}>
         {label}
         <ChevronDownIcon className="opacity-50" />
       </DropdownMenuTrigger>
@@ -107,11 +109,11 @@ function JobTypeFilter({
   value: JobSearchState['jobType']
   onChange: (value: JobSearchState['jobType']) => void
 }) {
-  const label = JOB_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'All'
+  const label = JOB_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'Any job type'
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), triggerClass)}>
         {label}
         <ChevronDownIcon className="opacity-50" />
       </DropdownMenuTrigger>
@@ -137,7 +139,7 @@ function SortFilter({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), 'w-40 justify-between font-normal')}>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'outline' }), triggerClass)}>
         {label}
         <ChevronDownIcon className="opacity-50" />
       </DropdownMenuTrigger>
@@ -172,10 +174,10 @@ function SalaryRangeFilter({
   }
 
   return (
-    <div className="w-72 space-y-1.5">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>Salary</span>
-        <span>
+        <span className="text-secondary-foreground tabular-nums">
           {formatSalaryThousands(salaryRange[0])} – {formatSalaryThousands(salaryRange[1])}
           {salaryRange[1] >= SALARY_MAX ? '+' : ''}
         </span>
@@ -325,16 +327,23 @@ export function SearchFilters({
   }
 
   return (
-    <div className="mt-6 space-y-3 text-left">
-      <Input
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search titles, companies, descriptions…"
-        aria-label="Search jobs"
-      />
+    <div className="mt-6 space-y-4">
+      <div className="relative">
+        <SearchIcon
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search titles, companies, descriptions…"
+          aria-label="Search jobs"
+          className="h-11 pl-10 md:text-[15px]"
+        />
+      </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-wrap sm:items-center">
         <WorkplaceTypeFilter
           value={search.workplaceType}
           onChange={(workplaceType) => onChange({ ...search, workplaceType })}
@@ -344,13 +353,15 @@ export function SearchFilters({
         <SortFilter value={search.sort} onChange={(sort) => onChange({ ...search, sort })} />
       </div>
 
-      <SalaryRangeFilter
-        minSalary={search.minSalary}
-        maxSalary={search.maxSalary}
-        onCommit={(minSalary, maxSalary) => onChange({ ...search, minSalary, maxSalary })}
-      />
+      <div className="grid items-start gap-4 md:grid-cols-[18rem_minmax(0,1fr)] md:gap-6">
+        <SalaryRangeFilter
+          minSalary={search.minSalary}
+          maxSalary={search.maxSalary}
+          onCommit={(minSalary, maxSalary) => onChange({ ...search, minSalary, maxSalary })}
+        />
 
-      {tags && tags.length > 0 && <TagFilter tags={tags} selectedTags={selectedTags} onToggle={toggleTag} />}
+        {tags && tags.length > 0 && <TagFilter tags={tags} selectedTags={selectedTags} onToggle={toggleTag} />}
+      </div>
     </div>
   )
 }

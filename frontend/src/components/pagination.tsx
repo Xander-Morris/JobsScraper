@@ -15,11 +15,11 @@ export default function Pagination({
   if (pageCount <= 1) return null
 
   return (
-    <nav aria-label="Pagination" className="mt-6 flex items-center justify-center gap-3 text-sm">
+    <nav aria-label="Pagination" className="mt-8 flex items-center justify-center gap-4 text-sm">
       <Button type="button" variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
-        Prev
+        Previous
       </Button>
-      <span aria-live="polite" className="text-muted-foreground">
+      <span aria-live="polite" className="text-muted-foreground tabular-nums">
         Page {page} of {pageCount}
       </span>
       <Button type="button" variant="outline" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>

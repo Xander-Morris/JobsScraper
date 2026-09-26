@@ -48,7 +48,7 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
       </CardHeader>
       <form.AppForm>
         <form.Form>
-          <CardContent className="grid grid-cols-2 gap-3">
+          <CardContent className="grid gap-3 sm:grid-cols-2">
             <form.AppField name="name">{(f) => <f.TextField label="Name" />}</form.AppField>
             <form.Field name="address">
               {(f) => (
@@ -70,11 +70,11 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
             <form.AppField name="linked_in">{(f) => <f.TextField label="LinkedIn URL" type="url" />}</form.AppField>
             <form.AppField name="github">{(f) => <f.TextField label="GitHub URL" type="url" />}</form.AppField>
             <form.AppField name="portfolio">
-              {(f) => <f.TextField label="Portfolio URL" type="url" className="col-span-2" />}
+              {(f) => <f.TextField label="Portfolio URL" type="url" className="sm:col-span-2" />}
             </form.AppField>
             <form.Field name="email_notifications">
               {(f) => (
-                <div className="col-span-2 flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                <div className="flex items-center sm:col-span-2 justify-between gap-3 rounded-lg border border-border p-3">
                   <div className="pointer-events-none space-y-0.5">
                     <Label htmlFor={`${id}-email-notifications`}>Email me matching jobs</Label>
                     <p className="text-xs text-muted-foreground">
@@ -90,8 +90,8 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
               )}
             </form.Field>
           </CardContent>
-          <CardFooter>
-            <form.SubmitButton>Save</form.SubmitButton>
+          <CardFooter className="mt-(--card-spacing)">
+            <form.SubmitButton>Save changes</form.SubmitButton>
           </CardFooter>
         </form.Form>
       </form.AppForm>
