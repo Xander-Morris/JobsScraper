@@ -384,6 +384,40 @@ func TestSearchForJobsJobType(t *testing.T) {
 	}
 }
 
+func TestSearchForJobsFirstSeenAfter(t *testing.T) {
+	newTestDB(t)
+
+	seed := []jobs.Job{
+		{Title: "Old Scrape", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/old-scrape"},
+		{Title: "Late Scrape", Company: "Acme", PostedAt: time.Now().Add(-5 * 24 * time.Hour), URL: "https://example.com/jobs/late-scrape"},
+		{Title: "No Post Date", Company: "Acme", URL: "https://example.com/jobs/no-post-date"},
+	}
+
+	if err := WriteJobsToDatabase(seed); err != nil {
+		t.Fatalf("seed db: %v", err)
+	}
+
+	if _, err := db().Exec(`UPDATE jobs SET first_seen_at = NOW() - INTERVAL '2 days' WHERE url = $1`, seed[0].URL); err != nil {
+		t.Fatalf("backdate first_seen_at: %v", err)
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+	result, err := SearchForJobs(context.Background(), &JobSearchParams{FirstSeenAfter: &cutoff, Limit: 10})
+	if err != nil {
+		t.Fatalf("SearchForJobs: %v", err)
+	}
+
+	var got []string
+	for _, job := range result.Jobs {
+		got = append(got, job.Title)
+	}
+	slices.Sort(got)
+
+	if want := []string{"Late Scrape", "No Post Date"}; !slices.Equal(got, want) {
+		t.Errorf("titles = %v, want %v", got, want)
+	}
+}
+
 func TestGetJobByIDNotFound(t *testing.T) {
 	newTestDB(t)
 

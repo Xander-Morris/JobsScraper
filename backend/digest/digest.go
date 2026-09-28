@@ -91,7 +91,7 @@ func sendForProfile(ctx context.Context, profile database.DigestProfile) error {
 	result, err := database.SearchForJobs(ctx, &database.JobSearchParams{
 		ResumeQuery:     resumeQuery,
 		ResumeEmbedding: extraction.Embedding,
-		PostedAfter:     &windowStart,
+		FirstSeenAfter:  &windowStart,
 		Sort:            database.SortRelevance,
 		Limit:           jobLimit,
 	})

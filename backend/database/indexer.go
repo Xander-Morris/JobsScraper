@@ -72,14 +72,16 @@ type JobSearchParams struct {
 	ResumeEmbedding *pgvector.Vector
 	ProfileID       int64
 	PostedAfter     *time.Time
-	Tags            []string
-	WorkplaceType   jobs.WorkplaceType
-	JobType         JobTypeFilter
-	MinSalary       int
-	MaxSalary       int
-	Sort            SortOrder
-	Limit           int
-	Offset          int
+	// FirstSeenAfter filters on when we scraped the job, not its post date.
+	FirstSeenAfter *time.Time
+	Tags           []string
+	WorkplaceType  jobs.WorkplaceType
+	JobType        JobTypeFilter
+	MinSalary      int
+	MaxSalary      int
+	Sort           SortOrder
+	Limit          int
+	Offset         int
 }
 
 type JobDetailParams struct {
@@ -228,6 +230,11 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 	if params.PostedAfter != nil {
 		args = append(args, *params.PostedAfter)
 		conditions = append(conditions, fmt.Sprintf("j.posted_at > $%d", len(args)))
+	}
+
+	if params.FirstSeenAfter != nil {
+		args = append(args, *params.FirstSeenAfter)
+		conditions = append(conditions, fmt.Sprintf("j.first_seen_at > $%d", len(args)))
 	}
 
 	if len(params.Tags) > 0 {
