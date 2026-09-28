@@ -39,17 +39,21 @@ func refreshCookieSameSite() http.SameSite {
 	return http.SameSiteLaxMode
 }
 
-func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
-	http.SetCookie(w, &http.Cookie{
+// Non-persistent cookies omit Expires/MaxAge so the browser drops them on close.
+func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time, persistent bool) {
+	cookie := &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    token,
 		Path:     "/api/profile",
-		Expires:  expiresAt,
-		MaxAge:   int(time.Until(expiresAt).Seconds()),
 		HttpOnly: true,
 		Secure:   os.Getenv("COOKIE_SECURE") == "true",
 		SameSite: refreshCookieSameSite(),
-	})
+	}
+	if persistent {
+		cookie.Expires = expiresAt
+		cookie.MaxAge = int(time.Until(expiresAt).Seconds())
+	}
+	http.SetCookie(w, cookie)
 }
 
 func clearRefreshCookie(w http.ResponseWriter) {
@@ -64,7 +68,7 @@ func clearRefreshCookie(w http.ResponseWriter) {
 	})
 }
 
-func createSession(w http.ResponseWriter, profileID int64) (string, error) {
+func createSession(w http.ResponseWriter, profileID int64, persistent bool) (string, error) {
 	accessToken, err := createToken(profileID)
 	if err != nil {
 		return "", err
@@ -75,12 +79,12 @@ func createSession(w http.ResponseWriter, profileID int64) (string, error) {
 		return "", err
 	}
 
-	expiresAt := time.Now().Add(database.RefreshTokenLifetime)
-	if err := database.StoreRefreshToken(context.Background(), profileID, refreshToken, expiresAt); err != nil {
+	expiresAt := database.RefreshTokenExpiry(persistent)
+	if err := database.StoreRefreshToken(context.Background(), profileID, refreshToken, expiresAt, persistent); err != nil {
 		return "", err
 	}
 
-	setRefreshCookie(w, refreshToken, expiresAt)
+	setRefreshCookie(w, refreshToken, expiresAt, persistent)
 	return accessToken, nil
 }
 
@@ -110,7 +114,7 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createSession(w, id)
+	token, err := createSession(w, id, req.RememberMe)
 
 	if err != nil {
 		slog.Error("login profile: create session", "error", err)
@@ -136,7 +140,7 @@ func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createSession(w, profileID)
+	token, err := createSession(w, profileID, true)
 
 	if err != nil {
 		slog.Error("create profile: create session", "error", err)
@@ -162,8 +166,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt := time.Now().Add(database.RefreshTokenLifetime)
-	profileID, err := database.RotateRefreshToken(r.Context(), cookie.Value, newRefreshToken, expiresAt)
+	session, err := database.RotateRefreshToken(r.Context(), cookie.Value, newRefreshToken)
 	if err != nil {
 		clearRefreshCookie(w)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -175,6 +178,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	profileID := session.ProfileID
 	exists, err := database.ProfileExists(r.Context(), profileID)
 	if err != nil {
 		slog.Error("check refreshed profile", "error", err)
@@ -196,7 +200,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefreshCookie(w, newRefreshToken, expiresAt)
+	setRefreshCookie(w, newRefreshToken, session.ExpiresAt, session.Persistent)
 	writeJSON(w, http.StatusOK, map[string]string{"token": accessToken})
 }
 

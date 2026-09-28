@@ -97,7 +97,7 @@ func handleConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createSession(w, profileID)
+	token, err := createSession(w, profileID, true)
 	if err != nil {
 		slog.Error("confirm password reset: create session", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not reset password")

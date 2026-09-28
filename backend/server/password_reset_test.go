@@ -38,7 +38,7 @@ func TestPasswordResetFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new refresh token: %v", err)
 	}
-	if err := database.StoreRefreshToken(ctx, profileID, oldSession, time.Now().Add(time.Hour)); err != nil {
+	if err := database.StoreRefreshToken(ctx, profileID, oldSession, time.Now().Add(time.Hour), true); err != nil {
 		t.Fatalf("store refresh token: %v", err)
 	}
 
@@ -64,7 +64,7 @@ func TestPasswordResetFlow(t *testing.T) {
 		t.Errorf("password was not updated")
 	}
 
-	if _, err := database.RotateRefreshToken(ctx, oldSession, "unused", time.Now().Add(time.Hour)); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := database.RotateRefreshToken(ctx, oldSession, "unused"); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("existing session survived password reset: err = %v", err)
 	}
 

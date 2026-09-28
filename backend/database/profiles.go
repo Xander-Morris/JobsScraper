@@ -41,7 +41,8 @@ var verifier = emailverifier.NewVerifier()
 
 type ProfileRequest struct {
 	Email    string `json:"email"`
-	Password string `json:"password"`
+	Password   string `json:"password"`
+	RememberMe bool   `json:"remember_me"`
 }
 
 func HashPassword(password string) (string, error) {

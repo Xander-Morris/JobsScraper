@@ -44,7 +44,8 @@ export function useCreateProfileMutation() {
 
 export function useLoginMutation() {
   return useMutation({
-    mutationFn: ({ email, password }: ProfileCredentials) => loginProfile(email, password)
+    mutationFn: ({ email, password, rememberMe = false }: ProfileCredentials) =>
+      loginProfile(email, password, rememberMe)
   })
 }
 

@@ -49,6 +49,7 @@ export interface AddWorkExperienceBulletRequest {
 export interface ProfileCredentials {
   email: string
   password: string
+  rememberMe?: boolean
 }
 
 const jsonHeaders: HeadersInit = { 'Content-Type': 'application/json' }
@@ -61,11 +62,11 @@ export function createProfile(email: string, password: string): Promise<AuthResp
   })
 }
 
-export function loginProfile(email: string, password: string): Promise<AuthResponse> {
+export function loginProfile(email: string, password: string, rememberMe: boolean): Promise<AuthResponse> {
   return apiFetch('/api/profile/login', authResponseSchema, {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password, remember_me: rememberMe })
   })
 }
 

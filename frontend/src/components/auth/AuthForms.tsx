@@ -9,8 +9,10 @@ import { z } from 'zod'
 
 const email = z.email('Enter a valid email')
 
-const loginSchema = z.object({ email, password: z.string().min(1, 'Required') })
-const signupSchema = z.object({ email, password: z.string().min(8, 'At least 8 characters') })
+const rememberMe = z.boolean()
+
+const loginSchema = z.object({ email, password: z.string().min(1, 'Required'), rememberMe })
+const signupSchema = z.object({ email, password: z.string().min(8, 'At least 8 characters'), rememberMe })
 
 export function AuthPanel({ className, children }: { className?: string; children: ReactNode }) {
   return (
@@ -34,7 +36,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
   const mutation = mode === 'login' ? loginMutation : createMutation
 
   const form = useAppForm({
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: '', password: '', rememberMe: false },
     validationLogic: revalidateLogic(),
     validators: { onDynamic: mode === 'signup' ? signupSchema : loginSchema },
     onSubmit: async ({ value }) => {
@@ -48,10 +50,6 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
 
   return (
     <section className="px-4 pt-16 pb-20 text-center sm:pt-24">
-      <p className="inline-flex items-center gap-2 rounded-full border border-accent-border bg-accent-bg px-3 py-1 text-xs text-primary">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--primary)]" />
-        Daily digest of new matches
-      </p>
       <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-[450] tracking-[-0.04em] sm:text-6xl sm:leading-[1.05]">
         Find the jobs that fit your resume
       </h1>
@@ -101,6 +99,21 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
                     />
                   )}
                 </form.AppField>
+                {mode === 'login' && (
+                  <form.AppField name="rememberMe">
+                    {(f) => (
+                      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
+                        <input
+                          type="checkbox"
+                          checked={f.state.value}
+                          onChange={(e) => f.handleChange(e.target.checked)}
+                          className="size-4 cursor-pointer accent-primary"
+                        />
+                        Remember me
+                      </label>
+                    )}
+                  </form.AppField>
+                )}
                 {error && (
                   <p role="alert" className="text-sm text-destructive">
                     {error}
@@ -113,7 +126,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
                   <button
                     type="button"
                     onClick={() => setMode('forgot')}
-                    className="block w-full pt-1 text-center text-xs text-muted-foreground hover:text-heading"
+                    className="block w-full pt-1 text-center text-sm text-muted-foreground hover:text-heading"
                   >
                     Forgot password?
                   </button>

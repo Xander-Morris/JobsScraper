@@ -63,7 +63,7 @@ Full list with comments is in `.env.example`. The short version:
 
 Routes are all registered in `server/routes.go`. Roughly: job search/detail is public, marking a job as applied and everything under `/api/profile` requires a bearer token, login/signup are rate limited separately from everything else.
 
-Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout. Password reset emails a one-time link (stored hashed, expires in an hour); using it sets the new password and revokes every refresh token for that profile.
+Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout. Checking "Remember me" at login gives a 30-day persistent cookie; leaving it unchecked gives a browser-session cookie whose token also expires after a day without use. Password reset emails a one-time link (stored hashed, expires in an hour); using it sets the new password and revokes every refresh token for that profile.
 
 ## Background jobs
 
