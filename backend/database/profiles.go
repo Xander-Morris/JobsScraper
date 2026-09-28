@@ -40,7 +40,7 @@ type UpdateProfileRequest struct {
 var verifier = emailverifier.NewVerifier()
 
 type ProfileRequest struct {
-	Email    string `json:"email"`
+	Email      string `json:"email"`
 	Password   string `json:"password"`
 	RememberMe bool   `json:"remember_me"`
 }
