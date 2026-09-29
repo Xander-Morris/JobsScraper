@@ -10,9 +10,68 @@ import {
 import { queryKeys } from '../api/query-keys'
 
 const authChannelName = 'profile-auth'
+const presenceChannelName = 'profile-presence'
+const rememberKey = 'profile-remember'
+const liveKey = 'profile-session-live'
+
+const local = () => localStorage
+const session = () => sessionStorage
+
+function readStorage(storage: () => Storage, key: string): string | null {
+  try {
+    return storage().getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStorage(storage: () => Storage, key: string, value: string | null) {
+  try {
+    if (value === null) storage().removeItem(key)
+    else storage().setItem(key, value)
+  } catch {
+    // storage blocked
+  }
+}
+
+// Open tabs holding a live session answer pings, so a new tab can tell whether the user left the site.
+const presence = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(presenceChannelName)
+presence?.addEventListener('message', (event: MessageEvent) => {
+  if (event.data === 'ping' && readStorage(session, liveKey)) presence.postMessage('pong')
+})
+
+function otherTabLive(): Promise<boolean> {
+  const channel = presence
+  if (!channel) return Promise.resolve(false)
+
+  return new Promise((resolve) => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.data === 'pong') done(true)
+    }
+    const timer = setTimeout(() => done(false), 300)
+    const done = (live: boolean) => {
+      clearTimeout(timer)
+      channel.removeEventListener('message', onMessage)
+      resolve(live)
+    }
+    channel.addEventListener('message', onMessage)
+    channel.postMessage('ping')
+  })
+}
+
+// Without "remember me", a session only survives reloads and other open tabs, not leaving the site.
+async function restoreSession(): Promise<string | null> {
+  const mayForget = readStorage(local, rememberKey) === 'false' && !readStorage(session, liveKey)
+  if (mayForget && !(await otherTabLive())) {
+    writeStorage(local, rememberKey, null)
+    await fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' }).catch(() => {})
+    return null
+  }
+  return refreshAccessToken()
+}
 
 // Started at import so the refresh overlaps app boot instead of waiting for first render.
-const initialRefresh = refreshAccessToken()
+const initialRefresh = restoreSession()
 
 type AuthMessage = { type: 'login'; token: string } | { type: 'logout' }
 
@@ -21,7 +80,8 @@ export interface ProfileAuthContextValue {
   isAuthenticated: boolean
   isInitializing: boolean
   sessionMessage: string | null
-  login: (token: string) => void
+  // Pass remember only on an explicit login; token refreshes leave it as is.
+  login: (token: string, remember?: boolean) => void
   logout: (message?: string) => void
 }
 
@@ -38,7 +98,9 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const channelRef = useRef<BroadcastChannel | null>(null)
   const queryClient = useQueryClient()
 
-  const login = useCallback((next: string) => {
+  const login = useCallback((next: string, remember?: boolean) => {
+    if (remember !== undefined) writeStorage(local, rememberKey, String(remember))
+    writeStorage(session, liveKey, '1')
     setAccessToken(next)
     setToken(next)
     setSessionMessage(null)
@@ -51,6 +113,8 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(
     (message?: string) => {
       void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
+      writeStorage(local, rememberKey, null)
+      writeStorage(session, liveKey, null)
       setAccessToken(null)
       setToken(null)
       clearUserJobs()
@@ -68,10 +132,12 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
 
     channel.onmessage = (event: MessageEvent<AuthMessage>) => {
       if (event.data.type === 'login') {
+        writeStorage(session, liveKey, '1')
         setAccessToken(event.data.token)
         setToken(event.data.token)
         setSessionMessage(null)
       } else {
+        writeStorage(session, liveKey, null)
         setAccessToken(null)
         setToken(null)
         clearUserJobs()
@@ -90,6 +156,7 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
     initialRefresh.then((next) => {
       if (cancelled) return
       if (next) {
+        writeStorage(session, liveKey, '1')
         setAccessToken(next)
         setToken(next)
       }

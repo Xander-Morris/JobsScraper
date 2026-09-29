@@ -41,7 +41,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
     validators: { onDynamic: mode === 'signup' ? signupSchema : loginSchema },
     onSubmit: async ({ value }) => {
       const { token } = await mutation.mutateAsync(value)
-      login(token)
+      login(token, mode === 'login' ? value.rememberMe : true)
     }
   })
 

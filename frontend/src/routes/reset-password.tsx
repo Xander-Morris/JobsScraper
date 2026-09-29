@@ -28,7 +28,7 @@ function ResetPasswordPage() {
     validators: { onDynamic: resetPasswordSchema },
     onSubmit: async ({ value }) => {
       const { token: accessToken } = await mutation.mutateAsync({ token, password: value.password })
-      login(accessToken)
+      login(accessToken, true)
       void navigate({ to: '/profile' })
     }
   })
