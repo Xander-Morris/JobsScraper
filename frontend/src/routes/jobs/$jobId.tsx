@@ -88,7 +88,6 @@ function JobDetailPage() {
             )}
 
             <section className="order-2 lg:order-1">
-              <h2 className="text-sm font-medium text-muted-foreground">Job description</h2>
               <p className="mt-3 max-w-[68ch] text-[15px] leading-7 whitespace-pre-wrap text-secondary-foreground">
                 {job.description}
               </p>
