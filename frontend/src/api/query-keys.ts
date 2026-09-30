@@ -10,5 +10,7 @@ export const queryKeys = {
   tailoredResume: (jobId: number) => ['jobs', jobId, 'tailored-resume'] as const,
   profile: ['profile'] as const,
   resumeExtraction: (resumeId: number) => ['profile', 'resume', resumeId, 'extraction'] as const,
-  tags: ['tags'] as const
+  tags: ['tags'] as const,
+  trivia: ['trivia'] as const,
+  triviaQuiz: (id: number) => ['trivia', id] as const
 }

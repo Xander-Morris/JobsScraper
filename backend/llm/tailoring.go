@@ -71,7 +71,7 @@ const tailoringPrompt = "Tailor the candidate's resume below to the job posting 
 func TailorResume(ctx context.Context, resume ExtractedResume, job JobPosting) (*TailoredResume, error) {
 	prompt := tailoringPrompt + "\n\n" + formatIndexedResume(resume) + "\n\n" + formatJobPosting(job)
 
-	respText, err := callOpenRouterChat(ctx, prompt, tailoringSchema())
+	respText, err := callOpenRouterChat(ctx, prompt, tailoringSchema(), 0)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,7 @@
 
 **Live demo:** [https://www.jobsscraper.com/](https://www.jobsscraper.com/)
 
-A job board that crawls listings from public job feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and from company job boards hosted on Greenhouse, Lever, and Ashby, indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site.
+A job board that crawls listings from public job feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and from company job boards hosted on Greenhouse, Lever, and Ashby, indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site, and a trivia mode that generates multiple-choice quizzes on your resume's skills or any topic you name, with scores kept in a history.
 
 ## What's in here
 

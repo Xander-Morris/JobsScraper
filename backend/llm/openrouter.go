@@ -63,7 +63,7 @@ type openRouterChatResponse struct {
 // chat completions endpoint. response_format only guarantees valid JSON, not a
 // specific shape, so the schema gets rendered into the prompt too, the same trick
 // the old Groq client used.
-func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]any) (string, error) {
+func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]any, temperature float64) (string, error) {
 	apiKey := openRouterAPIKey()
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
@@ -83,7 +83,7 @@ func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]an
 			{Role: "user", Content: fullPrompt},
 		},
 		ResponseFormat: openRouterResponseFormat{Type: "json_object"},
-		Temperature:    0,
+		Temperature:    temperature,
 	}
 
 	payload, err := json.Marshal(reqBody)

@@ -11,6 +11,7 @@
   --color-brand: var(--primary);
   --color-accent-bg: var(--accent-bg);
   --color-accent-border: var(--accent-border);
+  --color-success: var(--success);
   --animate-progress: progress 1.2s ease-in-out infinite;
 
   @keyframes progress {
@@ -43,6 +44,7 @@
   --accent-bg: rgb(245 165 36 / 0.1);
   --accent-border: rgb(245 165 36 / 0.35);
   --destructive: #f07167;
+  --success: #6fcf97;
   --border: rgb(255 255 255 / 0.07);
   --input: rgb(255 255 255 / 0.1);
   --ring: rgb(245 165 36 / 0.6);

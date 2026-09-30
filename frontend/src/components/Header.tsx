@@ -34,6 +34,9 @@ export function Header() {
           <Link to="/profile" className={navLinkClass}>
             Profile
           </Link>
+          <Link to="/trivia" className={navLinkClass}>
+            Trivia
+          </Link>
         </nav>
 
         <div className="hidden justify-end md:flex">

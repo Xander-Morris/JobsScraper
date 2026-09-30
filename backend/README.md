@@ -1,6 +1,6 @@
 # backend
 
-Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume management, the job scraper, and the digest email scheduler. No framework, just the standard library `net/http` mux plus a handful of focused packages.
+Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume management, trivia quizzes, the job scraper, and the digest email scheduler. No framework, just the standard library `net/http` mux plus a handful of focused packages.
 
 ## Layout
 
@@ -8,7 +8,7 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `database/`: Postgres access, migrations, schema
 - `scraper/`: runs the job source fetchers on a 10 minute ticker
 - `jobs/`: one file per job source: public feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and company boards on Greenhouse, Lever, and Ashby, whose company lists sit at the top of `greenhouse.go`, `lever.go`, and `ashby.go`
-- `llm/`: resume text extraction and generation via OpenRouter, embeddings via Jina AI
+- `llm/`: resume text extraction, generation, and trivia quizzes via OpenRouter, embeddings via Jina AI
 - `notify/`: Resend email client for the digest
 - `utils/`: env loading and a couple of small helpers
 - `api/`: Vercel serverless entrypoints (see the repo root README's "Fully on Vercel" section)
@@ -25,7 +25,7 @@ You need Go 1.26+ and a Postgres database.
 
 The server listens on `:8090` by default (override with `PORT`). `go run .` applies migrations on startup, so there's no separate step locally. The Vercel function skips them to keep cold starts fast; run `go run ./cmd/migrate` (or let CI's `migrate` job do it) before deploying a schema change there.
 
-Resume extraction and cover letter generation need `OPENROUTER_API_KEY` set (a free key from [openrouter.ai/keys](https://openrouter.ai/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
+Resume extraction, cover letter generation, and trivia need `OPENROUTER_API_KEY` set (a free key from [openrouter.ai/keys](https://openrouter.ai/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
 
 ## Tests
 
