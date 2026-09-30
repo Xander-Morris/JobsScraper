@@ -38,6 +38,7 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
     validators: { onDynamic: basicInfoSchema },
     onSubmit: async ({ value }) => {
       await updateProfile.mutateAsync(value)
+      form.reset(value)
     }
   })
 

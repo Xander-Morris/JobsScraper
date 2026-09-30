@@ -62,6 +62,8 @@ export function useConfirmPasswordResetMutation() {
 export const profileQueryOptions = queryOptions({
   queryKey: queryKeys.profile,
   queryFn: fetchProfile,
+  // Bypass staleTime on refocus, so out-of-tab edits like unsubbing from daily digest from an email show up.
+  refetchOnWindowFocus: 'always',
   retry: (failureCount, error) =>
     !(error instanceof ApiError && (error.status === 401 || error.status === 404)) && failureCount < 2
 })
