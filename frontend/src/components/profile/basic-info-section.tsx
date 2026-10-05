@@ -1,12 +1,14 @@
 import { useUpdateProfileMutation } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
+import { useAutosave, type AutosaveStatus } from '@/src/hooks/use-autosave'
+import type { UpdateProfileRequest } from '@/src/api/profile'
 import type { Profile } from '@/src/api/schemas'
+import { cn } from '@/src/lib/utils'
 import { Card, CardContent, CardFooter, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
 import { Switch } from '@/src/components/ui/switch'
 import { AddressAutofill } from '@mapbox/search-js-react'
-import { revalidateLogic } from '@tanstack/react-form'
 import { useId } from 'react'
 import { z } from 'zod'
 
@@ -21,9 +23,26 @@ const basicInfoSchema = z.object({
   email_notifications: z.boolean()
 })
 
+const statusText: Record<AutosaveStatus, string> = {
+  idle: '',
+  saving: 'Saving…',
+  saved: 'All changes saved',
+  retrying: "Couldn't save, retrying…",
+  error: "Couldn't save changes"
+}
+
 export function BasicInfoSection({ profile }: { profile: Profile }) {
   const updateProfile = useUpdateProfileMutation()
   const id = useId()
+
+  // Reset once saved so later profile refetches (e.g. applying a resume) show up in the form again.
+  // Skipped if the form has moved on to unsaved invalid input, which reset would wipe.
+  const autosave = useAutosave(updateProfile.mutateAsync, (value: UpdateProfileRequest) => {
+    const current = form.state.values
+    if ((Object.keys(value) as (keyof UpdateProfileRequest)[]).every((key) => current[key] === value[key])) {
+      form.reset(value)
+    }
+  })
 
   const form = useAppForm({
     defaultValues: {
@@ -34,11 +53,12 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
       portfolio: profile.portfolio,
       email_notifications: profile.email_notifications
     },
-    validationLogic: revalidateLogic(),
-    validators: { onDynamic: basicInfoSchema },
-    onSubmit: async ({ value }) => {
-      await updateProfile.mutateAsync(value)
-      form.reset(value)
+    validators: { onChange: basicInfoSchema },
+    listeners: {
+      onChange: ({ formApi }) => {
+        const parsed = basicInfoSchema.safeParse(formApi.state.values)
+        if (parsed.success) autosave.queue(parsed.data)
+      }
     }
   })
 
@@ -92,7 +112,19 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
             </form.Field>
           </CardContent>
           <CardFooter className="mt-(--card-spacing)">
-            <form.SubmitButton>Save changes</form.SubmitButton>
+            <form.Subscribe selector={(state) => state.isValid}>
+              {(isValid) => (
+                <p
+                  aria-live="polite"
+                  className={cn(
+                    'text-xs text-muted-foreground',
+                    (!isValid || autosave.status === 'error') && 'text-destructive'
+                  )}
+                >
+                  {isValid ? statusText[autosave.status] : 'Fix the highlighted fields to save'}
+                </p>
+              )}
+            </form.Subscribe>
           </CardFooter>
         </form.Form>
       </form.AppForm>

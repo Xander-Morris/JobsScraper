@@ -68,6 +68,9 @@ func (w *WorkplaceType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MinSalary is the lowest amount stored as a yearly salary; less is a parse slip or an hourly rate.
+const MinSalary = 1000
+
 type Job struct {
 	ID            int64         `json:"id"`
 	Title         string        `json:"title"`
@@ -77,7 +80,8 @@ type Job struct {
 	Tags          []string      `json:"tags"`
 	SalaryMin     *int          `json:"salary_min"`
 	SalaryMax     *int          `json:"salary_max"`
-	PostedAt      time.Time     `json:"posted_at"`
+	// PostedAt is left out of JSON when the source gave no post date.
+	PostedAt time.Time `json:"posted_at,omitzero"`
 	URL           string        `json:"url"`
 	// Description is empty in search results; only job detail loads it.
 	Description string `json:"description,omitempty"`

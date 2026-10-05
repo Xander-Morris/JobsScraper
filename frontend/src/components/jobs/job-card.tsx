@@ -9,6 +9,7 @@ const MAX_TAGS = 5
 
 export function JobCard({ job, bestMatchScore }: { job: JobListItem; bestMatchScore?: number }) {
   const salary = formatSalary(job.salary_min, job.salary_max)
+  const postedAt = formatRelativeDate(job.posted_at)
   const fitLabel = matchFitLabel(job.match_score, bestMatchScore)
   const greatFit = fitLabel === 'Great fit'
   const extraTags = job.tags.length - MAX_TAGS
@@ -40,9 +41,7 @@ export function JobCard({ job, bestMatchScore }: { job: JobListItem; bestMatchSc
           </div>
           <div className="shrink-0 text-right tabular-nums">
             {salary && <p className="text-sm font-medium text-heading">{salary}</p>}
-            <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">
-              {formatRelativeDate(job.posted_at)}
-            </p>
+            {postedAt && <p className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">{postedAt}</p>}
           </div>
         </div>
 

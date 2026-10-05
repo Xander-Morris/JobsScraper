@@ -95,12 +95,13 @@ func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 		titles[i], companies[i], locations[i] = job.Title, job.Company, job.Location
 		urls[i], descriptions[i] = job.URL, job.Description
 		workplaceTypes[i] = int32(job.WorkplaceType)
-		salaryMins[i], salaryMaxes[i] = int32Ptr(job.SalaryMin), int32Ptr(job.SalaryMax)
+		salaryMins[i], salaryMaxes[i] = salaryPtr(job.SalaryMin), salaryPtr(job.SalaryMax)
 
 		flags := jobTypeFlagsFor(job)
 		interns[i], partTimes[i], fullTimes[i] = flags.intern, flags.partTime, flags.fullTime
 
-		if !job.PostedAt.IsZero() {
+		// A post date in the future is bad source data, so it's stored as unknown.
+		if !job.PostedAt.IsZero() && job.PostedAt.Before(time.Now().Add(maxPostedAtSkew)) {
 			postedAt := job.PostedAt.UTC()
 			postedAts[i] = &postedAt
 		}
@@ -202,8 +203,12 @@ func upsertTags(tx *sql.Tx, tags []string) (map[string]int64, error) {
 	return ids, rows.Err()
 }
 
-func int32Ptr(v *int) *int32 {
-	if v == nil {
+// maxPostedAtSkew allows for source clocks and time zones running a little ahead.
+const maxPostedAtSkew = 24 * time.Hour
+
+// salaryPtr drops amounts too small to be a yearly salary.
+func salaryPtr(v *int) *int32 {
+	if v == nil || *v < jobs.MinSalary {
 		return nil
 	}
 

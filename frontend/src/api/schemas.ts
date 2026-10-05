@@ -19,7 +19,8 @@ export const jobSchema = z.object({
   tags: z.array(z.string().trim()),
   salary_min: z.number().nullable(),
   salary_max: z.number().nullable(),
-  posted_at: z.iso.datetime({ offset: true }),
+  // Left out when the source gave no post date.
+  posted_at: z.iso.datetime({ offset: true }).optional(),
   url: z.string().trim(),
   description: htmlDecodedString,
   match_score: z.number().nullable().optional(),

@@ -24,6 +24,8 @@ function JobDetailPage() {
   const { isAuthenticated } = useAuth()
   const { data: job, isPending, isError, error } = useJobQuery(Number(jobId))
   const fitLabel = job ? matchFitLabel(job.match_score) : null
+  const salary = job ? formatSalary(job.salary_min, job.salary_max) : null
+  const postedAt = job ? formatRelativeDate(job.posted_at) : null
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -66,10 +68,8 @@ function JobDetailPage() {
               {fitLabel && <Badge variant="default">{fitLabel}</Badge>}
               {job.applied && <Badge variant="outline">Applied</Badge>}
               <Badge variant="secondary">{formatWorkplaceType(job.workplace_type)}</Badge>
-              {formatSalary(job.salary_min, job.salary_max) && (
-                <Badge variant="secondary">{formatSalary(job.salary_min, job.salary_max)}</Badge>
-              )}
-              <Badge variant="outline">{formatRelativeDate(job.posted_at)}</Badge>
+              {salary && <Badge variant="secondary">{salary}</Badge>}
+              {postedAt && <Badge variant="outline">{postedAt}</Badge>}
               {job.tags.map((tag) => (
                 <Badge key={tag} variant="outline">
                   {tag}

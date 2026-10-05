@@ -87,8 +87,16 @@ export function useProfileMutation<TArgs, TResult = unknown>(mutationFn: (args: 
   })
 }
 
+// Patches the cache instead of refetching, since autosave can fire several times a second.
 export function useUpdateProfileMutation() {
-  return useProfileMutation((req: UpdateProfileRequest) => updateProfile(req))
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (req: UpdateProfileRequest) => updateProfile(req),
+    onSuccess: (_data, req) => {
+      queryClient.setQueryData<Profile>(queryKeys.profile, (old) => old && { ...old, ...req })
+    }
+  })
 }
 
 export function useAddEducationMutation() {

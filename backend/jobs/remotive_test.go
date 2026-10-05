@@ -18,7 +18,7 @@ func TestRemotiveJobToJob(t *testing.T) {
 		want Job
 	}{
 		{
-			name: "salary string yields same min and max from first parsed number",
+			name: "single k salary yields same min and max",
 			raw: remotiveJob{
 				ID:                        1,
 				Title:                     "Backend Engineer",
@@ -39,8 +39,8 @@ func TestRemotiveJobToJob(t *testing.T) {
 				Tags:          []string{"Software Development", "full time"},
 				URL:           "https://remotive.com/jobs/1",
 				Description:   "Great role",
-				SalaryMin:     intPtr(50),
-				SalaryMax:     intPtr(50),
+				SalaryMin:     intPtr(50000),
+				SalaryMax:     intPtr(50000),
 				PostedAt:      validPosted,
 			},
 		},
@@ -74,4 +74,43 @@ func TestRemotiveJobToJob(t *testing.T) {
 			assertJobEqual(t, tt.raw.toJob(), tt.want)
 		})
 	}
+}
+
+func TestParseSalaryRange(t *testing.T) {
+	tests := []struct {
+		text     string
+		min, max *int
+	}{
+		{"$100k - $150k", intPtr(100000), intPtr(150000)},
+		{"$80,000 – $120,000 USD", intPtr(80000), intPtr(120000)},
+		{"$120K-$90K", intPtr(90000), intPtr(120000)},
+		{"$95000", intPtr(95000), intPtr(95000)},
+		{"$40 - $60 per hour", nil, nil},
+		{"$50/hr", nil, nil},
+		{"50", nil, nil},
+		{"Competitive", nil, nil},
+		{"", nil, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.text, func(t *testing.T) {
+			min, max := parseSalaryRange(tt.text)
+
+			if !intPtrEqual(min, tt.min) || !intPtrEqual(max, tt.max) {
+				t.Errorf("parseSalaryRange(%q) = %v, %v, want %v, %v", tt.text, deref(min), deref(max), deref(tt.min), deref(tt.max))
+			}
+		})
+	}
+}
+
+func intPtrEqual(a, b *int) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
+}
+
+func deref(p *int) any {
+	if p == nil {
+		return nil
+	}
+
+	return *p
 }
