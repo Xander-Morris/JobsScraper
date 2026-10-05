@@ -7,6 +7,7 @@ import (
 	"main/database"
 	"main/jobs"
 	"main/schedule"
+	"slices"
 	"sync"
 	"time"
 )
@@ -27,6 +28,36 @@ func dropExpiredJobs(fetched []jobs.Job, cutoff time.Time) []jobs.Job {
 	}
 
 	return kept
+}
+
+// capNewestJobs keeps the newest max jobs, undated ones last, so a big fetch can't overfill the database.
+func capNewestJobs(fetched []jobs.Job, max int) []jobs.Job {
+	if len(fetched) <= max {
+		return fetched
+	}
+
+	slices.SortStableFunc(fetched, func(a, b jobs.Job) int {
+		if a.PostedAt.IsZero() != b.PostedAt.IsZero() {
+			if a.PostedAt.IsZero() {
+				return 1
+			}
+			return -1
+		}
+		return b.PostedAt.Compare(a.PostedAt)
+	})
+
+	return fetched[:max]
+}
+
+func deleteExpiredJobs() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	if deleted, err := database.DeleteExpiredJobs(ctx); err != nil {
+		slog.Error("scraper: delete expired jobs", "error", err)
+	} else {
+		slog.Info("scraper: deleted expired jobs", "count", deleted)
+	}
 }
 
 func runScraper(sources []jobs.JobSource) {
@@ -83,21 +114,20 @@ func runScraper(sources []jobs.JobSource) {
 
 	fetchedCount := len(fetchedJobs)
 	fetchedJobs = dropExpiredJobs(fetchedJobs, time.Now().Add(-database.JobMaxAge))
-	slog.Info("scraper: writing jobs", "count", len(fetchedJobs), "skipped_expired", fetchedCount-len(fetchedJobs))
+	unexpiredCount := len(fetchedJobs)
+	fetchedJobs = capNewestJobs(fetchedJobs, database.MaxJobs)
+	slog.Info("scraper: writing jobs", "count", len(fetchedJobs),
+		"skipped_expired", fetchedCount-unexpiredCount, "skipped_over_cap", unexpiredCount-len(fetchedJobs))
+
+	// Prune first so space frees up even if the write fails.
+	deleteExpiredJobs()
 
 	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
 		slog.Error("scraper: write jobs to database", "error", err)
 		return
 	}
 
-	deleteCtx, cancelDelete := context.WithTimeout(context.Background(), time.Minute)
-	defer cancelDelete()
-
-	if deleted, err := database.DeleteExpiredJobs(deleteCtx); err != nil {
-		slog.Error("scraper: delete expired jobs", "error", err)
-	} else {
-		slog.Info("scraper: deleted expired jobs", "count", deleted)
-	}
+	deleteExpiredJobs()
 
 	embedCtx, cancel := context.WithTimeout(context.Background(), embedJobsTimeout)
 	defer cancel()

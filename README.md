@@ -69,6 +69,6 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 
 ## How it fits together
 
-The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes, writes new/updated listings to Postgres, and deletes postings more than 60 days old (except ones someone marked applied or tailored a resume for), and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
+The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes, writes new/updated listings to Postgres, and deletes postings more than 30 days old or beyond the newest 5,000 (except ones someone marked applied or tailored a resume for), and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
 
 The frontend talks to the backend over a plain REST API (see `backend/server/routes.go` for the full list of endpoints) using TanStack Query for data fetching and TanStack Router for routing.

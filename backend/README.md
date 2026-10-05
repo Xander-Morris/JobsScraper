@@ -76,7 +76,7 @@ Both recover from panics per-run so one bad fetch or one bad email doesn't take 
 
 Each scrape cycle also:
 
-- **Expires old jobs**: postings first published more than 60 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Jobs someone marked applied or tailored a resume for are kept, but drop out of search.
+- **Expires old jobs**: postings first published more than 30 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Stored jobs are also capped at the newest 5,000 (`MaxJobs`); older ones past the cap are deleted, and each scrape writes at most that many. Jobs someone marked applied or tailored a resume for are kept, but drop out of search. Pruning runs before each write, so it still frees space if Supabase has put the database in read-only mode.
 - **Embeds new jobs**: the title plus the first 2,000 characters of the description go to Jina, which keeps token use down on the free tier. The full description is still stored and shown.
 - **Tolerates broken boards**: a Greenhouse, Lever, or Ashby company that fails (renamed board, outage) is logged and skipped without failing the rest.
 
