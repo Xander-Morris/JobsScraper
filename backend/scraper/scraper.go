@@ -13,8 +13,7 @@ import (
 )
 
 // embedJobsTimeout caps how long one cycle spends embedding new jobs before
-// giving up and letting the next cycle pick it back up. Jina's free tier allows
-// 100k tokens a minute, so a large backlog takes a few cycles to clear.
+// giving up and letting the next cycle pick it back up. 
 const embedJobsTimeout = 10 * time.Minute
 
 // dropExpiredJobs skips postings already past retention, so they aren't written and embedded only to be deleted.

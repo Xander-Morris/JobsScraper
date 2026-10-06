@@ -65,8 +65,8 @@ type limiter interface {
 }
 
 var globalLimiter = newIPLimiter(10, 20)
-var authLimiter limiter = newRedisLimiter("auth", 5, 100*time.Second, newIPLimiter(rate.Every(20*time.Second), 5))
-var llmLimiter limiter = newRedisLimiter("llm", 3, 30*time.Second, newIPLimiter(rate.Every(10*time.Second), 3))
+var authLimiter limiter = newRedisLimiter("auth", rate.Every(20*time.Second), 5)
+var llmLimiter limiter = newRedisLimiter("llm", rate.Every(10*time.Second), 3)
 
 func clientIP(r *http.Request) (string, error) {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
