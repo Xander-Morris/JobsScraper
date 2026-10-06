@@ -13,7 +13,7 @@ import (
 )
 
 // embedJobsTimeout caps how long one cycle spends embedding new jobs before
-// giving up and letting the next cycle pick it back up. 
+// giving up and letting the next cycle pick it back up.
 const embedJobsTimeout = 10 * time.Minute
 
 // dropExpiredJobs skips postings already past retention, so they aren't written and embedded only to be deleted.
