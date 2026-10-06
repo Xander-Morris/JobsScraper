@@ -82,7 +82,7 @@ type Job struct {
 	SalaryMax     *int          `json:"salary_max"`
 	// PostedAt is left out of JSON when the source gave no post date.
 	PostedAt time.Time `json:"posted_at,omitzero"`
-	URL           string        `json:"url"`
+	URL      string    `json:"url"`
 	// Description is empty in search results; only job detail loads it.
 	Description string `json:"description,omitempty"`
 	// MatchScore is a text-relevance score (roughly 0-1) against the caller's active
