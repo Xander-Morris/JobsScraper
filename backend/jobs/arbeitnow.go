@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -20,7 +21,7 @@ type Arbeitnow struct {
 }
 
 func NewArbeitnow(userAgent string) *Arbeitnow {
-	return &Arbeitnow{newFeed(userAgent, arbeitnowEndpoint)}
+	return &Arbeitnow{newFeed(userAgent, arbeitnowEndpoint, feedTimeout)}
 }
 
 type arbeitnowResponse struct {
@@ -67,13 +68,13 @@ func (jt *arbeitnowJobTypes) UnmarshalJSON(data []byte) error {
 }
 
 // FetchJobs pages through the feed. A failed later page keeps the pages already fetched.
-func (a *Arbeitnow) FetchJobs() ([]Job, error) {
+func (a *Arbeitnow) FetchJobs(ctx context.Context) ([]Job, error) {
 	var result []Job
 
 	for page := 1; page <= arbeitnowMaxPages; page++ {
 		var parsed arbeitnowResponse
 
-		if err := a.getJSON(fmt.Sprintf("%s?page=%d", a.Endpoint, page), &parsed); err != nil {
+		if err := a.getJSON(ctx, fmt.Sprintf("%s?page=%d", a.Endpoint, page), &parsed); err != nil {
 			if len(result) > 0 {
 				slog.Warn("jobs: arbeitnow page failed, keeping earlier pages", "page", page, "error", err)
 				break

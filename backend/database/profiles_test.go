@@ -10,7 +10,7 @@ import (
 func newTestProfile(t *testing.T) int64 {
 	t.Helper()
 
-	id, err := CreateProfile(&ProfileRequest{Email: "test@example.com", Password: "securepassword123"})
+	id, err := CreateProfile(t.Context(), &ProfileRequest{Email: "test@example.com", Password: "securepassword123"})
 
 	if err != nil {
 		t.Fatalf("create profile: %v", err)

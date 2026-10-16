@@ -1,14 +1,13 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"strings"
+
+	"main/utils"
 )
 
 // defaultOpenRouterModel is free-tier (":free", rate limited), tested against
@@ -21,11 +20,11 @@ const defaultOpenRouterModel = "nvidia/nemotron-3-super-120b-a12b:free"
 const openRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 
 func openRouterAPIKey() string {
-	return os.Getenv("OPENROUTER_API_KEY")
+	return utils.Getenv("OPENROUTER_API_KEY")
 }
 
 func openRouterModel() string {
-	if model := os.Getenv("OPENROUTER_MODEL"); model != "" {
+	if model := utils.Getenv("OPENROUTER_MODEL"); model != "" {
 		return model
 	}
 
@@ -86,31 +85,13 @@ func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]an
 		Temperature:    temperature,
 	}
 
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("encode request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openRouterAPIURL, bytes.NewReader(payload))
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := http.DefaultClient.Do(req)
+	status, respBody, err := postJSON(ctx, openRouterAPIURL, apiKey, reqBody)
 	if err != nil {
 		return "", fmt.Errorf("call openrouter: %w", err)
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read openrouter response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("openrouter returned %d: %s", resp.StatusCode, string(respBody))
+	if status != http.StatusOK {
+		return "", fmt.Errorf("openrouter returned %d: %s", status, errorBody(respBody))
 	}
 
 	var parsed openRouterChatResponse

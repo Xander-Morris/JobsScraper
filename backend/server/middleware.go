@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"main/utils"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -25,7 +24,7 @@ func parseProfileIDFromToken(tokenString string) (profileID int64, ok bool) {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 
-		return []byte(utils.GetEnv()["SECRET_KEY"]), nil
+		return []byte(utils.Getenv("SECRET_KEY")), nil
 	})
 
 	if err != nil || !token.Valid {
@@ -129,7 +128,7 @@ func withRecovery(next http.Handler) http.Handler {
 }
 
 func allowedOrigin() string {
-	if origin := os.Getenv("ALLOWED_ORIGIN"); origin != "" {
+	if origin := utils.Getenv("ALLOWED_ORIGIN"); origin != "" {
 		return origin
 	}
 

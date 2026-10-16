@@ -71,7 +71,7 @@ func db() *sql.DB {
 }
 
 func openPool() (*sql.DB, error) {
-	pool, err := sql.Open("pgx", utils.GetEnv()["DATABASE_CONNECTION"])
+	pool, err := sql.Open("pgx", utils.Getenv("DATABASE_CONNECTION"))
 
 	if err != nil {
 		return nil, err
@@ -114,6 +114,7 @@ func CloseDb() {
 	}
 
 	cachedDb.Close()
+	cachedDb = nil
 }
 
 func SetDB(pool *sql.DB) *sql.DB {

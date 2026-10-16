@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"main/utils"
@@ -45,7 +46,7 @@ type Himalayas struct {
 }
 
 func NewHimalayas(userAgent string) *Himalayas {
-	return &Himalayas{newFeed(userAgent, himalayasEndpoint)}
+	return &Himalayas{newFeed(userAgent, himalayasEndpoint, feedTimeout)}
 }
 
 type himalayasResponse struct {
@@ -68,7 +69,7 @@ type himalayasJob struct {
 }
 
 // FetchJobs follows the feed's cursor pagination. A failed later page keeps the pages already fetched.
-func (h *Himalayas) FetchJobs() ([]Job, error) {
+func (h *Himalayas) FetchJobs(ctx context.Context) ([]Job, error) {
 	var result []Job
 	cursor := ""
 
@@ -81,7 +82,7 @@ func (h *Himalayas) FetchJobs() ([]Job, error) {
 
 		var parsed himalayasResponse
 
-		if err := h.getJSON(pageURL, &parsed); err != nil {
+		if err := h.getJSON(ctx, pageURL, &parsed); err != nil {
 			if len(result) > 0 {
 				slog.Warn("jobs: himalayas page failed, keeping earlier pages", "page", page, "error", err)
 				break

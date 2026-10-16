@@ -69,11 +69,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// testDBConnString reads through utils.GetEnv, not os.Getenv, so a value in
+// testDBConnString reads through utils.Getenv, not os.Getenv, so a value in
 // backend/.env counts; matches database.newTestDB, lets these tests run
 // locally and not just in CI.
 func testDBConnString() string {
-	return utils.GetEnv()["TEST_DATABASE_CONNECTION"]
+	return utils.Getenv("TEST_DATABASE_CONNECTION")
 }
 
 func requireTestDB(t *testing.T) {
@@ -230,7 +230,7 @@ func seedJob(t *testing.T, url string) int64 {
 		PostedAt: time.Now(),
 	}
 
-	if err := database.WriteJobsToDatabase([]jobs.Job{job}); err != nil {
+	if err := database.WriteJobsToDatabase(t.Context(), []jobs.Job{job}); err != nil {
 		t.Fatalf("seed job: %v", err)
 	}
 

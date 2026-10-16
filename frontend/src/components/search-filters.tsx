@@ -1,5 +1,5 @@
 import { ChevronDownIcon, SearchIcon, XIcon } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useState } from 'react'
 import { useTagsQuery } from '@/src/hooks/use-tags'
 import type { JobSearchState } from '../lib/job-search'
 import { cn } from '../lib/utils'
@@ -165,10 +165,6 @@ function SalaryRangeFilter({
 }) {
   const [salaryRange, setSalaryRange] = useState<number[]>([minSalary ?? SALARY_MIN, maxSalary ?? SALARY_MAX])
 
-  useEffect(() => {
-    setSalaryRange([minSalary ?? SALARY_MIN, maxSalary ?? SALARY_MAX])
-  }, [minSalary, maxSalary])
-
   function commit(next: number[]) {
     onCommit(next[0] > SALARY_MIN ? next[0] : undefined, next[1] < SALARY_MAX ? next[1] : undefined)
   }
@@ -305,15 +301,21 @@ export function SearchFilters({
 }) {
   const { data: tags } = useTagsQuery()
   const [q, setQ] = useState(search.q ?? '')
+  const [syncedQ, setSyncedQ] = useState(search.q)
 
-  useEffect(() => {
+  // Back/forward changes the URL query, so pull it into the input.
+  if (search.q !== syncedQ) {
+    setSyncedQ(search.q)
     setQ(search.q ?? '')
-  }, [search.q])
+  }
+
+  // Reads the latest search when the timer fires, so filters changed mid-debounce survive.
+  const commitQ = useEffectEvent((next: string) => {
+    if (next !== (search.q ?? '')) onChange({ ...search, q: next || undefined })
+  })
 
   useEffect(() => {
-    const handle = setTimeout(() => {
-      if (q !== (search.q ?? '')) onChange({ ...search, q: q || undefined })
-    }, 300)
+    const handle = setTimeout(() => commitQ(q), 300)
     return () => clearTimeout(handle)
   }, [q])
 
@@ -355,6 +357,7 @@ export function SearchFilters({
 
       <div className="grid items-start gap-4 md:grid-cols-[18rem_minmax(0,1fr)] md:gap-6">
         <SalaryRangeFilter
+          key={`${search.minSalary}-${search.maxSalary}`}
           minSalary={search.minSalary}
           maxSalary={search.maxSalary}
           onCommit={(minSalary, maxSalary) => onChange({ ...search, minSalary, maxSalary })}

@@ -23,21 +23,11 @@ type ProfileResume struct {
 }
 
 type ResumeExtraction struct {
-	ResumeID       int64                     `json:"resume_id"`
-	Status         string                    `json:"status"`
-	FullName       string                    `json:"full_name"`
-	Email          string                    `json:"email"`
-	Phone          string                    `json:"phone"`
-	LinkedIn       string                    `json:"linked_in"`
-	GitHub         string                    `json:"github"`
-	Portfolio      string                    `json:"portfolio"`
-	Summary        string                    `json:"summary"`
-	Skills         []string                  `json:"skills"`
-	Education      []llm.EducationEntry      `json:"education"`
-	WorkExperience []llm.WorkExperienceEntry `json:"work_experience"`
-	Projects       []llm.ProjectEntry        `json:"projects"`
-	Error          string                    `json:"error"`
-	UpdatedAt      time.Time                 `json:"updated_at"`
+	ResumeID int64  `json:"resume_id"`
+	Status   string `json:"status"`
+	llm.ExtractedResume
+	Error     string    `json:"error"`
+	UpdatedAt time.Time `json:"updated_at"`
 	// Embedding ranks job matches by meaning instead of keyword overlap.
 	Embedding *pgvector.Vector `json:"-"`
 }

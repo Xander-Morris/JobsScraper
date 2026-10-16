@@ -4,7 +4,7 @@ import type { JobSearchParams } from './jobs'
 // means to hit can't drift apart.
 export const queryKeys = {
   jobs: ['jobs'] as const,
-  // Keyed on auth state, not the token: it rotates every reload. Logout clears ['jobs'].
+  // Keyed on auth state, not the token: it rotates every reload. Logout clears the whole cache.
   jobSearch: (params: JobSearchParams, isAuthenticated: boolean) => ['jobs', params, isAuthenticated] as const,
   job: (id: number, isAuthenticated: boolean) => ['jobs', id, isAuthenticated] as const,
   tailoredResume: (jobId: number) => ['jobs', jobId, 'tailored-resume'] as const,

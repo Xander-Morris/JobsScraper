@@ -1,5 +1,5 @@
 import { CheckIcon, ClipboardIcon, CornerDownLeftIcon, DownloadIcon, SparklesIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { GeneratedContent, Job } from '@/src/api/schemas'
 import useCopied from '@/src/hooks/use-copied'
 import downloadBlob from '@/src/lib/download-blob'
@@ -29,9 +29,6 @@ export default function CoverLetterSection({
 }) {
   const [draft, setDraft] = useState(data.cover_letter)
   const { copied, copy } = useCopied()
-
-  // Regenerating replaces the draft; edits only survive until then.
-  useEffect(() => setDraft(data.cover_letter), [data.cover_letter])
 
   function appendBullet(bullet: string) {
     setDraft((current) => `${current.trimEnd()}\n\n• ${bullet}`)

@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"fmt"
 	"main/utils"
 	"strings"
@@ -23,7 +24,7 @@ type Lever struct {
 
 func NewLever(userAgent string) *Lever {
 	return &Lever{
-		feed:   newBoardFeed(userAgent, leverEndpoint),
+		feed:   newFeed(userAgent, leverEndpoint, boardFeedTimeout),
 		Boards: leverBoards,
 	}
 }
@@ -50,11 +51,11 @@ type leverCategories struct {
 	Team       string `json:"team"`
 }
 
-func (l *Lever) FetchJobs() ([]Job, error) {
+func (l *Lever) FetchJobs(ctx context.Context) ([]Job, error) {
 	return fetchBoards("lever", l.Boards, func(board Board) ([]Job, error) {
 		var parsed []leverJob
 
-		if err := l.getJSON(l.Endpoint+"/"+board.Slug+"?mode=json", &parsed); err != nil {
+		if err := l.getJSON(ctx, l.Endpoint+"/"+board.Slug+"?mode=json", &parsed); err != nil {
 			return nil, err
 		}
 

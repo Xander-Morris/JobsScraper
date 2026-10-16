@@ -78,6 +78,8 @@ export default function JobApplyPanel({ job }: { job: Job }) {
           )}
           {generateContent.data && (
             <CoverLetterSection
+              // Regenerating replaces the draft; edits only survive until then.
+              key={generateContent.submittedAt}
               job={job}
               data={generateContent.data}
               onRegenerate={() => generateContent.mutate(job.id)}

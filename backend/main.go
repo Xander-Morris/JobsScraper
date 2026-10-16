@@ -2,21 +2,20 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"main/coldstart"
 	"main/database"
 	"main/digest"
 	"main/scraper"
 	"main/server"
+	"main/utils"
 )
 
 func main() {
@@ -32,17 +31,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		scraper.StartScrapingJob(ctx)
-		return nil
-	})
-
-	g.Go(func() error {
-		digest.StartScheduler(ctx)
-		return nil
-	})
+	var wg sync.WaitGroup
+	wg.Go(func() { scraper.StartScrapingJob(ctx) })
+	wg.Go(func() { digest.StartScheduler(ctx) })
 
 	srv := server.New(serverAddr())
 
@@ -64,15 +55,13 @@ func main() {
 		slog.Error("server shutdown error", "error", err)
 	}
 
-	// wait for any scrape/digest run in flight to finish before the deferred
-	// CloseDb above runs, so it's not yanking the pool out from under a write
-	if err := g.Wait(); err != nil {
-		log.Printf("background service error: %v", err)
-	}
+	// Wait for the cancelled scrape/digest runs to unwind before the deferred
+	// CloseDb above runs, so it's not yanking the pool out from under a write.
+	wg.Wait()
 }
 
 func serverAddr() string {
-	port := os.Getenv("PORT")
+	port := utils.Getenv("PORT")
 
 	if port == "" {
 		port = "8090"

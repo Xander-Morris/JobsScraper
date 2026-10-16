@@ -14,11 +14,6 @@ export function setAccessToken(token: string | null): void {
   accessToken = token
 }
 
-// For the few requests that bypass apiFetch because the response isn't JSON.
-export function authHeaders(): HeadersInit {
-  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-}
-
 export class ApiError extends Error {
   readonly status: number
 
@@ -81,12 +76,8 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshInFlight
 }
 
-async function apiFetchInternal<T>(
-  path: string,
-  schema: ZodType<T>,
-  init: RequestInit | undefined,
-  refreshed: boolean
-): Promise<T> {
+// apiRequest sends an authed request, refreshing once on 401, and throws ApiError on a non-2xx.
+async function apiRequest(path: string, init: RequestInit | undefined, refreshed = false): Promise<Response> {
   const authed = withAuthHeader(init)
   const request = authed ?? init
   const res = await fetch(`${API_BASE_URL}${path}`, { ...request, credentials: request?.credentials ?? 'include' })
@@ -96,7 +87,7 @@ async function apiFetchInternal<T>(
     if (token) {
       const headers = new Headers(init?.headers)
       headers.set('Authorization', `Bearer ${token}`)
-      return apiFetchInternal(path, schema, { ...init, headers }, true)
+      return apiRequest(path, { ...init, headers }, true)
     }
 
     window.dispatchEvent(new Event(sessionExpiredEvent))
@@ -115,11 +106,17 @@ async function apiFetchInternal<T>(
     throw new ApiError(message, res.status)
   }
 
+  return res
+}
+
+export async function apiFetch<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
+  const res = await apiRequest(path, init)
   return schema.parse(await res.json())
 }
 
-export function apiFetch<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
-  return apiFetchInternal(path, schema, init, false)
+export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const res = await apiRequest(path, init)
+  return res.blob()
 }
 
 export { refreshAccessToken, sessionExpiredEvent, tokenRefreshedEvent }

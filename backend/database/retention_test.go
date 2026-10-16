@@ -42,11 +42,11 @@ func TestDeleteExpiredJobs(t *testing.T) {
 		{Title: "Undated", Company: "Acme", URL: "https://example.com/jobs/undated"},
 	}
 
-	if err := WriteJobsToDatabase(seed); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), seed); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
-	profileID, err := CreateProfile(&ProfileRequest{Email: "retention@example.com", Password: "securepassword123"})
+	profileID, err := CreateProfile(t.Context(), &ProfileRequest{Email: "retention@example.com", Password: "securepassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
@@ -102,13 +102,13 @@ func TestWriteJobsToDatabaseUpsert(t *testing.T) {
 		{Title: "Engineer", Company: "Acme", URL: url, PostedAt: posted, Tags: []string{"go", "sql"}},
 	}
 
-	if err := WriteJobsToDatabase(first); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), first); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
 
 	rescraped := jobs.Job{Title: "Senior Engineer", Company: "Acme", URL: url, Tags: []string{"sql", "rust"}}
 
-	if err := WriteJobsToDatabase([]jobs.Job{rescraped}); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), []jobs.Job{rescraped}); err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 

@@ -8,7 +8,6 @@ import (
 	"main/database"
 	"main/utils"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -22,7 +21,7 @@ func createToken(profileID int64) (string, error) {
 			"exp":       time.Now().Add(15 * time.Minute).Unix(),
 		})
 
-	tokenString, err := token.SignedString([]byte(utils.GetEnv()["SECRET_KEY"]))
+	tokenString, err := token.SignedString([]byte(utils.Getenv("SECRET_KEY")))
 	if err != nil {
 		return "", err
 	}
@@ -33,22 +32,26 @@ func createToken(profileID int64) (string, error) {
 const refreshCookieName = "profile_refresh"
 
 func refreshCookieSameSite() http.SameSite {
-	if strings.EqualFold(os.Getenv("COOKIE_SAME_SITE"), "none") {
+	if strings.EqualFold(utils.Getenv("COOKIE_SAME_SITE"), "none") {
 		return http.SameSiteNoneMode
 	}
 	return http.SameSiteLaxMode
 }
 
-// Non-persistent cookies omit Expires/MaxAge so the browser drops them on close.
-func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time, persistent bool) {
-	cookie := &http.Cookie{
+func refreshCookie(value string) *http.Cookie {
+	return &http.Cookie{
 		Name:     refreshCookieName,
-		Value:    token,
+		Value:    value,
 		Path:     "/api/profile",
 		HttpOnly: true,
-		Secure:   os.Getenv("COOKIE_SECURE") == "true",
+		Secure:   utils.Getenv("COOKIE_SECURE") == "true",
 		SameSite: refreshCookieSameSite(),
 	}
+}
+
+// Non-persistent cookies omit Expires/MaxAge so the browser drops them on close.
+func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time, persistent bool) {
+	cookie := refreshCookie(token)
 	if persistent {
 		cookie.Expires = expiresAt
 		cookie.MaxAge = int(time.Until(expiresAt).Seconds())
@@ -57,18 +60,12 @@ func setRefreshCookie(w http.ResponseWriter, token string, expiresAt time.Time, 
 }
 
 func clearRefreshCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     refreshCookieName,
-		Value:    "",
-		Path:     "/api/profile",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   os.Getenv("COOKIE_SECURE") == "true",
-		SameSite: refreshCookieSameSite(),
-	})
+	cookie := refreshCookie("")
+	cookie.MaxAge = -1
+	http.SetCookie(w, cookie)
 }
 
-func createSession(w http.ResponseWriter, profileID int64, persistent bool) (string, error) {
+func createSession(ctx context.Context, w http.ResponseWriter, profileID int64, persistent bool) (string, error) {
 	accessToken, err := createToken(profileID)
 	if err != nil {
 		return "", err
@@ -80,7 +77,7 @@ func createSession(w http.ResponseWriter, profileID int64, persistent bool) (str
 	}
 
 	expiresAt := database.RefreshTokenExpiry(persistent)
-	if err := database.StoreRefreshToken(context.Background(), profileID, refreshToken, expiresAt, persistent); err != nil {
+	if err := database.StoreRefreshToken(ctx, profileID, refreshToken, expiresAt, persistent); err != nil {
 		return "", err
 	}
 
@@ -96,7 +93,7 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, hash, err := database.GetProfileByEmail(req.Email)
+	id, hash, err := database.GetProfileByEmail(r.Context(), req.Email)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		slog.Error("login profile: get profile by email", "error", err)
@@ -114,7 +111,7 @@ func handleLoginProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createSession(w, id, req.RememberMe)
+	token, err := createSession(r.Context(), w, id, req.RememberMe)
 
 	if err != nil {
 		slog.Error("login profile: create session", "error", err)
@@ -133,14 +130,14 @@ func handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileID, err := database.CreateProfile(req)
+	profileID, err := database.CreateProfile(r.Context(), req)
 
 	if err != nil {
 		writeDBError(w, "create profile", err, "profile not found", "could not create profile")
 		return
 	}
 
-	token, err := createSession(w, profileID, true)
+	token, err := createSession(r.Context(), w, profileID, true)
 
 	if err != nil {
 		slog.Error("create profile: create session", "error", err)
@@ -196,6 +193,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := createToken(profileID)
 	if err != nil {
+		slog.Error("refresh profile: create token", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not refresh session")
 		return
 	}

@@ -1,14 +1,13 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
+
+	"main/utils"
 )
 
 const (
@@ -19,11 +18,11 @@ const (
 var errJinaRateLimited = errors.New("jina rate limited")
 
 func jinaAPIKey() string {
-	return os.Getenv("JINA_API_KEY")
+	return utils.Getenv("JINA_API_KEY")
 }
 
 func jinaEmbedModel() string {
-	if model := os.Getenv("JINA_EMBED_MODEL"); model != "" {
+	if model := utils.Getenv("JINA_EMBED_MODEL"); model != "" {
 		return model
 	}
 
@@ -51,35 +50,17 @@ func callJinaEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 		return nil, fmt.Errorf("JINA_API_KEY is not set")
 	}
 
-	payload, err := json.Marshal(jinaEmbedRequest{Model: jinaEmbedModel(), Input: texts})
-	if err != nil {
-		return nil, fmt.Errorf("encode request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, jinaAPIURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := http.DefaultClient.Do(req)
+	status, respBody, err := postJSON(ctx, jinaAPIURL, apiKey, jinaEmbedRequest{Model: jinaEmbedModel(), Input: texts})
 	if err != nil {
 		return nil, fmt.Errorf("call jina: %w", err)
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read jina response: %w", err)
+	if status == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("%w: %s", errJinaRateLimited, errorBody(respBody))
 	}
 
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("%w: %s", errJinaRateLimited, string(respBody))
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jina returned %d: %s", resp.StatusCode, string(respBody))
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("jina returned %d: %s", status, errorBody(respBody))
 	}
 
 	var parsed jinaEmbedResponse

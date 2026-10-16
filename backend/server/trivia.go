@@ -1,13 +1,11 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"main/database"
@@ -91,31 +89,19 @@ func handleGenerateTrivia(w http.ResponseWriter, r *http.Request, profileID int6
 	topic := req.Prompt
 
 	if req.Source == triviaSourceResume {
-		extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
-		if err != nil {
-			slog.Error("generate trivia: get active resume extraction", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to load active resume")
-			return
-		}
-		if !found {
-			writeError(w, http.StatusNotFound, "no completed resume extraction found for your active resume")
+		extraction, ok := requireActiveResume(w, r, profileID, "generate trivia")
+		if !ok {
 			return
 		}
 
-		llmReq.Resume = &llm.ResumeProfile{
-			Summary:        extraction.Summary,
-			Skills:         extraction.Skills,
-			WorkExperience: extraction.WorkExperience,
-			Projects:       extraction.Projects,
-		}
+		// The quiz is about technologies, not the person, so leave the name out.
+		profile := extraction.Profile()
+		profile.FullName = ""
+		llmReq.Resume = &profile
 		topic = triviaResumeTopic
 	}
 
-	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(generationTimeout + 15*time.Second)); err != nil {
-		slog.Error("generate trivia: extend write deadline", "error", err)
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), generationTimeout)
+	ctx, cancel := llmContext(w, r, "generate trivia")
 	defer cancel()
 
 	questions, err := llm.GenerateTrivia(ctx, llmReq)

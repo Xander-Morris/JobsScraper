@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -16,7 +15,7 @@ import (
 // SECRET_KEY as access-token JWTs. Lets the one-click unsubscribe link prove
 // we minted it for this profile, without the recipient needing to log in.
 func unsubscribeToken(profileID int64) string {
-	mac := hmac.New(sha256.New, []byte(utils.GetEnv()["SECRET_KEY"]))
+	mac := hmac.New(sha256.New, []byte(utils.Getenv("SECRET_KEY")))
 	mac.Write([]byte(strconv.FormatInt(profileID, 10)))
 
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
@@ -29,7 +28,7 @@ func ValidUnsubscribeToken(profileID int64, token string) bool {
 }
 
 func unsubscribeLink(profileID int64) string {
-	base := strings.TrimSuffix(os.Getenv("PUBLIC_BACKEND_URL"), "/")
+	base := strings.TrimSuffix(utils.Getenv("PUBLIC_BACKEND_URL"), "/")
 	if base == "" {
 		base = "http://localhost:8090"
 	}

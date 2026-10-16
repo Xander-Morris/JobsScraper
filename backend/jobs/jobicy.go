@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"time"
 )
@@ -15,7 +16,7 @@ type Jobicy struct {
 }
 
 func NewJobicy(userAgent string) *Jobicy {
-	return &Jobicy{newFeed(userAgent, jobicyEndpoint)}
+	return &Jobicy{newFeed(userAgent, jobicyEndpoint, feedTimeout)}
 }
 
 type jobicyResponse struct {
@@ -36,10 +37,10 @@ type jobicyJob struct {
 	SalaryMax      int      `json:"salaryMax"`
 }
 
-func (j *Jobicy) FetchJobs() ([]Job, error) {
+func (j *Jobicy) FetchJobs(ctx context.Context) ([]Job, error) {
 	var parsed jobicyResponse
 
-	if err := j.getJSON(j.Endpoint, &parsed); err != nil {
+	if err := j.getJSON(ctx, j.Endpoint, &parsed); err != nil {
 		return nil, err
 	}
 

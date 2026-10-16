@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"regexp"
 	"strconv"
@@ -17,7 +18,7 @@ type Remotive struct {
 }
 
 func NewRemotive(userAgent string) *Remotive {
-	return &Remotive{newFeed(userAgent, remotiveEndpoint)}
+	return &Remotive{newFeed(userAgent, remotiveEndpoint, feedTimeout)}
 }
 
 type remotiveResponse struct {
@@ -38,10 +39,10 @@ type remotiveJob struct {
 	CandidateRequiredLocation string `json:"candidate_required_location"`
 }
 
-func (r *Remotive) FetchJobs() ([]Job, error) {
+func (r *Remotive) FetchJobs(ctx context.Context) ([]Job, error) {
 	var parsed remotiveResponse
 
-	if err := r.getJSON(r.Endpoint, &parsed); err != nil {
+	if err := r.getJSON(ctx, r.Endpoint, &parsed); err != nil {
 		return nil, err
 	}
 

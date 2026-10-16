@@ -99,18 +99,18 @@ func verifyEmail(email string) (*emailverifier.Result, error) {
 	}
 }
 
-func GetProfileByEmail(email string) (int64, string, error) {
+func GetProfileByEmail(ctx context.Context, email string) (int64, string, error) {
 	var id int64
 	var password string
 
-	if err := db().QueryRow("SELECT id, password FROM profiles WHERE email=$1", email).Scan(&id, &password); err != nil {
+	if err := db().QueryRowContext(ctx, "SELECT id, password FROM profiles WHERE email=$1", email).Scan(&id, &password); err != nil {
 		return 0, "", err
 	}
 
 	return id, password, nil
 }
 
-func CreateProfile(req *ProfileRequest) (int64, error) {
+func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 	if len(req.Email) == 0 || len(req.Password) == 0 {
 		return 0, invalidInput("email and password are required")
 	}
@@ -129,14 +129,6 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 		return 0, invalidInput("email is invalid or undeliverable")
 	}
 
-	tx, err := db().Begin()
-
-	if err != nil {
-		return 0, err
-	}
-
-	defer tx.Rollback()
-
 	hashedPassword, err := HashPassword(req.Password)
 
 	if err != nil {
@@ -145,15 +137,12 @@ func CreateProfile(req *ProfileRequest) (int64, error) {
 
 	var profileID int64
 
-	if err := tx.QueryRow(insertStatements["profiles"], req.Email, hashedPassword).Scan(&profileID); err != nil {
+	if err := db().QueryRowContext(ctx, `INSERT INTO profiles (email, password) VALUES ($1, $2)
+		ON CONFLICT (email) DO NOTHING RETURNING id`, req.Email, hashedPassword).Scan(&profileID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, invalidInput("email already registered")
 		}
 
-		return 0, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 

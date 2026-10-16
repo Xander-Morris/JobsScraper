@@ -84,7 +84,13 @@ func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest
 
 	var educationID int64
 
-	err = db().QueryRowContext(ctx, insertStatements["profiles_education"],
+	err = db().QueryRowContext(ctx, `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (profile_id, school_name, major, degree) DO UPDATE SET
+			gpa = excluded.gpa,
+			start_date = excluded.start_date,
+			end_date = excluded.end_date
+		RETURNING id`,
 		profileID, req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate).Scan(&educationID)
 
 	if err != nil {

@@ -25,7 +25,7 @@ func TestTailoredResumeUpsertAndStale(t *testing.T) {
 	}
 
 	seed := jobs.Job{Title: "Engineer", Company: "Acme", URL: "https://example.com/tailored", PostedAt: time.Now()}
-	if err := WriteJobsToDatabase([]jobs.Job{seed}); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), []jobs.Job{seed}); err != nil {
 		t.Fatalf("seed job: %v", err)
 	}
 	jobID := jobIDByURL(t, seed.URL)

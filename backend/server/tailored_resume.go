@@ -1,11 +1,9 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"main/database"
 	"main/llm"
@@ -38,14 +36,8 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request, profil
 		return
 	}
 
-	extraction, found, err := database.GetActiveResumeExtraction(r.Context(), profileID)
-	if err != nil {
-		slog.Error("tailor resume: get active resume extraction", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to load active resume")
-		return
-	}
-	if !found {
-		writeError(w, http.StatusNotFound, "no completed resume extraction found for your active resume")
+	extraction, ok := requireActiveResume(w, r, profileID, "tailor resume")
+	if !ok {
 		return
 	}
 
@@ -55,31 +47,10 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request, profil
 		return
 	}
 
-	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(generationTimeout + 15*time.Second)); err != nil {
-		slog.Error("tailor resume: extend write deadline", "error", err)
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), generationTimeout)
+	ctx, cancel := llmContext(w, r, "tailor resume")
 	defer cancel()
 
-	tailored, err := llm.TailorResume(ctx, llm.ExtractedResume{
-		FullName:       extraction.FullName,
-		Email:          extraction.Email,
-		Phone:          extraction.Phone,
-		LinkedIn:       extraction.LinkedIn,
-		GitHub:         extraction.GitHub,
-		Portfolio:      extraction.Portfolio,
-		Summary:        extraction.Summary,
-		Skills:         extraction.Skills,
-		Education:      extraction.Education,
-		WorkExperience: extraction.WorkExperience,
-		Projects:       extraction.Projects,
-	}, llm.JobPosting{
-		Title:       job.Title,
-		Company:     job.Company,
-		Tags:        job.Tags,
-		Description: job.Description,
-	})
+	tailored, err := llm.TailorResume(ctx, extraction.ExtractedResume, jobPosting(job))
 
 	if err != nil {
 		slog.Error("tailor resume", "profile_id", profileID, "job_id", jobID, "error", err)

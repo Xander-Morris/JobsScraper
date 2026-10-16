@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, apiFetch, authHeaders } from './client'
+import { apiFetch, apiFetchBlob } from './client'
 import {
   authResponseSchema,
   idResponseSchema,
@@ -206,16 +206,6 @@ export function triggerResumeExtraction(id: number) {
   return apiFetch(`/api/profile/resumes/${id}/extraction`, statusResponseSchema, { method: 'POST' })
 }
 
-// Downloads bypass apiFetch: the response is a file, not a schema-checked JSON body.
-export async function downloadResume(id: number): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/profile/resumes/${id}/download`, {
-    credentials: 'include',
-    headers: authHeaders()
-  })
-
-  if (!response.ok) {
-    throw new ApiError(response.statusText || 'Unable to download resume', response.status)
-  }
-
-  return response.blob()
+export function downloadResume(id: number): Promise<Blob> {
+  return apiFetchBlob(`/api/profile/resumes/${id}/download`)
 }

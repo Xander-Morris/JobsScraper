@@ -53,6 +53,17 @@ type ExtractedResume struct {
 	Projects       []ProjectEntry        `json:"projects"`
 }
 
+// Profile is the subset of the resume the generation prompts work from.
+func (r ExtractedResume) Profile() ResumeProfile {
+	return ResumeProfile{
+		FullName:       r.FullName,
+		Summary:        r.Summary,
+		Skills:         r.Skills,
+		WorkExperience: r.WorkExperience,
+		Projects:       r.Projects,
+	}
+}
+
 func ExtractResumeFields(ctx context.Context, fileName, contentType string, content []byte) (*ExtractedResume, error) {
 	text, err := extractResumeText(contentType, content)
 	if err != nil {

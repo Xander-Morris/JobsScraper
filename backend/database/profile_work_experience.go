@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 )
 
 type ProfileWorkExperienceBullet struct {
@@ -151,7 +152,13 @@ func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperie
 
 	var workExperienceID int64
 
-	err = db().QueryRowContext(ctx, insertStatements["profiles_work_experience"],
+	err = db().QueryRowContext(ctx, `INSERT INTO profiles_work_experience (profile_id, company, job_title, job_type, location, start_date, end_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (profile_id, company, job_title, start_date) DO UPDATE SET
+			job_type = excluded.job_type,
+			location = excluded.location,
+			end_date = excluded.end_date
+		RETURNING id`,
 		profileID, req.Company, req.JobTitle, int(jobType), location, startDate, endDate).Scan(&workExperienceID)
 
 	if err != nil {
@@ -254,7 +261,11 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 
 	var bulletID int64
 
-	err := db().QueryRowContext(ctx, insertStatements["profiles_work_experience_bullets"],
+	err := db().QueryRowContext(ctx, `INSERT INTO profiles_work_experience_bullets (work_experience_id, bullet, position)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (work_experience_id, bullet) DO UPDATE SET
+			position = excluded.position
+		RETURNING id`,
 		workExperienceID, req.Bullet, req.Position).Scan(&bulletID)
 
 	if err != nil {
@@ -310,6 +321,64 @@ func DeleteWorkExperienceBullet(ctx context.Context, profileID, workExperienceID
 	if rows == 0 {
 		return sql.ErrNoRows
 	}
+
+	return nil
+}
+
+type JobType int
+
+const (
+	JobTypeUnknown JobType = iota
+	JobTypeContract
+	JobTypeInternship
+	JobTypePartTime
+	JobTypeFullTime
+)
+
+func ParseJobType(s string) (JobType, bool) {
+	switch s {
+	case "", "unknown":
+		return JobTypeUnknown, true
+	case "contract":
+		return JobTypeContract, true
+	case "internship":
+		return JobTypeInternship, true
+	case "part_time":
+		return JobTypePartTime, true
+	case "full_time":
+		return JobTypeFullTime, true
+	default:
+		return JobTypeUnknown, false
+	}
+}
+
+func (j JobType) String() string {
+	switch j {
+	case JobTypeContract:
+		return "contract"
+	case JobTypeInternship:
+		return "internship"
+	case JobTypePartTime:
+		return "part_time"
+	case JobTypeFullTime:
+		return "full_time"
+	default:
+		return "unknown"
+	}
+}
+
+func (j JobType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(j.String())
+}
+
+func (j *JobType) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	parsed, _ := ParseJobType(s)
+	*j = parsed
 
 	return nil
 }

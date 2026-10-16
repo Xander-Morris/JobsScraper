@@ -85,12 +85,12 @@ func limit(next http.Handler) http.Handler {
 		ip, err := clientIP(r)
 		if err != nil {
 			slog.Error("rate limiter: resolve client ip", "error", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 
 		if !globalLimiter.allow(ip) {
-			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			writeError(w, http.StatusTooManyRequests, "too many requests, please slow down")
 			return
 		}
 

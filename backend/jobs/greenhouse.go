@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ type Greenhouse struct {
 
 func NewGreenhouse(userAgent string) *Greenhouse {
 	return &Greenhouse{
-		feed:   newBoardFeed(userAgent, greenhouseEndpoint),
+		feed:   newFeed(userAgent, greenhouseEndpoint, boardFeedTimeout),
 		Boards: greenhouseBoards,
 	}
 }
@@ -55,11 +56,11 @@ type greenhouseDepartment struct {
 	Name string `json:"name"`
 }
 
-func (g *Greenhouse) FetchJobs() ([]Job, error) {
+func (g *Greenhouse) FetchJobs(ctx context.Context) ([]Job, error) {
 	return fetchBoards("greenhouse", g.Boards, func(board Board) ([]Job, error) {
 		var parsed greenhouseResponse
 
-		if err := g.getJSON(g.Endpoint+"/"+board.Slug+"/jobs?content=true", &parsed); err != nil {
+		if err := g.getJSON(ctx, g.Endpoint+"/"+board.Slug+"/jobs?content=true", &parsed); err != nil {
 			return nil, err
 		}
 

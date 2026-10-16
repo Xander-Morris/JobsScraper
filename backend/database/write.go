@@ -1,16 +1,27 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"main/jobs"
+	"math"
+	"sync"
 	"time"
+
+	"main/jobs"
 )
 
-var createdTables bool
+var (
+	migrateMu sync.Mutex
+	migrated  bool
+)
 
+// CreateTables applies pending migrations once per process; a failure is retried on the next call.
 func CreateTables() error {
-	if createdTables {
+	migrateMu.Lock()
+	defer migrateMu.Unlock()
+
+	if migrated {
 		return nil
 	}
 
@@ -18,7 +29,7 @@ func CreateTables() error {
 		return err
 	}
 
-	createdTables = true
+	migrated = true
 
 	return nil
 }
@@ -45,18 +56,18 @@ const upsertJobsSQL = `INSERT INTO jobs (title, company, location, workplace_typ
 		is_full_time = excluded.is_full_time
 	RETURNING id, url`
 
-func writeJobs(tx *sql.Tx, batch []jobs.Job) error {
+func writeJobs(ctx context.Context, tx *sql.Tx, batch []jobs.Job) error {
 	batch = dedupeJobsByURL(batch)
 
 	for start := 0; start < len(batch); start += writeJobsChunkSize {
 		chunk := batch[start:min(start+writeJobsChunkSize, len(batch))]
 
-		jobIDs, err := upsertJobs(tx, chunk)
+		jobIDs, err := upsertJobs(ctx, tx, chunk)
 		if err != nil {
 			return err
 		}
 
-		if err := replaceJobTags(tx, chunk, jobIDs); err != nil {
+		if err := replaceJobTags(ctx, tx, chunk, jobIDs); err != nil {
 			return err
 		}
 	}
@@ -82,7 +93,7 @@ func dedupeJobsByURL(batch []jobs.Job) []jobs.Job {
 	return deduped
 }
 
-func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
+func upsertJobs(ctx context.Context, tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 	n := len(chunk)
 	titles, companies, locations := make([]string, n), make([]string, n), make([]string, n)
 	urls, descriptions := make([]string, n), make([]string, n)
@@ -107,7 +118,7 @@ func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 		}
 	}
 
-	rows, err := tx.Query(upsertJobsSQL, titles, companies, locations, workplaceTypes, salaryMins, salaryMaxes, postedAts, urls, descriptions,
+	rows, err := tx.QueryContext(ctx, upsertJobsSQL, titles, companies, locations, workplaceTypes, salaryMins, salaryMaxes, postedAts, urls, descriptions,
 		interns, partTimes, fullTimes)
 	if err != nil {
 		return nil, fmt.Errorf("upsert jobs: %w", err)
@@ -130,13 +141,13 @@ func upsertJobs(tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
 	return ids, rows.Err()
 }
 
-func replaceJobTags(tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error {
+func replaceJobTags(ctx context.Context, tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error {
 	ids := make([]int64, 0, len(jobIDs))
 	for _, id := range jobIDs {
 		ids = append(ids, id)
 	}
 
-	if _, err := tx.Exec("DELETE FROM job_tags WHERE job_id = ANY($1::int[])", ids); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM job_tags WHERE job_id = ANY($1::int[])", ids); err != nil {
 		return fmt.Errorf("clear job tags: %w", err)
 	}
 
@@ -156,7 +167,7 @@ func replaceJobTags(tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error
 		return nil
 	}
 
-	tagIDs, err := upsertTags(tx, uniqueTags)
+	tagIDs, err := upsertTags(ctx, tx, uniqueTags)
 	if err != nil {
 		return err
 	}
@@ -170,7 +181,7 @@ func replaceJobTags(tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error
 		}
 	}
 
-	if _, err := tx.Exec(`INSERT INTO job_tags (job_id, tag_id) SELECT * FROM unnest($1::int[], $2::int[])
+	if _, err := tx.ExecContext(ctx, `INSERT INTO job_tags (job_id, tag_id) SELECT * FROM unnest($1::int[], $2::int[])
 		ON CONFLICT (job_id, tag_id) DO NOTHING`, pairJobIDs, pairTagIDs); err != nil {
 		return fmt.Errorf("insert job tags: %w", err)
 	}
@@ -178,8 +189,8 @@ func replaceJobTags(tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error
 	return nil
 }
 
-func upsertTags(tx *sql.Tx, tags []string) (map[string]int64, error) {
-	rows, err := tx.Query(`INSERT INTO tags (tag) SELECT unnest($1::text[])
+func upsertTags(ctx context.Context, tx *sql.Tx, tags []string) (map[string]int64, error) {
+	rows, err := tx.QueryContext(ctx, `INSERT INTO tags (tag) SELECT unnest($1::text[])
 		ON CONFLICT (tag) DO UPDATE SET tag = excluded.tag
 		RETURNING id, tag`, tags)
 	if err != nil {
@@ -206,9 +217,9 @@ func upsertTags(tx *sql.Tx, tags []string) (map[string]int64, error) {
 // maxPostedAtSkew allows for source clocks and time zones running a little ahead.
 const maxPostedAtSkew = 24 * time.Hour
 
-// salaryPtr drops amounts too small to be a yearly salary.
+// salaryPtr drops amounts too small to be a yearly salary, or too big for the column.
 func salaryPtr(v *int) *int32 {
-	if v == nil || *v < jobs.MinSalary {
+	if v == nil || *v < jobs.MinSalary || *v > math.MaxInt32 {
 		return nil
 	}
 
@@ -217,12 +228,12 @@ func salaryPtr(v *int) *int32 {
 	return &n
 }
 
-func WriteJobsToDatabase(jobs []jobs.Job) error {
+func WriteJobsToDatabase(ctx context.Context, jobs []jobs.Job) error {
 	if err := CreateTables(); err != nil {
 		return err
 	}
 
-	tx, err := db().Begin()
+	tx, err := db().BeginTx(ctx, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
@@ -230,7 +241,7 @@ func WriteJobsToDatabase(jobs []jobs.Job) error {
 
 	defer tx.Rollback()
 
-	if err := writeJobs(tx, jobs); err != nil {
+	if err := writeJobs(ctx, tx, jobs); err != nil {
 		return fmt.Errorf("failed to write jobs: %w", err)
 	}
 

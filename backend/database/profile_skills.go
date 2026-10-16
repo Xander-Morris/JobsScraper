@@ -45,7 +45,7 @@ func AddSkill(ctx context.Context, profileID int64, req *AddSkillRequest) (int64
 
 	var skillID int64
 
-	err := db().QueryRowContext(ctx, insertStatements["profiles_skills"], profileID, req.Skill).Scan(&skillID)
+	err := db().QueryRowContext(ctx, `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id`, profileID, req.Skill).Scan(&skillID)
 
 	if err != nil {
 		return 0, err

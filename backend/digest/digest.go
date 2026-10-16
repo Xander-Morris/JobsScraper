@@ -31,12 +31,12 @@ func StartScheduler(ctx context.Context) {
 }
 
 // RunCycle runs one digest pass across all opted-in profiles, for cmd/cron.
-func RunCycle() {
-	schedule.Once(jobName, run)
+func RunCycle(ctx context.Context) {
+	schedule.Once(ctx, jobName, run)
 }
 
-func run() {
-	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
+func run(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, runTimeout)
 	defer cancel()
 
 	profiles, err := database.ListProfilesForDigest(ctx)

@@ -7,7 +7,6 @@ import {
   setAccessToken,
   tokenRefreshedEvent
 } from '../api/client'
-import { queryKeys } from '../api/query-keys'
 
 const authChannelName = 'profile-auth'
 const presenceChannelName = 'profile-presence'
@@ -98,30 +97,36 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
   const channelRef = useRef<BroadcastChannel | null>(null)
   const queryClient = useQueryClient()
 
-  const login = useCallback((next: string, remember?: boolean) => {
-    if (remember !== undefined) writeStorage(local, rememberKey, String(remember))
-    writeStorage(session, liveKey, '1')
-    setAccessToken(next)
-    setToken(next)
-    setSessionMessage(null)
-    channelRef.current?.postMessage({ type: 'login', token: next } satisfies AuthMessage)
-  }, [])
+  // Query keys don't include the user, so drop every cached response on logout.
+  const applyToken = useCallback(
+    (next: string | null) => {
+      writeStorage(session, liveKey, next ? '1' : null)
+      setAccessToken(next)
+      setToken(next)
+      if (!next) queryClient.clear()
+    },
+    [queryClient]
+  )
 
-  // Jobs keys don't include the token, so drop per-user data (applied, match score) on logout.
-  const clearUserJobs = useCallback(() => queryClient.removeQueries({ queryKey: queryKeys.jobs }), [queryClient])
+  const login = useCallback(
+    (next: string, remember?: boolean) => {
+      if (remember !== undefined) writeStorage(local, rememberKey, String(remember))
+      applyToken(next)
+      setSessionMessage(null)
+      channelRef.current?.postMessage({ type: 'login', token: next } satisfies AuthMessage)
+    },
+    [applyToken]
+  )
 
   const logout = useCallback(
     (message?: string) => {
       void fetch(`${API_BASE_URL}/api/profile/logout`, { method: 'POST', credentials: 'include' })
       writeStorage(local, rememberKey, null)
-      writeStorage(session, liveKey, null)
-      setAccessToken(null)
-      setToken(null)
-      clearUserJobs()
+      applyToken(null)
       setSessionMessage(message ?? null)
       channelRef.current?.postMessage({ type: 'logout' } satisfies AuthMessage)
     },
-    [clearUserJobs]
+    [applyToken]
   )
 
   useEffect(() => {
@@ -132,15 +137,10 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
 
     channel.onmessage = (event: MessageEvent<AuthMessage>) => {
       if (event.data.type === 'login') {
-        writeStorage(session, liveKey, '1')
-        setAccessToken(event.data.token)
-        setToken(event.data.token)
+        applyToken(event.data.token)
         setSessionMessage(null)
       } else {
-        writeStorage(session, liveKey, null)
-        setAccessToken(null)
-        setToken(null)
-        clearUserJobs()
+        applyToken(null)
       }
     }
 
@@ -148,25 +148,21 @@ export function ProfileAuthProvider({ children }: { children: ReactNode }) {
       channel.close()
       channelRef.current = null
     }
-  }, [clearUserJobs])
+  }, [applyToken])
 
   useEffect(() => {
     let cancelled = false
 
     initialRefresh.then((next) => {
       if (cancelled) return
-      if (next) {
-        writeStorage(session, liveKey, '1')
-        setAccessToken(next)
-        setToken(next)
-      }
+      if (next) applyToken(next)
       setIsInitializing(false)
     })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [applyToken])
 
   useEffect(() => {
     const onTokenRefreshed = (event: Event) => {

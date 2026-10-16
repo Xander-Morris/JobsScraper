@@ -56,7 +56,7 @@ func TestHandleGetTailoredResumeNotFound(t *testing.T) {
 func TestHandleGenerateTailoredResumeNoActiveResume(t *testing.T) {
 	requireTestDB(t)
 
-	profileID, err := database.CreateProfile(&database.ProfileRequest{Email: "tailored-no-resume@example.com", Password: "securepassword123"})
+	profileID, err := database.CreateProfile(t.Context(), &database.ProfileRequest{Email: "tailored-no-resume@example.com", Password: "securepassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}

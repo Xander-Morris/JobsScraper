@@ -61,7 +61,7 @@ func TestHimalayasFetchJobsFollowsCursor(t *testing.T) {
 	h := NewHimalayas("test-agent")
 	h.Endpoint = srv.URL
 
-	got, err := h.FetchJobs()
+	got, err := h.FetchJobs(t.Context())
 	if err != nil {
 		t.Fatalf("FetchJobs: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestArbeitnowFetchJobsStopsAtLastPage(t *testing.T) {
 	a := NewArbeitnow("test-agent")
 	a.Endpoint = srv.URL
 
-	got, err := a.FetchJobs()
+	got, err := a.FetchJobs(t.Context())
 	if err != nil {
 		t.Fatalf("FetchJobs: %v", err)
 	}

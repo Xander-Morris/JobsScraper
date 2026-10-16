@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ type WeWorkRemotely struct {
 }
 
 func NewWeWorkRemotely(userAgent string) *WeWorkRemotely {
-	return &WeWorkRemotely{newFeed(userAgent, weWorkRemotelyEndpoint)}
+	return &WeWorkRemotely{newFeed(userAgent, weWorkRemotelyEndpoint, feedTimeout)}
 }
 
 type weWorkRemotelyFeed struct {
@@ -37,10 +38,10 @@ type weWorkRemotelyItem struct {
 	Link        string `xml:"link"`
 }
 
-func (w *WeWorkRemotely) FetchJobs() ([]Job, error) {
+func (w *WeWorkRemotely) FetchJobs(ctx context.Context) ([]Job, error) {
 	var parsed weWorkRemotelyFeed
 
-	if err := w.getXML(w.Endpoint, &parsed); err != nil {
+	if err := w.getXML(ctx, w.Endpoint, &parsed); err != nil {
 		return nil, err
 	}
 

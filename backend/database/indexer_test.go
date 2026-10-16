@@ -16,7 +16,7 @@ import (
 func newTestDB(t *testing.T) {
 	t.Helper()
 
-	connString := utils.GetEnv()["TEST_DATABASE_CONNECTION"]
+	connString := utils.Getenv("TEST_DATABASE_CONNECTION")
 
 	if connString == "" {
 		t.Skip("TEST_DATABASE_CONNECTION not set; skipping tests that require a live Postgres database")
@@ -47,7 +47,7 @@ func newTestDB(t *testing.T) {
 	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
 		t.Fatalf("reset test db: %v", err)
 	}
-	createdTables = false
+	migrated = false
 
 	prev := SetDB(db)
 
@@ -80,7 +80,7 @@ func TestGetJobByID(t *testing.T) {
 		Description:   "Build things",
 	}
 
-	if err := WriteJobsToDatabase([]jobs.Job{seed}); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), []jobs.Job{seed}); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestSearchForJobsPage(t *testing.T) {
 			URL: "https://example.com/jobs/newer", Description: "long text"},
 	}
 
-	if err := WriteJobsToDatabase(seed); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), seed); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -258,7 +258,7 @@ func TestSearchForJobsResumeEmbedding(t *testing.T) {
 		{Title: "Unembedded", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/unembedded", Description: "x"},
 	}
 
-	if err := WriteJobsToDatabase(seed); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), seed); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -308,7 +308,7 @@ func TestGetJobByIDResumeEmbedding(t *testing.T) {
 	seed := jobs.Job{Title: "Match", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/match", Description: "x"}
 	unembedded := jobs.Job{Title: "Unembedded", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/unembedded", Description: "x"}
 
-	if err := WriteJobsToDatabase([]jobs.Job{seed, unembedded}); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), []jobs.Job{seed, unembedded}); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -347,7 +347,7 @@ func TestSearchForJobsJobType(t *testing.T) {
 		{Title: "Designer", Company: "Acme", PostedAt: time.Now(), URL: "https://example.com/jobs/untyped"},
 	}
 
-	if err := WriteJobsToDatabase(seed); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), seed); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -393,7 +393,7 @@ func TestSearchForJobsFirstSeenAfter(t *testing.T) {
 		{Title: "No Post Date", Company: "Acme", URL: "https://example.com/jobs/no-post-date"},
 	}
 
-	if err := WriteJobsToDatabase(seed); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), seed); err != nil {
 		t.Fatalf("seed db: %v", err)
 	}
 
@@ -421,7 +421,7 @@ func TestSearchForJobsFirstSeenAfter(t *testing.T) {
 func TestGetJobByIDNotFound(t *testing.T) {
 	newTestDB(t)
 
-	if err := WriteJobsToDatabase(nil); err != nil {
+	if err := WriteJobsToDatabase(t.Context(), nil); err != nil {
 		t.Fatalf("init schema: %v", err)
 	}
 

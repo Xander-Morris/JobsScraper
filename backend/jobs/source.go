@@ -1,5 +1,7 @@
 package jobs
 
+import "context"
+
 type JobSource interface {
-	FetchJobs() ([]Job, error)
+	FetchJobs(ctx context.Context) ([]Job, error)
 }

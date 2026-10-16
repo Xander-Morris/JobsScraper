@@ -14,7 +14,7 @@ func newTestProfileWithActiveResume(t *testing.T, email string) int64 {
 	t.Helper()
 	requireTestDB(t)
 
-	profileID, err := database.CreateProfile(&database.ProfileRequest{Email: email, Password: "securepassword123"})
+	profileID, err := database.CreateProfile(t.Context(), &database.ProfileRequest{Email: email, Password: "securepassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestHandleGenerateApplicationContentInvalidJobID(t *testing.T) {
 func TestHandleGenerateApplicationContentNoActiveResume(t *testing.T) {
 	requireTestDB(t)
 
-	profileID, err := database.CreateProfile(&database.ProfileRequest{Email: "generation-no-resume@example.com", Password: "securepassword123"})
+	profileID, err := database.CreateProfile(t.Context(), &database.ProfileRequest{Email: "generation-no-resume@example.com", Password: "securepassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}

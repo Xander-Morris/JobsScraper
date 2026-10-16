@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useBlocker } from '@tanstack/react-router'
 import { ArrowLeftIcon, PrinterIcon, SaveIcon, SparklesIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   jobQueryOptions,
   tailoredResumeQueryOptions,
@@ -41,12 +41,14 @@ function TailoredResumePage() {
   })
   const save = useSaveTailoredResumeMutation(jobId)
   const regenerate = useGenerateTailoredResumeMutation()
-  const [draft, setDraft] = useState<TailoredResumeContent | null>(null)
+  const [draft, setDraft] = useState<TailoredResumeContent | null>(tailored?.content ?? null)
+  const [syncedTailored, setSyncedTailored] = useState(tailored)
 
   // Saving or regenerating replaces the query data, which resets the draft.
-  useEffect(() => {
+  if (tailored !== syncedTailored) {
+    setSyncedTailored(tailored)
     if (tailored) setDraft(tailored.content)
-  }, [tailored])
+  }
 
   const dirty = !!tailored && draft !== null && draft !== tailored.content
   const actionError = [save.error, regenerate.error].find((err) => err instanceof Error)?.message

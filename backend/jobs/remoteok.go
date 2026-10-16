@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"time"
 )
@@ -14,7 +15,7 @@ type RemoteOK struct {
 }
 
 func NewRemoteOK(userAgent string) *RemoteOK {
-	return &RemoteOK{newFeed(userAgent, remoteOKEndpoint)}
+	return &RemoteOK{newFeed(userAgent, remoteOKEndpoint, feedTimeout)}
 }
 
 type remoteOKJob struct {
@@ -30,10 +31,10 @@ type remoteOKJob struct {
 	Description string   `json:"description"`
 }
 
-func (r *RemoteOK) FetchJobs() ([]Job, error) {
+func (r *RemoteOK) FetchJobs(ctx context.Context) ([]Job, error) {
 	var rawJobs []remoteOKJob
 
-	if err := r.getJSON(r.Endpoint, &rawJobs); err != nil {
+	if err := r.getJSON(ctx, r.Endpoint, &rawJobs); err != nil {
 		return nil, err
 	}
 

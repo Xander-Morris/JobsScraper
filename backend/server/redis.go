@@ -18,7 +18,7 @@ var redisClient *redis.Client
 
 func sharedRedis() *redis.Client {
 	redisOnce.Do(func() {
-		url := utils.GetEnv()["REDIS_URL"]
+		url := utils.Getenv("REDIS_URL")
 		if url == "" {
 			return
 		}

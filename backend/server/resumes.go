@@ -118,13 +118,14 @@ func handleDeleteResume(w http.ResponseWriter, r *http.Request, profileID int64)
 // calls it, not in a detached goroutine that could outlive the response.
 const resumeExtractionTimeout = 45 * time.Second
 
-func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) {
+// runResumeExtraction returns the extraction's resulting status.
+func runResumeExtraction(resumeID int64, fileName, contentType string, content []byte) string {
 	ctx, cancel := context.WithTimeout(context.Background(), resumeExtractionTimeout)
 	defer cancel()
 
 	if err := database.UpsertResumeExtractionPending(ctx, resumeID); err != nil {
 		slog.Error("resume extraction: mark pending", "resume_id", resumeID, "error", err)
-		return
+		return "failed"
 	}
 
 	extracted, err := llm.ExtractResumeFields(ctx, fileName, contentType, content)
@@ -140,15 +141,17 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 		if dbErr := database.SaveResumeExtractionFailure(saveCtx, resumeID, status, err.Error()); dbErr != nil {
 			slog.Error("resume extraction: save failure", "resume_id", resumeID, "error", dbErr)
 		}
-		return
+		return status
 	}
 
 	if err := database.SaveResumeExtractionResult(ctx, resumeID, extracted); err != nil {
 		slog.Error("resume extraction: save result", "resume_id", resumeID, "error", err)
-		return
+		return "failed"
 	}
 
 	embedResumeExtraction(ctx, resumeID, extracted)
+
+	return "completed"
 }
 
 // embedResumeExtraction generates and stores a semantic embedding for a
@@ -156,13 +159,7 @@ func runResumeExtraction(resumeID int64, fileName, contentType string, content [
 // than flip the extraction back to failed, since the structured data already
 // saved fine, and search/digest just fall back to keyword matching.
 func embedResumeExtraction(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) {
-	text := llm.EmbeddingText(llm.ResumeProfile{
-		FullName:       extracted.FullName,
-		Summary:        extracted.Summary,
-		Skills:         extracted.Skills,
-		WorkExperience: extracted.WorkExperience,
-		Projects:       extracted.Projects,
-	})
+	text := llm.EmbeddingText(extracted.Profile())
 
 	embeddings, err := llm.EmbedTexts(ctx, []string{text})
 	if err != nil {
@@ -202,9 +199,9 @@ func handleTriggerResumeExtraction(w http.ResponseWriter, r *http.Request, profi
 		return
 	}
 
-	runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
+	status := runResumeExtraction(resumeID, resume.FileName, resume.ContentType, content)
 
-	writeJSON(w, http.StatusOK, statusResponse("pending"))
+	writeJSON(w, http.StatusOK, statusResponse(status))
 }
 
 func handleActivateResume(w http.ResponseWriter, r *http.Request, profileID int64) {
@@ -238,7 +235,7 @@ func readResumeUpload(w http.ResponseWriter, r *http.Request, requireFile bool) 
 	}
 
 	file, header, err := r.FormFile("resume")
-	if err == http.ErrMissingFile && !requireFile {
+	if errors.Is(err, http.ErrMissingFile) && !requireFile {
 		fileName, err := normalizeResumeName(r.FormValue("file_name"))
 		if err != nil {
 			return "", "", nil, err

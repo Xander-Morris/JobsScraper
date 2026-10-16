@@ -13,7 +13,7 @@ import (
 )
 
 // embedJobsTimeout caps how long one cycle spends embedding new jobs before
-// giving up and letting the next cycle pick it back up. 
+// giving up and letting the next cycle pick it back up.
 const embedJobsTimeout = 10 * time.Minute
 
 // dropExpiredJobs skips postings already past retention, so they aren't written and embedded only to be deleted.
@@ -48,8 +48,8 @@ func capNewestJobs(fetched []jobs.Job, max int) []jobs.Job {
 	return fetched[:max]
 }
 
-func deleteExpiredJobs() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+func deleteExpiredJobs(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
 	if deleted, err := database.DeleteExpiredJobs(ctx); err != nil {
@@ -59,9 +59,18 @@ func deleteExpiredJobs() {
 	}
 }
 
-func runScraper(sources []jobs.JobSource) {
-	slog.Info("scraper: starting fetch cycle")
+// dedupeKey keeps one company's same-titled openings in different cities or months apart.
+type dedupeKey struct {
+	company, title, location string
+	year                     int
+	month                    time.Month
+}
 
+func keyFor(job jobs.Job) dedupeKey {
+	return dedupeKey{job.Company, job.Title, job.Location, job.PostedAt.Year(), job.PostedAt.Month()}
+}
+
+func fetchAll(ctx context.Context, sources []jobs.JobSource) []jobs.Job {
 	var wg sync.WaitGroup
 	ch := make(chan []jobs.Job, len(sources))
 
@@ -75,7 +84,7 @@ func runScraper(sources []jobs.JobSource) {
 				}
 			}()
 
-			sourceJobs, err := source.FetchJobs()
+			sourceJobs, err := source.FetchJobs(ctx)
 
 			if err != nil {
 				slog.Error("scraper: fetch failed", "source", sourceName, "error", err)
@@ -91,24 +100,28 @@ func runScraper(sources []jobs.JobSource) {
 	close(ch)
 
 	var fetchedJobs []jobs.Job
-	seen := make(map[string]bool)
+	seen := make(map[dedupeKey]bool)
 
 	for sourceJobs := range ch {
-		var filtered []jobs.Job
-
 		for _, job := range sourceJobs {
-			// Location keeps one company's same-titled openings in different cities apart.
-			key := job.Company + job.Title + job.Location + job.PostedAt.Month().String()
-			exists, _ := seen[key]
-
-			if !exists {
-				filtered = append(filtered, job)
+			if key := keyFor(job); !seen[key] {
 				seen[key] = true
+				fetchedJobs = append(fetchedJobs, job)
 			}
 		}
+	}
 
-		slog.Debug("scraper: filtered jobs", "count", len(filtered))
-		fetchedJobs = append(fetchedJobs, filtered...)
+	return fetchedJobs
+}
+
+func runScraper(ctx context.Context, sources []jobs.JobSource) {
+	slog.Info("scraper: starting fetch cycle")
+
+	fetchedJobs := fetchAll(ctx, sources)
+
+	if ctx.Err() != nil {
+		slog.Info("scraper: cancelled before write")
+		return
 	}
 
 	fetchedCount := len(fetchedJobs)
@@ -119,16 +132,16 @@ func runScraper(sources []jobs.JobSource) {
 		"skipped_expired", fetchedCount-unexpiredCount, "skipped_over_cap", unexpiredCount-len(fetchedJobs))
 
 	// Prune first so space frees up even if the write fails.
-	deleteExpiredJobs()
+	deleteExpiredJobs(ctx)
 
-	if err := database.WriteJobsToDatabase(fetchedJobs); err != nil {
+	if err := database.WriteJobsToDatabase(ctx, fetchedJobs); err != nil {
 		slog.Error("scraper: write jobs to database", "error", err)
 		return
 	}
 
-	deleteExpiredJobs()
+	deleteExpiredJobs(ctx)
 
-	embedCtx, cancel := context.WithTimeout(context.Background(), embedJobsTimeout)
+	embedCtx, cancel := context.WithTimeout(ctx, embedJobsTimeout)
 	defer cancel()
 
 	if err := database.EmbedPendingJobs(embedCtx); err != nil {
@@ -136,19 +149,20 @@ func runScraper(sources []jobs.JobSource) {
 	}
 }
 
-func allSources() []jobs.JobSource {
-	botAgent := "MyCustomScraperBot/1.0"
+// userAgent identifies the scraper to job boards, with a link to who runs it.
+const userAgent = "JobsScraper/1.0 (+https://github.com/Xander-Morris/JobsScraper)"
 
+func allSources() []jobs.JobSource {
 	return []jobs.JobSource{
-		jobs.NewRemoteOK(botAgent),
-		jobs.NewRemotive(botAgent),
-		jobs.NewArbeitnow(botAgent),
-		jobs.NewJobicy(botAgent),
-		jobs.NewHimalayas(botAgent),
-		jobs.NewWeWorkRemotely(botAgent),
-		jobs.NewGreenhouse(botAgent),
-		jobs.NewLever(botAgent),
-		jobs.NewAshby(botAgent),
+		jobs.NewRemoteOK(userAgent),
+		jobs.NewRemotive(userAgent),
+		jobs.NewArbeitnow(userAgent),
+		jobs.NewJobicy(userAgent),
+		jobs.NewHimalayas(userAgent),
+		jobs.NewWeWorkRemotely(userAgent),
+		jobs.NewGreenhouse(userAgent),
+		jobs.NewLever(userAgent),
+		jobs.NewAshby(userAgent),
 	}
 }
 
@@ -157,10 +171,10 @@ const jobName = "scrape"
 const scrapeInterval = 10 * time.Minute
 
 // RunScrapeCycle runs one fetch-all-sources-and-write pass, for cmd/cron.
-func RunScrapeCycle() {
+func RunScrapeCycle(ctx context.Context) {
 	sources := allSources()
 
-	schedule.Once(jobName, func() { runScraper(sources) })
+	schedule.Once(ctx, jobName, func(ctx context.Context) { runScraper(ctx, sources) })
 }
 
 // StartScrapingJob fetches immediately, then every scrapeInterval, until ctx is
@@ -168,5 +182,5 @@ func RunScrapeCycle() {
 func StartScrapingJob(ctx context.Context) {
 	sources := allSources()
 
-	schedule.Every(ctx, jobName, scrapeInterval, func() { runScraper(sources) })
+	schedule.Every(ctx, jobName, scrapeInterval, func(ctx context.Context) { runScraper(ctx, sources) })
 }

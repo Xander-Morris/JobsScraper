@@ -40,7 +40,7 @@ func handleRequestPasswordReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendPasswordResetEmail(ctx context.Context, email string) error {
-	profileID, _, err := database.GetProfileByEmail(email)
+	profileID, _, err := database.GetProfileByEmail(ctx, email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -97,7 +97,7 @@ func handleConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := createSession(w, profileID, true)
+	token, err := createSession(r.Context(), w, profileID, true)
 	if err != nil {
 		slog.Error("confirm password reset: create session", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not reset password")

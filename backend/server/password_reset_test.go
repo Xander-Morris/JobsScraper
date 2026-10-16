@@ -29,7 +29,7 @@ func TestPasswordResetFlow(t *testing.T) {
 	ctx := context.Background()
 
 	const email = "reset-flow@example.com"
-	profileID, err := database.CreateProfile(&database.ProfileRequest{Email: email, Password: "oldpassword123"})
+	profileID, err := database.CreateProfile(t.Context(), &database.ProfileRequest{Email: email, Password: "oldpassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestPasswordResetFlow(t *testing.T) {
 		t.Fatalf("confirm status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body)
 	}
 
-	_, hash, err := database.GetProfileByEmail(email)
+	_, hash, err := database.GetProfileByEmail(t.Context(), email)
 	if err != nil {
 		t.Fatalf("get profile: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestPasswordResetFlow(t *testing.T) {
 func TestPasswordResetRejectsExpiredToken(t *testing.T) {
 	requireTestDB(t)
 
-	profileID, err := database.CreateProfile(&database.ProfileRequest{Email: "reset-expired@example.com", Password: "oldpassword123"})
+	profileID, err := database.CreateProfile(t.Context(), &database.ProfileRequest{Email: "reset-expired@example.com", Password: "oldpassword123"})
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}

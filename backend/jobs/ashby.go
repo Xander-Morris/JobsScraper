@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"main/utils"
 	"regexp"
 	"strings"
@@ -28,7 +29,7 @@ type Ashby struct {
 
 func NewAshby(userAgent string) *Ashby {
 	return &Ashby{
-		feed:   newBoardFeed(userAgent, ashbyEndpoint),
+		feed:   newFeed(userAgent, ashbyEndpoint, boardFeedTimeout),
 		Boards: ashbyBoards,
 	}
 }
@@ -51,11 +52,11 @@ type ashbyJob struct {
 	DescriptionHTML string `json:"descriptionHtml"`
 }
 
-func (a *Ashby) FetchJobs() ([]Job, error) {
+func (a *Ashby) FetchJobs(ctx context.Context) ([]Job, error) {
 	return fetchBoards("ashby", a.Boards, func(board Board) ([]Job, error) {
 		var parsed ashbyResponse
 
-		if err := a.getJSON(a.Endpoint+"/"+board.Slug, &parsed); err != nil {
+		if err := a.getJSON(ctx, a.Endpoint+"/"+board.Slug, &parsed); err != nil {
 			return nil, err
 		}
 

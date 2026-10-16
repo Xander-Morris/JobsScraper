@@ -27,15 +27,14 @@ type resendEmailRequest struct {
 // line) if RESEND_API_KEY isn't set, so the rest of the digest pipeline still
 // runs and can be tested before a real sending credential exists.
 func SendEmail(ctx context.Context, to, subject, body string) error {
-	env := utils.GetEnv()
-	apiKey := env["RESEND_API_KEY"]
+	apiKey := utils.Getenv("RESEND_API_KEY")
 
 	if apiKey == "" {
 		slog.Warn("notify: RESEND_API_KEY not set, skipping email", "to", to, "subject", subject)
 		return nil
 	}
 
-	from := env["RESEND_FROM_ADDRESS"]
+	from := utils.Getenv("RESEND_FROM_ADDRESS")
 	if from == "" {
 		from = defaultFromAddress
 	}

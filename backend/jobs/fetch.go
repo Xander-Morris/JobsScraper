@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -26,34 +27,26 @@ type feed struct {
 	Endpoint   string
 }
 
-func newFeed(userAgent, endpoint string) feed {
+func newFeed(userAgent, endpoint string, timeout time.Duration) feed {
 	return feed{
-		HTTPClient: &http.Client{Timeout: feedTimeout},
-		UserAgent:  userAgent,
-		Endpoint:   endpoint,
-	}
-}
-
-func newBoardFeed(userAgent, endpoint string) feed {
-	return feed{
-		HTTPClient: &http.Client{Timeout: boardFeedTimeout},
+		HTTPClient: &http.Client{Timeout: timeout},
 		UserAgent:  userAgent,
 		Endpoint:   endpoint,
 	}
 }
 
 // getJSON GETs url and decodes the JSON body into dest.
-func (f feed) getJSON(url string, dest any) error {
-	return f.get(url, func(r io.Reader) error { return json.NewDecoder(r).Decode(dest) })
+func (f feed) getJSON(ctx context.Context, url string, dest any) error {
+	return f.get(ctx, url, func(r io.Reader) error { return json.NewDecoder(r).Decode(dest) })
 }
 
 // getXML GETs url and decodes the XML body into dest.
-func (f feed) getXML(url string, dest any) error {
-	return f.get(url, func(r io.Reader) error { return xml.NewDecoder(r).Decode(dest) })
+func (f feed) getXML(ctx context.Context, url string, dest any) error {
+	return f.get(ctx, url, func(r io.Reader) error { return xml.NewDecoder(r).Decode(dest) })
 }
 
-func (f feed) get(url string, decode func(io.Reader) error) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (f feed) get(ctx context.Context, url string, decode func(io.Reader) error) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}

@@ -13,7 +13,7 @@ func TestTriviaQuizLifecycle(t *testing.T) {
 	newTestDB(t)
 	ctx := context.Background()
 	profileID := newTestProfile(t)
-	otherProfileID, err := CreateProfile(&ProfileRequest{Email: "other@example.com", Password: "securepassword123"})
+	otherProfileID, err := CreateProfile(t.Context(), &ProfileRequest{Email: "other@example.com", Password: "securepassword123"})
 	if err != nil {
 		t.Fatalf("create other profile: %v", err)
 	}

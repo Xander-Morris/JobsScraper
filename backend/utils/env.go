@@ -5,16 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/joho/godotenv"
 )
-
-type EnvPair struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-var allEnvVariables map[string]string
 
 func findEnvFile() string {
 	dir, err := os.Getwd()
@@ -39,27 +33,18 @@ func findEnvFile() string {
 	}
 }
 
-func GetEnv() map[string]string {
-	if allEnvVariables != nil {
-		return allEnvVariables
-	}
-
+// loadDotEnv merges the nearest .env into the process env once; real env vars win.
+var loadDotEnv = sync.OnceFunc(func() {
 	if path := findEnvFile(); path != "" {
 		_ = godotenv.Load(path)
 	}
-	rawEnv := os.Environ()
-	envList := make(map[string]string)
+})
 
-	for _, env := range rawEnv {
-		pair := strings.SplitN(env, "=", 2)
-		if len(pair) == 2 {
-			envList[pair[0]] = pair[1]
-		}
-	}
+// Getenv is os.Getenv with the nearest .env loaded first.
+func Getenv(key string) string {
+	loadDotEnv()
 
-	allEnvVariables = envList
-
-	return allEnvVariables
+	return os.Getenv(key)
 }
 
 // RequireEnv checks every given key is set to a non-empty value, and returns
@@ -67,11 +52,10 @@ func GetEnv() map[string]string {
 // misconfiguration fails loud instead of surfacing later as a mystery empty
 // JWT secret or nil DB connection string.
 func RequireEnv(keys ...string) error {
-	env := GetEnv()
 	var missing []string
 
 	for _, key := range keys {
-		if env[key] == "" {
+		if Getenv(key) == "" {
 			missing = append(missing, key)
 		}
 	}
