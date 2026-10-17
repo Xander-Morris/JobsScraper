@@ -6,7 +6,7 @@ import { profileQueryOptions } from '@/src/hooks/use-profile'
 import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
 import { Badge } from '../../components/ui/badge'
 import { Skeleton } from '../../components/ui/skeleton'
-import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
+import { formatRelativeDate, formatSalary, formatWorkplaceType, matchLabel } from '../../lib/format'
 import { lastJobSearch } from '../../lib/job-search'
 import { cn } from '../../lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
@@ -26,7 +26,7 @@ function JobDetailPage() {
   const router = useRouter()
   const fromJobsList = useLocation({ select: (location) => location.state.fromJobsList })
   const { data: job, isPending, isError, error } = useJobQuery(Number(jobId))
-  const fitLabel = job ? matchFitLabel(job.match_score) : null
+  const fitLabel = job?.match_percent != null ? `${job.match_percent}% · ${matchLabel(job.match_percent)}` : null
   const salary = job ? formatSalary(job.salary_min, job.salary_max) : null
   const postedAt = job ? formatRelativeDate(job.posted_at) : null
 

@@ -26,20 +26,14 @@ export function formatWorkplaceType(type: string): string {
   }
 }
 
-// matchFitLabel turns a raw match_score into a badge label. The score isn't on
-// a fixed scale, so when `best` (top score in the set) is available, bucket
-// relative to that instead of showing a misleading absolute percentage.
-export function matchFitLabel(score: number | null | undefined, best?: number): string | null {
-  if (score == null || score <= 0) return null
+// match_percent is the share of open jobs a listing out-matches for the caller's resume.
+export const STRONG_MATCH = 85
 
-  if (best && best > 0) {
-    const ratio = score / best
-    if (ratio >= 0.7) return 'Great fit'
-    if (ratio >= 0.4) return 'Good fit'
-    return null
-  }
-
-  return 'Matches your resume'
+export function matchLabel(percent: number): string {
+  if (percent >= STRONG_MATCH) return 'Strong match'
+  if (percent >= 65) return 'Good match'
+  if (percent >= 40) return 'Fair match'
+  return 'Low match'
 }
 
 const EARLIEST_POSTED_AT = Date.UTC(2000, 0, 1)

@@ -88,6 +88,8 @@ type Job struct {
 	// MatchScore is a text-relevance score (roughly 0-1) against the caller's active
 	// resume, nil when there's no active resume to compare against.
 	MatchScore *float64 `json:"match_score,omitempty"`
+	// MatchPercent is the share of listed jobs MatchScore beats (0-100), nil without a score.
+	MatchPercent *int `json:"match_percent,omitempty"`
 	// Applied is whether the caller has marked this job as applied to. Always false
 	// for anonymous callers.
 	Applied bool `json:"applied"`

@@ -64,8 +64,6 @@ function JobsPage() {
     navigate({ search: { ...next, page: 1 } })
   }
 
-  const bestMatchScore = Math.max(0, ...(data?.jobs.map((job) => job.match_score ?? 0) ?? []))
-
   if (isInitializing) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
@@ -127,7 +125,7 @@ function JobsPage() {
             aria-busy={isPlaceholderData}
           >
             {data.jobs.map((job) => (
-              <JobCard key={job.id} job={job} bestMatchScore={bestMatchScore} />
+              <JobCard key={job.id} job={job} />
             ))}
           </ul>
 

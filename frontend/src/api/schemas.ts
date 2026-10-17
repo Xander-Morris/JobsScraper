@@ -24,6 +24,7 @@ export const jobSchema = z.object({
   url: z.string().trim(),
   description: htmlDecodedString,
   match_score: z.number().nullable().optional(),
+  match_percent: z.number().int().min(0).max(100).nullable().optional(),
   applied: z.boolean().default(false)
 })
 export type Job = z.infer<typeof jobSchema>

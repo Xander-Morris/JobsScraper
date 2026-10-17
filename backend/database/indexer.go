@@ -139,11 +139,13 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 
 func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Job, error) {
 	args := []any{id}
-	matchScoreColumn := cmp.Or(resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery), "NULL::real")
+	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
+	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
+	percentJoin, percentColumn := matchPercentJoin(&args, resumeScore)
 	appliedColumn := appliedExpr(&args, params.ProfileID)
 
-	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, COALESCE(j.description, '')
-		FROM jobs j WHERE j.id = $1`, jobColumns, matchScoreColumn, jobTagsColumn, appliedColumn)
+	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, %s, COALESCE(j.description, '')
+		FROM jobs j %s WHERE j.id = $1`, jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn, percentJoin)
 
 	job, err := scanJob(db().QueryRowContext(ctx, query, args...), true)
 
@@ -299,14 +301,30 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 		sortKey, from, len(args)-1, len(args))
 
 	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
+	percentJoin, percentColumn := matchPercentJoin(&args, resumeScore)
 	appliedColumn := appliedExpr(&args, params.ProfileID)
 
-	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s
-		FROM (%s) page JOIN jobs j ON j.id = page.id
+	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, %s
+		FROM (%s) page JOIN jobs j ON j.id = page.id %s
 		ORDER BY page.sort_key DESC NULLS LAST, page.id DESC`,
-		jobColumns, matchScoreColumn, jobTagsColumn, appliedColumn, page)
+		jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn, page, percentJoin)
 
 	return query, args
+}
+
+// matchPercentJoin ranks score across every listed job, so match_percent reads the same on any page, filter, or sort.
+// Returns the join and the column selecting it; both are no-ops when score is empty.
+func matchPercentJoin(args *[]any, score string) (join, column string) {
+	if score == "" {
+		return "", "NULL::int"
+	}
+
+	*args = append(*args, time.Now().Add(-JobMaxAge))
+
+	join = fmt.Sprintf(`LEFT JOIN (SELECT j.id, percent_rank() OVER (ORDER BY %s) AS pct FROM jobs j
+		WHERE %s >= $%d AND %s IS NOT NULL) mp ON mp.id = j.id`, score, jobAgeColumn, len(*args), score)
+
+	return join, "floor(mp.pct * 100)::int"
 }
 
 // resumeScoreExpr scores j against the caller's resume, appending its arg to args.
@@ -339,16 +357,16 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanJob reads jobColumns, match_score, tags and applied, plus description when withDescription.
+// scanJob reads jobColumns, match_score, match_percent, tags and applied, plus description when withDescription.
 func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 	var job jobs.Job
-	var salaryMin, salaryMax sql.NullInt64
+	var salaryMin, salaryMax, matchPercent sql.NullInt64
 	var postedAtRaw any
 	var matchScore sql.NullFloat64
 	var tags []byte
 
 	dest := []any{&job.ID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &matchScore, &tags, &job.Applied}
+		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &matchScore, &matchPercent, &tags, &job.Applied}
 
 	if withDescription {
 		dest = append(dest, &job.Description)
@@ -375,6 +393,11 @@ func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 	if matchScore.Valid {
 		score := matchScore.Float64
 		job.MatchScore = &score
+	}
+
+	if matchPercent.Valid {
+		percent := int(matchPercent.Int64)
+		job.MatchPercent = &percent
 	}
 
 	switch v := postedAtRaw.(type) {
