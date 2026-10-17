@@ -89,7 +89,7 @@ func (raw greenhouseJob) toJob(company string) Job {
 		Title:         strings.TrimSpace(raw.Title),
 		Company:       company,
 		Location:      raw.Location.Name,
-		WorkplaceType: workplaceFromLocation(raw.Location.Name),
+		WorkplaceType: WorkplaceFromLocation(raw.Location.Name),
 		Tags:          utils.CleanTags(tags),
 		URL:           raw.AbsoluteURL,
 		Description:   utils.StripHTML(raw.Content),

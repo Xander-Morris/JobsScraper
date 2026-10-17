@@ -30,8 +30,8 @@ func ParseWorkplaceType(s string) (WorkplaceType, bool) {
 	}
 }
 
-// workplaceFromLocation infers Remote from free-text locations like "Remote - US".
-func workplaceFromLocation(location string) WorkplaceType {
+// WorkplaceFromLocation infers Remote from free-text locations like "Remote - US".
+func WorkplaceFromLocation(location string) WorkplaceType {
 	if strings.Contains(strings.ToLower(location), "remote") {
 		return Remote
 	}

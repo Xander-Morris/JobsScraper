@@ -228,6 +228,29 @@ func salaryPtr(v *int) *int32 {
 	return &n
 }
 
+// KnownJobURLs reports which of urls are already stored, so the crawler can skip refetching them.
+func KnownJobURLs(ctx context.Context, urls []string) (map[string]bool, error) {
+	rows, err := db().QueryContext(ctx, "SELECT url FROM jobs WHERE url = ANY($1::text[])", urls)
+	if err != nil {
+		return nil, fmt.Errorf("query known job urls: %w", err)
+	}
+	defer rows.Close()
+
+	known := make(map[string]bool)
+
+	for rows.Next() {
+		var url string
+
+		if err := rows.Scan(&url); err != nil {
+			return nil, fmt.Errorf("scan known job url: %w", err)
+		}
+
+		known[url] = true
+	}
+
+	return known, rows.Err()
+}
+
 func WriteJobsToDatabase(ctx context.Context, jobs []jobs.Job) error {
 	if err := CreateTables(); err != nil {
 		return err

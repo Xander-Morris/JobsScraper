@@ -8,6 +8,7 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `database/`: Postgres access, migrations, schema
 - `scraper/`: runs the job source fetchers on a 10 minute ticker
 - `jobs/`: one file per job source: public feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and company boards on Greenhouse, Lever, and Ashby, whose company lists sit at the top of `greenhouse.go`, `lever.go`, and `ashby.go`
+- `crawler/`: a web crawler for career sites with no API (NVIDIA, Salesforce, Adobe, Intel, Mastercard, Cisco, Red Hat, Target, HP, all on Workday), seeded from `seeds.go`. See "Crawler" below
 - `llm/`: resume text extraction, generation, and trivia quizzes via OpenRouter, embeddings via Jina AI
 - `notify/`: Resend email client for the digest
 - `utils/`: env loading and a couple of small helpers
@@ -78,11 +79,28 @@ Each scrape cycle also:
 
 - **Expires old jobs**: postings first published more than 30 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Stored jobs are also capped at the newest 5,000 (`MaxJobs`); older ones past the cap are deleted, and each scrape writes at most that many. Jobs someone marked applied or tailored a resume for are kept, but drop out of search. Pruning runs before each write, so it still frees space if Supabase has put the database in read-only mode.
 - **Embeds new jobs**: the title plus the first 2,000 characters of the description go to Jina, which keeps token use down on the free tier. The full description is still stored and shown.
-- **Tolerates broken boards**: a Greenhouse, Lever, or Ashby company that fails (renamed board, outage) is logged and skipped without failing the rest.
+- **Tolerates broken boards**: a Greenhouse, Lever, Ashby company, or crawler seed that fails (renamed board, outage) is logged and skipped without failing the rest.
+
+### Crawler
+
+The other sources read JSON or RSS feeds. The crawler instead loads real career site pages and scrapes them. For each seed in `crawler/seeds.go` it:
+
+1. **Reads `robots.txt`**: obeys `Disallow`/`Allow` for the `JobsScraper` agent (or `*`), uses its `Crawl-delay` if it's longer than the default 1 second between requests to a host, and collects its `Sitemap:` lines. If `robots.txt` is unreachable (5xx or a network error), that seed is skipped for this cycle, as RFC 9309 says to.
+2. **Discovers pages**: walks the host's sitemaps (sitemap indexes and `.gz` too), newest `lastmod` first, then follows links from the seed page up to two hops away. Only URLs under the seed URL's path are fetched, and a seed's `Include` pattern can narrow that further.
+3. **Scrapes each page**: parses the HTML and reads the schema.org `JobPosting` JSON-LD that career sites embed for Google for Jobs (title, description, post date, locations, remote flag, employment type, salary). Postings past their `validThrough` date are dropped. Pages that only render with JavaScript have no JSON-LD in their HTML and yield nothing.
+
+Storage stays bounded so it fits a free database:
+
+- At most 40 pages per seed per scrape, and a whole crawl stops after 6 minutes
+- URLs already stored are skipped before fetching (`database.KnownJobURLs`), so each scrape's budget goes to new postings instead of reloading old ones
+- Descriptions are cut at 20,000 characters
+- Crawled jobs share the same 30-day and 5,000-job limits as every other source
+
+To crawl another site, add a `Seed` to `crawler/seeds.go`. Any site whose job pages carry `JobPosting` JSON-LD in their HTML works; for another company on Workday, use `workday(siteURL, company)` with the career site URL from its `robots.txt`. Set `Company`, since `hiringOrganization` is often a legal entity name like "2100 NVIDIA USA".
 
 ### Adding a job source
 
-Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead.
+Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead, and for a career site with no API, add a crawler seed (see "Crawler" above).
 
 ## Docker
 

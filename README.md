@@ -2,7 +2,7 @@
 
 **Live demo:** [https://www.jobsscraper.com/](https://www.jobsscraper.com/)
 
-A job board that crawls listings from public job feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and from company job boards hosted on Greenhouse, Lever, and Ashby, indexes them into Postgres, and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site, and a trivia mode that generates multiple-choice quizzes on your resume's skills or any topic you name, with scores kept in a history.
+A job board that pulls listings from public job feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and from company job boards hosted on Greenhouse, Lever, and Ashby, plus a web crawler that scrapes career sites with no API (NVIDIA, Salesforce, Adobe, Intel, Mastercard, Cisco, Red Hat, Target, HP) by following their `robots.txt`, sitemaps, and links and reading the job data embedded in each page. It indexes everything into Postgres and lets you build a profile with a resume so it can tell you which listings are actually a good fit. There's also a daily email digest for anyone who wants matching jobs sent to their inbox instead of checking the site, and a trivia mode that generates multiple-choice quizzes on your resume's skills or any topic you name, with scores kept in a history.
 
 ## What's in here
 
@@ -69,6 +69,6 @@ Both halves deploy as separate Vercel projects. Neither needs a domain of your o
 
 ## How it fits together
 
-The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes, writes new/updated listings to Postgres, and deletes postings more than 30 days old or beyond the newest 5,000 (except ones someone marked applied or tailored a resume for), and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
+The backend runs two background loops alongside the HTTP server: one that re-scrapes all the job sources every 10 minutes (the crawler loads up to 40 new job pages per career site each time, politely spaced and obeying `robots.txt`), writes new/updated listings to Postgres, and deletes postings more than 30 days old or beyond the newest 5,000 (except ones someone marked applied or tailored a resume for), and one that sends the daily digest email to anyone who's opted in (on Vercel, these run on a GitHub Actions schedule instead; see Deploying, above). Resume text extraction (turning an uploaded PDF into structured skills/experience) and cover-letter generation go through OpenRouter; resume/job embeddings go through Jina AI.
 
 The frontend talks to the backend over a plain REST API (see `backend/server/routes.go` for the full list of endpoints) using TanStack Query for data fetching and TanStack Router for routing.

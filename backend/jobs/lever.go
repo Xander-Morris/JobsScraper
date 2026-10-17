@@ -77,7 +77,7 @@ func (raw leverJob) toJob(company string) Job {
 	workplaceType, _ := ParseWorkplaceType(raw.WorkplaceType)
 
 	if workplaceType == Unknown {
-		workplaceType = workplaceFromLocation(raw.Categories.Location)
+		workplaceType = WorkplaceFromLocation(raw.Categories.Location)
 	}
 
 	// Lever splits a posting into an intro, titled lists (requirements, benefits), and a closing section.

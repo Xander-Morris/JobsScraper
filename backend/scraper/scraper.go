@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"main/crawler"
 	"main/database"
 	"main/jobs"
 	"main/schedule"
@@ -163,6 +164,7 @@ func allSources() []jobs.JobSource {
 		jobs.NewGreenhouse(userAgent),
 		jobs.NewLever(userAgent),
 		jobs.NewAshby(userAgent),
+		crawler.New(userAgent, database.KnownJobURLs),
 	}
 }
 
