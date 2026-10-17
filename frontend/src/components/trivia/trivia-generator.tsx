@@ -126,7 +126,7 @@ function GeneratorForm({ resumeReady, resumeHint }: { resumeReady: boolean; resu
                             onBlur={f.handleBlur}
                             aria-invalid={!!fieldError}
                             aria-describedby={fieldError ? `${id}-prompt-error` : undefined}
-                            className="w-full min-w-0 resize-y rounded-lg border border-input bg-input/30 px-3 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground/70 hover:border-white/15 focus-visible:border-primary/60 focus-visible:ring-3 focus-visible:ring-primary/15 aria-invalid:border-destructive/50 aria-invalid:ring-3 aria-invalid:ring-destructive/40 md:text-sm"
+                            className="w-full min-w-0 resize-y rounded-lg border border-input bg-card px-3 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground/70 hover:border-primary/40 focus-visible:border-primary/60 focus-visible:ring-3 focus-visible:ring-primary/15 aria-invalid:border-destructive/50 aria-invalid:ring-3 aria-invalid:ring-destructive/40 md:text-sm"
                           />
                           {fieldError && (
                             <p id={`${id}-prompt-error`} className="text-xs text-destructive">

@@ -24,46 +24,46 @@
   }
 }
 
-/* Dark only: warm near-black, amber accent. */
+/* Light only: white surfaces, navy text, blue accent. */
 :root {
-  --background: #0b0a09;
-  --foreground: #f2efe9;
-  --card: #131210;
-  --card-foreground: #f2efe9;
-  --raised: #1b1916;
-  --popover: #161513;
-  --popover-foreground: #f2efe9;
-  --primary: #f5a524;
-  --primary-foreground: #1c1204;
-  --secondary: #1f1d1a;
-  --secondary-foreground: #e6e2da;
-  --muted: #1f1d1a;
-  --muted-foreground: #8c867d;
-  --accent: #1f1d1a;
-  --accent-foreground: #f2efe9;
-  --accent-bg: rgb(245 165 36 / 0.1);
-  --accent-border: rgb(245 165 36 / 0.35);
-  --destructive: #f07167;
-  --success: #6fcf97;
-  --border: rgb(255 255 255 / 0.07);
-  --input: rgb(255 255 255 / 0.1);
-  --ring: rgb(245 165 36 / 0.6);
-  --chart-1: #f5a524;
-  --chart-2: #c98a26;
-  --chart-3: #8c867d;
-  --chart-4: #5c5750;
-  --chart-5: #3a3632;
+  --background: #f5f8ff;
+  --foreground: #0f1e3d;
+  --card: #ffffff;
+  --card-foreground: #0f1e3d;
+  --raised: #eaf0fc;
+  --popover: #ffffff;
+  --popover-foreground: #0f1e3d;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #e8effc;
+  --secondary-foreground: #1e3a8a;
+  --muted: #eef2f9;
+  --muted-foreground: #5b6b88;
+  --accent: #e8effc;
+  --accent-foreground: #1e3a8a;
+  --accent-bg: rgb(37 99 235 / 0.08);
+  --accent-border: rgb(37 99 235 / 0.3);
+  --destructive: #dc2626;
+  --success: #15803d;
+  --border: #dde5f2;
+  --input: #cbd7ea;
+  --ring: rgb(37 99 235 / 0.5);
+  --chart-1: #2563eb;
+  --chart-2: #3b82f6;
+  --chart-3: #60a5fa;
+  --chart-4: #93c5fd;
+  --chart-5: #1e3a8a;
   --radius: 0.625rem;
-  --sidebar: #131210;
-  --sidebar-foreground: #f2efe9;
-  --sidebar-primary: #f5a524;
-  --sidebar-primary-foreground: #1c1204;
-  --sidebar-accent: #1f1d1a;
-  --sidebar-accent-foreground: #f2efe9;
-  --sidebar-border: rgb(255 255 255 / 0.07);
-  --sidebar-ring: rgb(245 165 36 / 0.6);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1e3d;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8effc;
+  --sidebar-accent-foreground: #1e3a8a;
+  --sidebar-border: #dde5f2;
+  --sidebar-ring: rgb(37 99 235 / 0.5);
 
-  color-scheme: dark;
+  color-scheme: light;
   font-size: 16px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -123,8 +123,8 @@
   }
   body {
     @apply m-0 bg-background text-foreground;
-    /* Faint amber glow behind the header. */
-    background-image: radial-gradient(60rem 28rem at 50% -8rem, rgb(245 165 36 / 0.07), transparent 70%);
+    /* Faint blue glow behind the header. */
+    background-image: radial-gradient(60rem 28rem at 50% -8rem, rgb(37 99 235 / 0.1), transparent 70%);
     background-repeat: no-repeat;
   }
   #root {
@@ -137,7 +137,7 @@
     text-wrap: balance;
   }
   ::selection {
-    background: rgb(245 165 36 / 0.3);
+    background: rgb(37 99 235 / 0.2);
   }
   code {
     @apply rounded bg-raised px-1.5 py-0.5 font-mono text-[0.9em] text-heading;

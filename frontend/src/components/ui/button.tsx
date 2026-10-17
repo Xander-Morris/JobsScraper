@@ -9,13 +9,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary font-semibold text-primary-foreground shadow-[0_4px_16px_-6px_rgb(245_165_36/0.5)] hover:bg-[#ffb53d]',
+          'bg-primary font-semibold text-primary-foreground shadow-[0_4px_16px_-6px_rgb(37_99_235/0.5)] hover:bg-[#1d4ed8]',
         outline:
-          'border-input bg-white/[0.02] text-heading hover:border-white/15 hover:bg-white/[0.05] aria-expanded:border-white/15 aria-expanded:bg-white/[0.05]',
+          'border-input bg-card text-heading hover:border-primary/40 hover:bg-primary/[0.05] aria-expanded:border-primary/40 aria-expanded:bg-primary/[0.05]',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_6%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
         ghost:
-          'text-muted-foreground hover:bg-white/[0.05] hover:text-heading aria-expanded:bg-white/[0.05] aria-expanded:text-heading',
+          'text-muted-foreground hover:bg-primary/[0.06] hover:text-heading aria-expanded:bg-primary/[0.06] aria-expanded:text-heading',
         destructive:
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
         link: 'text-primary underline-offset-4 hover:underline'

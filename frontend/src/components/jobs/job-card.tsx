@@ -20,7 +20,7 @@ export function JobCard({ job, bestMatchScore }: { job: JobListItem; bestMatchSc
         to="/jobs/$jobId"
         params={{ jobId: String(job.id) }}
         className={cn(
-          'group block px-4 py-4 no-underline transition-colors outline-none hover:bg-white/[0.025] focus-visible:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-5',
+          'group block px-4 py-4 no-underline transition-colors outline-none hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-5',
           greatFit && 'shadow-[inset_2px_0_0_var(--primary)]'
         )}
       >

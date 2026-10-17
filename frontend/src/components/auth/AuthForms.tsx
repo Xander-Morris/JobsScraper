@@ -18,7 +18,7 @@ export function AuthPanel({ className, children }: { className?: string; childre
   return (
     <div
       className={cn(
-        'mx-auto w-full max-w-sm rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_60px_-24px_rgb(0_0_0/0.8)] backdrop-blur-sm',
+        'mx-auto w-full max-w-sm rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_60px_-24px_rgb(30_64_175/0.25)] backdrop-blur-sm',
         className
       )}
     >
@@ -70,7 +70,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
             <div
               role="group"
               aria-label="Authentication mode"
-              className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-border bg-black/40 p-1 text-sm"
+              className="mb-5 grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted p-1 text-sm"
             >
               {(['login', 'signup'] as const).map((m) => (
                 <button

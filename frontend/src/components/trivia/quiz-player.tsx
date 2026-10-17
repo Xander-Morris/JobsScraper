@@ -42,7 +42,7 @@ export default function QuizPlayer({ quiz }: { quiz: TriviaQuiz }) {
           </span>
           {question.topic && <Badge variant="secondary">{question.topic}</Badge>}
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-primary/10">
           <div className="h-full bg-primary transition-all" style={{ width: `${(index / total) * 100}%` }} />
         </div>
         <h2 className="mt-4 text-lg font-medium text-heading">{question.question}</h2>
@@ -61,7 +61,7 @@ export default function QuizPlayer({ quiz }: { quiz: TriviaQuiz }) {
         ))}
 
         {revealed && (
-          <p aria-live="polite" className="rounded-lg bg-white/[0.03] p-3 text-sm text-secondary-foreground">
+          <p aria-live="polite" className="rounded-lg bg-primary/[0.05] p-3 text-sm text-secondary-foreground">
             <span
               className={cn('font-medium', chosen === question.correct_index ? 'text-success' : 'text-destructive')}
             >
@@ -117,7 +117,7 @@ function OptionButton({
       disabled={disabled}
       className={cn(
         'flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-        state === 'idle' && 'border-input bg-white/[0.02] text-heading hover:border-white/15 hover:bg-white/[0.05]',
+        state === 'idle' && 'border-input bg-card text-heading hover:border-primary/40 hover:bg-primary/[0.05]',
         state === 'correct' && 'border-success/50 bg-success/10 text-heading',
         state === 'wrong' && 'border-destructive/50 bg-destructive/10 text-heading',
         state === 'dimmed' && 'border-border text-muted-foreground'
