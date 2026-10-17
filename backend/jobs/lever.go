@@ -38,6 +38,15 @@ type leverJob struct {
 	AdditionalPlain  string          `json:"additionalPlain"`
 	Lists            []leverList     `json:"lists"`
 	Categories       leverCategories `json:"categories"`
+	SalaryRange      *leverSalary    `json:"salaryRange"`
+}
+
+// leverSalary's interval is like "per-year-salary" or "per-hour-wage".
+type leverSalary struct {
+	Currency string  `json:"currency"`
+	Interval string  `json:"interval"`
+	Min      float64 `json:"min"`
+	Max      float64 `json:"max"`
 }
 
 type leverList struct {
@@ -100,6 +109,10 @@ func (raw leverJob) toJob(company string) Job {
 		Tags:          utils.CleanTags([]string{raw.Categories.Team, raw.Categories.Commitment}),
 		URL:           raw.HostedURL,
 		Description:   strings.TrimSpace(description.String()),
+	}
+
+	if pay := raw.SalaryRange; pay != nil {
+		job.SalaryMin, job.SalaryMax = YearlySalary(pay.Min, pay.Max, pay.Interval, pay.Currency)
 	}
 
 	if raw.CreatedAt > 0 {

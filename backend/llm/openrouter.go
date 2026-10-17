@@ -11,7 +11,7 @@ import (
 )
 
 // defaultOpenRouterModel is free-tier (":free", rate limited), tested against
-// resumeSchema(). Takes ~20-30s per extraction, well under
+// resumeSchema(). With reasoning off it takes ~5-10s per extraction, well under
 // resumeExtractionTimeout. Free models on OpenRouter come and go, so if this
 // one dies, grab a live one from https://openrouter.ai/api/v1/models
 // (pricing.prompt == "0") and set OPENROUTER_MODEL rather than editing this.
@@ -36,6 +36,12 @@ type openRouterChatRequest struct {
 	Messages       []openRouterChatMessage  `json:"messages"`
 	ResponseFormat openRouterResponseFormat `json:"response_format"`
 	Temperature    float64                  `json:"temperature"`
+	Reasoning      openRouterReasoning      `json:"reasoning"`
+}
+
+// openRouterReasoning is off: thinking tokens tripled latency and pushed resume extraction past its timeout.
+type openRouterReasoning struct {
+	Enabled bool `json:"enabled"`
 }
 
 type openRouterChatMessage struct {

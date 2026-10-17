@@ -3,7 +3,6 @@ package crawler
 import (
 	"encoding/json"
 	"io"
-	"math"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -378,16 +377,6 @@ func employmentTags(raw json.RawMessage) []string {
 	return tags
 }
 
-// yearlyMultiplier converts a schema.org unitText pay rate to a yearly salary.
-var yearlyMultiplier = map[string]float64{
-	"":      1,
-	"YEAR":  1,
-	"MONTH": 12,
-	"WEEK":  52,
-	"DAY":   260,
-	"HOUR":  2080,
-}
-
 // yearlySalary reads a USD MonetaryAmount; other currencies are skipped since salary filters assume dollars.
 func yearlySalary(raw json.RawMessage) (*int, *int) {
 	amounts := objects(raw)
@@ -396,12 +385,8 @@ func yearlySalary(raw json.RawMessage) (*int, *int) {
 	}
 
 	amount := amounts[0]
-	if currency := strings.ToUpper(text(amount["currency"])); currency != "" && currency != "USD" {
-		return nil, nil
-	}
-
 	value := amount["value"]
-	unit := strings.ToUpper(text(amount["unitText"]))
+	unit := text(amount["unitText"])
 
 	var low, high float64
 
@@ -409,7 +394,7 @@ func yearlySalary(raw json.RawMessage) (*int, *int) {
 		low, high = n, n
 	} else if quantities := objects(value); len(quantities) > 0 {
 		quantity := quantities[0]
-		if u := strings.ToUpper(text(quantity["unitText"])); u != "" {
+		if u := text(quantity["unitText"]); u != "" {
 			unit = u
 		}
 
@@ -424,12 +409,7 @@ func yearlySalary(raw json.RawMessage) (*int, *int) {
 		}
 	}
 
-	multiplier, ok := yearlyMultiplier[unit]
-	if !ok {
-		return nil, nil
-	}
-
-	return salary(low * multiplier), salary(high * multiplier)
+	return jobs.YearlySalary(low, high, unit, text(amount["currency"]))
 }
 
 func number(raw json.RawMessage) (float64, bool) {
@@ -447,16 +427,6 @@ func number(raw json.RawMessage) (float64, bool) {
 	}
 
 	return 0, false
-}
-
-func salary(yearly float64) *int {
-	if yearly < jobs.MinSalary || yearly > math.MaxInt32 {
-		return nil
-	}
-
-	n := int(math.Round(yearly))
-
-	return &n
 }
 
 func truncateRunes(s string, limit int) string {

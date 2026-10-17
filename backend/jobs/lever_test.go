@@ -35,6 +35,21 @@ func TestLeverJobToJob(t *testing.T) {
 			},
 		},
 		{
+			name: "hourly salaryRange is annualized",
+			raw: leverJob{
+				Text:        "Support Engineer",
+				HostedURL:   "https://jobs.lever.co/acme/3",
+				SalaryRange: &leverSalary{Currency: "USD", Interval: "per-hour-wage", Min: 30, Max: 40},
+			},
+			want: Job{
+				Title:     "Support Engineer",
+				Company:   "Acme",
+				URL:       "https://jobs.lever.co/acme/3",
+				SalaryMin: intPtr(62400),
+				SalaryMax: intPtr(83200),
+			},
+		},
+		{
 			name: "unspecified workplace falls back to a remote location",
 			raw: leverJob{
 				Text:          "Support Specialist",

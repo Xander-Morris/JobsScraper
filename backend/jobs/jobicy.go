@@ -33,8 +33,10 @@ type jobicyJob struct {
 	JobGeo         string   `json:"jobGeo"`
 	JobDescription string   `json:"jobDescription"`
 	PubDate        string   `json:"pubDate"`
-	SalaryMin      int      `json:"salaryMin"`
-	SalaryMax      int      `json:"salaryMax"`
+	SalaryMin      float64  `json:"salaryMin"`
+	SalaryMax      float64  `json:"salaryMax"`
+	SalaryCurrency string   `json:"salaryCurrency"`
+	SalaryPeriod   string   `json:"salaryPeriod"`
 }
 
 func (j *Jobicy) FetchJobs(ctx context.Context) ([]Job, error) {
@@ -72,13 +74,7 @@ func (raw jobicyJob) toJob() Job {
 		Description:   utils.StripHTML(raw.JobDescription),
 	}
 
-	if raw.SalaryMin > 0 {
-		job.SalaryMin = &raw.SalaryMin
-	}
-
-	if raw.SalaryMax > 0 {
-		job.SalaryMax = &raw.SalaryMax
-	}
+	job.SalaryMin, job.SalaryMax = YearlySalary(raw.SalaryMin, raw.SalaryMax, raw.SalaryPeriod, raw.SalaryCurrency)
 
 	if postedAt, err := time.Parse(time.RFC3339, raw.PubDate); err == nil {
 		job.PostedAt = postedAt

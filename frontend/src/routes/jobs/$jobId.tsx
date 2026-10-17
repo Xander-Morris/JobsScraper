@@ -1,5 +1,5 @@
 import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useLocation, useRouter } from '@tanstack/react-router'
 import { ArrowLeftIcon, MapPinIcon } from 'lucide-react'
 import { jobQueryOptions, useJobQuery } from '@/src/hooks/use-jobs'
 import { profileQueryOptions } from '@/src/hooks/use-profile'
@@ -7,6 +7,7 @@ import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel
 import { Badge } from '../../components/ui/badge'
 import { Skeleton } from '../../components/ui/skeleton'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, matchFitLabel } from '../../lib/format'
+import { lastJobSearch } from '../../lib/job-search'
 import { cn } from '../../lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
 
@@ -22,6 +23,8 @@ export const Route = createFileRoute('/jobs/$jobId')({
 function JobDetailPage() {
   const { jobId } = Route.useParams()
   const { isAuthenticated } = useAuth()
+  const router = useRouter()
+  const fromJobsList = useLocation({ select: (location) => location.state.fromJobsList })
   const { data: job, isPending, isError, error } = useJobQuery(Number(jobId))
   const fitLabel = job ? matchFitLabel(job.match_score) : null
   const salary = job ? formatSalary(job.salary_min, job.salary_max) : null
@@ -31,6 +34,13 @@ function JobDetailPage() {
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <Link
         to="/jobs"
+        search={lastJobSearch()}
+        onClick={(event) => {
+          // Going back restores the board's scroll position too.
+          if (!fromJobsList) return
+          event.preventDefault()
+          router.history.back()
+        }}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground no-underline hover:text-heading"
       >
         <ArrowLeftIcon aria-hidden="true" className="size-4" />

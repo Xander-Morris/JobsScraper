@@ -8,7 +8,7 @@ import { JobCard } from '../../components/jobs/job-card'
 import Pagination from '../../components/pagination'
 import { SearchFilters } from '../../components/search-filters'
 import { Skeleton } from '../../components/ui/skeleton'
-import { jobSearchSchema, type JobSearchState } from '../../lib/job-search'
+import { jobSearchSchema, rememberJobSearch, type JobSearchState } from '../../lib/job-search'
 import { cn } from '../../lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
 
@@ -45,6 +45,8 @@ function JobsPage() {
   const queryClient = useQueryClient()
 
   const params = useMemo(() => toJobSearchParams(search), [search])
+
+  useEffect(() => rememberJobSearch(search), [search])
 
   const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, { enabled: isAuthenticated })
 

@@ -60,6 +60,8 @@ type himalayasJob struct {
 	CompanyName          string   `json:"companyName"`
 	MinSalary            float64  `json:"minSalary"`
 	MaxSalary            float64  `json:"maxSalary"`
+	SalaryPeriod         string   `json:"salaryPeriod"`
+	Currency             string   `json:"currency"`
 	Categories           []string `json:"categories"`
 	EmploymentType       string   `json:"employmentType"`
 	LocationRestrictions []string `json:"locationRestrictions"`
@@ -140,15 +142,7 @@ func (raw himalayasJob) toJob() Job {
 		Description:   utils.StripHTML(raw.Description),
 	}
 
-	if raw.MinSalary > 0 {
-		minSalary := int(raw.MinSalary)
-		job.SalaryMin = &minSalary
-	}
-
-	if raw.MaxSalary > 0 {
-		maxSalary := int(raw.MaxSalary)
-		job.SalaryMax = &maxSalary
-	}
+	job.SalaryMin, job.SalaryMax = YearlySalary(raw.MinSalary, raw.MaxSalary, raw.SalaryPeriod, raw.Currency)
 
 	if raw.PubDate > 0 {
 		job.PostedAt = time.Unix(raw.PubDate, 0)

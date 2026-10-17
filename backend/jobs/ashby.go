@@ -50,13 +50,24 @@ type ashbyJob struct {
 	PublishedAt     string `json:"publishedAt"`
 	JobURL          string `json:"jobUrl"`
 	DescriptionHTML string `json:"descriptionHtml"`
+	Compensation    struct {
+		SummaryComponents []ashbyPayComponent `json:"summaryComponents"`
+	} `json:"compensation"`
+}
+
+type ashbyPayComponent struct {
+	CompensationType string  `json:"compensationType"`
+	Interval         string  `json:"interval"`
+	CurrencyCode     string  `json:"currencyCode"`
+	MinValue         float64 `json:"minValue"`
+	MaxValue         float64 `json:"maxValue"`
 }
 
 func (a *Ashby) FetchJobs(ctx context.Context) ([]Job, error) {
 	return fetchBoards("ashby", a.Boards, func(board Board) ([]Job, error) {
 		var parsed ashbyResponse
 
-		if err := a.getJSON(ctx, a.Endpoint+"/"+board.Slug, &parsed); err != nil {
+		if err := a.getJSON(ctx, a.Endpoint+"/"+board.Slug+"?includeCompensation=true", &parsed); err != nil {
 			return nil, err
 		}
 
@@ -91,6 +102,13 @@ func (raw ashbyJob) toJob(company string) Job {
 		Tags:          utils.CleanTags([]string{raw.Department, raw.Team, employmentType}),
 		URL:           raw.JobURL,
 		Description:   utils.StripHTML(raw.DescriptionHTML),
+	}
+
+	for _, pay := range raw.Compensation.SummaryComponents {
+		if pay.CompensationType == "Salary" {
+			job.SalaryMin, job.SalaryMax = YearlySalary(pay.MinValue, pay.MaxValue, pay.Interval, pay.CurrencyCode)
+			break
+		}
 	}
 
 	if postedAt, err := time.Parse(time.RFC3339, raw.PublishedAt); err == nil {

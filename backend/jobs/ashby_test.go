@@ -60,6 +60,24 @@ func TestAshbyJobToJob(t *testing.T) {
 			},
 		},
 		{
+			name: "salary component read from compensation, equity ignored",
+			raw: func() ashbyJob {
+				raw := ashbyJob{Title: "Security Engineer", IsListed: true, JobURL: "https://jobs.ashbyhq.com/acme/4"}
+				raw.Compensation.SummaryComponents = []ashbyPayComponent{
+					{CompensationType: "EquityPercentage", Interval: "NONE"},
+					{CompensationType: "Salary", Interval: "1 YEAR", CurrencyCode: "USD", MinValue: 211400, MaxValue: 290600},
+				}
+				return raw
+			}(),
+			want: Job{
+				Title:     "Security Engineer",
+				Company:   "Acme",
+				URL:       "https://jobs.ashbyhq.com/acme/4",
+				SalaryMin: intPtr(211400),
+				SalaryMax: intPtr(290600),
+			},
+		},
+		{
 			name: "OnSite parses as in person",
 			raw: ashbyJob{
 				Title:         "Hardware Engineer",

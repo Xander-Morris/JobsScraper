@@ -40,6 +40,46 @@ func TestHimalayasJobToJob(t *testing.T) {
 			},
 		},
 		{
+			name: "hourly salary is annualized",
+			raw: himalayasJob{
+				Title:        "Software Engineering Internship Program (2027)",
+				Guid:         "https://himalayas.app/jobs/321",
+				CompanyName:  "Wikimedia Foundation",
+				MinSalary:    34.32,
+				MaxSalary:    42.13,
+				SalaryPeriod: "hourly",
+				Currency:     "USD",
+			},
+			want: Job{
+				Title:         "Software Engineering Internship Program (2027)",
+				Company:       "Wikimedia Foundation",
+				Location:      "Worldwide",
+				WorkplaceType: Remote,
+				URL:           "https://himalayas.app/jobs/321",
+				SalaryMin:     intPtr(71386),
+				SalaryMax:     intPtr(87630),
+			},
+		},
+		{
+			name: "non-USD salary is skipped",
+			raw: himalayasJob{
+				Title:        "Backend Engineer",
+				Guid:         "https://himalayas.app/jobs/654",
+				CompanyName:  "Euro Co",
+				MinSalary:    60000,
+				MaxSalary:    80000,
+				SalaryPeriod: "yearly",
+				Currency:     "EUR",
+			},
+			want: Job{
+				Title:         "Backend Engineer",
+				Company:       "Euro Co",
+				Location:      "Worldwide",
+				WorkplaceType: Remote,
+				URL:           "https://himalayas.app/jobs/654",
+			},
+		},
+		{
 			name: "job with no restrictions or link falls back to worldwide and guid, no salary or date",
 			raw: himalayasJob{
 				Title:       "Support Specialist",

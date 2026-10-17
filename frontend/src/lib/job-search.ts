@@ -15,3 +15,23 @@ export const jobSearchSchema = z.object({
 })
 
 export type JobSearchState = z.infer<typeof jobSearchSchema>
+
+const LAST_SEARCH_KEY = 'jobs-last-search'
+
+// Lets links back to the board keep its filters.
+export function rememberJobSearch(search: JobSearchState) {
+  try {
+    sessionStorage.setItem(LAST_SEARCH_KEY, JSON.stringify(search))
+  } catch {
+    // Storage blocked; links fall back to an unfiltered board.
+  }
+}
+
+export function lastJobSearch(): JobSearchState {
+  try {
+    const parsed = jobSearchSchema.safeParse(JSON.parse(sessionStorage.getItem(LAST_SEARCH_KEY) ?? '{}'))
+    return parsed.success ? parsed.data : {}
+  } catch {
+    return {}
+  }
+}

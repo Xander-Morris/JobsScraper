@@ -24,12 +24,20 @@ const router = createRouter({
   context: { queryClient, auth: undefined! },
   // Loaders prefetch on hover; staleTime 0 defers caching to React Query.
   defaultPreload: 'intent',
-  defaultPreloadStaleTime: 0
+  defaultPreloadStaleTime: 0,
+  scrollRestoration: true
 })
 
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router
+  }
+}
+
+declare module '@tanstack/history' {
+  interface HistoryState {
+    // Set when a job is opened from the board, so "Back to jobs" can return to that exact entry.
+    fromJobsList?: boolean
   }
 }
 

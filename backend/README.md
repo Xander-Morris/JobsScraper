@@ -56,7 +56,7 @@ Full list with comments is in `.env.example`. The short version:
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
 | `TEST_DATABASE_CONNECTION` | dev only | separate DB for `go test` |
 | `OPENROUTER_API_KEY` | recommended | resume extraction/generation fail without it |
-| `OPENROUTER_MODEL` | optional | defaults to `minimax/minimax-m2.7:free`; must be a `:free` model to stay free |
+| `OPENROUTER_MODEL` | optional | defaults to `nvidia/nemotron-3-super-120b-a12b:free`; must be a `:free` model to stay free, and reasoning is sent disabled |
 | `JINA_API_KEY` | recommended | embeddings fail without it (search/digest fall back to keyword matching) |
 | `JINA_EMBED_MODEL` | optional | defaults to `jina-embeddings-v2-base-en`; must stay 768-dim to match the `vector(768)` columns |
 
@@ -79,6 +79,7 @@ Each scrape cycle also:
 
 - **Expires old jobs**: postings first published more than 30 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Stored jobs are also capped at the newest 5,000 (`MaxJobs`); older ones past the cap are deleted, and each scrape writes at most that many. Jobs someone marked applied or tailored a resume for are kept, but drop out of search. Pruning runs before each write, so it still frees space if Supabase has put the database in read-only mode.
 - **Embeds new jobs**: the title plus the first 2,000 characters of the description go to Jina, which keeps token use down on the free tier. The full description is still stored and shown.
+- **Normalizes salaries**: structured pay (Himalayas, Jobicy, Ashby compensation, Lever `salaryRange`, JSON-LD `baseSalary`) is converted to yearly USD; hourly, weekly, and monthly rates are annualized and other currencies are dropped. Jobs with no structured pay fall back to reading a range like "$150,000 – $200,000" that follows a word like "salary" or "pay" in the description (`jobs/salary.go`).
 - **Tolerates broken boards**: a Greenhouse, Lever, Ashby company, or crawler seed that fails (renamed board, outage) is logged and skipped without failing the rest.
 
 ### Crawler

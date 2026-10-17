@@ -46,6 +46,25 @@ func TestJobicyJobToJob(t *testing.T) {
 			},
 		},
 		{
+			name: "non-USD salary is skipped",
+			raw: jobicyJob{
+				ID:             3,
+				URL:            "https://jobicy.com/jobs/3",
+				JobTitle:       "Director of Product Design",
+				CompanyName:    "Monzo",
+				SalaryMin:      140000,
+				SalaryMax:      165000,
+				SalaryCurrency: "GBP",
+				SalaryPeriod:   "yearly",
+			},
+			want: Job{
+				Title:         "Director of Product Design",
+				Company:       "Monzo",
+				WorkplaceType: Remote,
+				URL:           "https://jobicy.com/jobs/3",
+			},
+		},
+		{
 			name: "job with zero salary and unparsable date leaves those fields unset",
 			raw: jobicyJob{
 				ID:             2,

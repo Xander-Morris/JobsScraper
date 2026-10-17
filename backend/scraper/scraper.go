@@ -107,6 +107,11 @@ func fetchAll(ctx context.Context, sources []jobs.JobSource) []jobs.Job {
 		for _, job := range sourceJobs {
 			if key := keyFor(job); !seen[key] {
 				seen[key] = true
+
+				if job.SalaryMin == nil && job.SalaryMax == nil {
+					job.SalaryMin, job.SalaryMax = jobs.ParseSalaryText(job.Description, true)
+				}
+
 				fetchedJobs = append(fetchedJobs, job)
 			}
 		}
