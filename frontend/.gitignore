@@ -29,3 +29,6 @@ src/routeTree.gen.ts
 
 # Environment Variables
 .env 
+
+# Test coverage
+coverage

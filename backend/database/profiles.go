@@ -39,6 +39,17 @@ type UpdateProfileRequest struct {
 
 var verifier = emailverifier.NewVerifier()
 
+// checkEmail is swapped out in tests to skip the live DNS/MX lookup.
+var checkEmail = verifyEmail
+
+// SetEmailVerifier swaps the email check, returning the previous one; for tests.
+func SetEmailVerifier(fn func(email string) (*emailverifier.Result, error)) func(email string) (*emailverifier.Result, error) {
+	prev := checkEmail
+	checkEmail = fn
+
+	return prev
+}
+
 type ProfileRequest struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
@@ -118,7 +129,7 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 		return 0, invalidInput("password must be at least 8 characters")
 	}
 
-	result, err := verifyEmail(req.Email)
+	result, err := checkEmail(req.Email)
 	if errors.Is(err, errEmailVerificationTimeout) {
 		if !verifier.ParseAddress(req.Email).Valid {
 			return 0, invalidInput("email is invalid or undeliverable")

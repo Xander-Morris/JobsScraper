@@ -220,7 +220,9 @@ func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64
 }
 
 func DeleteWorkExperience(ctx context.Context, profileID, workExperienceID int64) error {
-	if _, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets WHERE work_experience_id = $1`, workExperienceID); err != nil {
+	// Scoped to the owner, so a wrong profile can't wipe someone else's bullets.
+	if _, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets WHERE work_experience_id IN
+		(SELECT id FROM profiles_work_experience WHERE id = $1 AND profile_id = $2)`, workExperienceID, profileID); err != nil {
 		return err
 	}
 

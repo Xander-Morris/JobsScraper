@@ -35,9 +35,24 @@ npm run lint:fix       # oxlint --fix
 npm run format          # prettier --write
 npm run format:check   # prettier --check
 npm run preview         # serve the production build locally
+npm test                # vitest, run once
+npm run test:watch      # vitest in watch mode
+npm run coverage        # vitest with a v8 coverage report in coverage/
 ```
 
-CI runs `lint` and `build` on every push and PR. On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead. There's no test suite wired up yet, if you add one, hook it into `.github/workflows/ci.yml` alongside those.
+## Tests
+
+Vitest with jsdom, React Testing Library and MSW. Tests sit next to the code they cover as `*.test.ts(x)`; shared setup lives in `src/test/`:
+
+- `setup.ts` starts MSW (any request without a handler fails the test), stubs browser APIs jsdom lacks, and resets storage and auth between tests.
+- `server.ts` holds the MSW server and default handlers; override per test with `server.use(...)`.
+- `fixtures.ts` builds API-shaped objects (`makeJob`, `makeProfile`, ...).
+- `auth-mock.ts` stands in for the auth store: `vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))`, then `signIn()`.
+- `render.tsx` has `renderWithProviders` (query client plus a memory router) and `renderHookWithClient`.
+
+`src/routes/routes.test.tsx` mounts the real route tree for page-level flows. `VITE_API_URL` is pinned in `vitest.config.ts`, so a local `.env` can't send test traffic to a real backend.
+
+CI runs `test`, `lint` and `build` on every push and PR. On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead.
 
 On Windows with `core.autocrlf=true`, `format:check` flags every file locally because of CRLF line endings. That's harmless, git stores LF and CI checks LF.
 

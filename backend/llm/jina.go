@@ -12,13 +12,21 @@ import (
 
 const (
 	defaultJinaEmbedModel = "jina-embeddings-v2-base-en"
-	jinaAPIURL            = "https://api.jina.ai/v1/embeddings"
+	defaultJinaAPIURL     = "https://api.jina.ai/v1/embeddings"
 )
 
 var errJinaRateLimited = errors.New("jina rate limited")
 
 func jinaAPIKey() string {
 	return utils.Getenv("JINA_API_KEY")
+}
+
+func jinaAPIURL() string {
+	if url := utils.Getenv("JINA_API_URL"); url != "" {
+		return url
+	}
+
+	return defaultJinaAPIURL
 }
 
 func jinaEmbedModel() string {
@@ -50,7 +58,7 @@ func callJinaEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 		return nil, fmt.Errorf("JINA_API_KEY is not set")
 	}
 
-	status, respBody, err := postJSON(ctx, jinaAPIURL, apiKey, jinaEmbedRequest{Model: jinaEmbedModel(), Input: texts})
+	status, respBody, err := postJSON(ctx, jinaAPIURL(), apiKey, jinaEmbedRequest{Model: jinaEmbedModel(), Input: texts})
 	if err != nil {
 		return nil, fmt.Errorf("call jina: %w", err)
 	}

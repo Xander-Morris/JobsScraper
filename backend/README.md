@@ -34,9 +34,18 @@ Resume extraction, cover letter generation, and trivia need `OPENROUTER_API_KEY`
 go test -p 1 ./...
 ```
 
-`-p 1` matters: the `database` and `server` packages share one test database and each resets its tables at startup, so run in parallel they wipe each other mid-test.
+`-p 1` matters: the `database`, `server`, `digest` and `scraper` packages share one test database and each resets its tables at startup, so run in parallel they wipe each other mid-test.
 
-Tests that touch the database use `TEST_DATABASE_CONNECTION` instead of `DATABASE_CONNECTION`. Make sure that's set to a **different** database than your real one, the test suite drops and recreates tables on it. If `TEST_DATABASE_CONNECTION` isn't set, DB-backed tests skip themselves rather than fail.
+Tests that touch the database use `TEST_DATABASE_CONNECTION` instead of `DATABASE_CONNECTION`. Make sure that's set to a **different** database than your real one, the test suite drops every table on it. If `TEST_DATABASE_CONNECTION` isn't set, DB-backed tests skip themselves rather than fail.
+
+To run the DB tests locally, start the same Postgres image CI uses:
+
+```bash
+docker run -d --name crawler-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=crawlerandindexer_test -p 55432:5432 pgvector/pgvector:pg16
+TEST_DATABASE_CONNECTION=postgresql://postgres:postgres@localhost:55432/crawlerandindexer_test go test -p 1 ./...
+```
+
+No test calls a real outside service. OpenRouter, Jina and Resend are faked with local servers through `OPENROUTER_API_URL`, `JINA_API_URL` and `RESEND_API_URL`, and the signup email check is swapped for an offline one (`database.SetEmailVerifier`), so no DNS lookups either. The `server` tests drive the full HTTP handler (routing, auth, CORS) as well as calling handlers directly.
 
 CI runs `go vet`, `go build`, and `go test` against a throwaway Postgres service container, so you don't need Docker locally just to get a green check. It also runs `gofmt -w` and commits the result back to the branch (fork PRs just fail on unformatted files instead).
 

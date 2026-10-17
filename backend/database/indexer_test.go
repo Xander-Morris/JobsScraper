@@ -7,11 +7,29 @@ import (
 	"main/jobs"
 	"main/utils"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	emailverifier "github.com/AfterShip/email-verifier"
 	"github.com/pgvector/pgvector-go"
 )
+
+const resetTestDBSQL = `DO $$
+DECLARE t text;
+BEGIN
+	FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+		EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(t) || ' CASCADE';
+	END LOOP;
+END $$;`
+
+// offlineEmailCheck checks syntax only; ".invalid" domains have no MX.
+func offlineEmailCheck(email string) (*emailverifier.Result, error) {
+	return &emailverifier.Result{
+		Syntax:       verifier.ParseAddress(email),
+		HasMxRecords: !strings.HasSuffix(email, ".invalid"),
+	}, nil
+}
 
 func newTestDB(t *testing.T) {
 	t.Helper()
@@ -32,28 +50,20 @@ func newTestDB(t *testing.T) {
 		t.Fatalf("ping test db: %v", err)
 	}
 
-	// CASCADE only cascades to dependent objects like FK constraints, not to
-	// child tables themselves; every table with an FK into profiles has to be
-	// listed here, or its rows outlive the id sequence reset and collide with
-	// fresh test profiles reusing the same ids.
-	// schema_migrations needs dropping too, since it survives the reset
-	// otherwise. Left in place, CreateTables' next call sees the target
-	// version already applied and skips recreating everything just dropped.
-	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
-		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
-		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
-		profile_tailored_resumes, profile_password_reset_tokens, schema_migrations`
-
-	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
+	// Drop every public table, schema_migrations included, so CreateTables
+	// rebuilds from scratch and new tables can't be missed by a hand-kept list.
+	if _, err := db.Exec(resetTestDBSQL); err != nil {
 		t.Fatalf("reset test db: %v", err)
 	}
 	migrated = false
 
 	prev := SetDB(db)
+	prevCheck := SetEmailVerifier(offlineEmailCheck)
 
 	t.Cleanup(func() {
 		db.Close()
 		SetDB(prev)
+		SetEmailVerifier(prevCheck)
 	})
 
 	if err := CreateTables(); err != nil {

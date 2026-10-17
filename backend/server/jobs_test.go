@@ -9,15 +9,36 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"main/database"
 	"main/jobs"
 	"main/utils"
+
+	emailverifier "github.com/AfterShip/email-verifier"
 )
 
+const resetTestDBSQL = `DO $$
+DECLARE t text;
+BEGIN
+	FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+		EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(t) || ' CASCADE';
+	END LOOP;
+END $$;`
+
+// offlineEmailCheck checks syntax only; ".invalid" domains have no MX.
+func offlineEmailCheck(email string) (*emailverifier.Result, error) {
+	return &emailverifier.Result{
+		Syntax:       emailverifier.NewVerifier().ParseAddress(email),
+		HasMxRecords: !strings.HasSuffix(email, ".invalid"),
+	}, nil
+}
+
 func TestMain(m *testing.M) {
+	database.SetEmailVerifier(offlineEmailCheck)
+
 	connString := testDBConnString()
 
 	if connString == "" {
@@ -44,16 +65,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	// Same list as database.newTestDB, same reason: CASCADE doesn't reach
-	// child tables, so anything with an FK into profiles needs naming here;
-	// otherwise its rows outlive the id sequence reset and a second local
-	// test run collides on an already-registered email.
-	const dropTables = `job_tags, jobs, tags, profile_refresh_tokens, profiles_education,
-		profiles_work_experience_bullets, profiles_work_experience, profiles_skills,
-		profile_resume_extractions, profile_resumes, profiles, profile_job_applications,
-		profile_tailored_resumes, profile_password_reset_tokens, schema_migrations`
-
-	if _, err := db.Exec("DROP TABLE IF EXISTS " + dropTables + " CASCADE;"); err != nil {
+	// Same reset as database.newTestDB: drop every public table.
+	if _, err := db.Exec(resetTestDBSQL); err != nil {
 		panic(err)
 	}
 

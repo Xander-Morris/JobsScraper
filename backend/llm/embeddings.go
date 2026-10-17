@@ -7,10 +7,10 @@ import (
 )
 
 // Free Jina keys allow 100k tokens a minute, so a 429 clears after about a minute.
-const (
-	jinaRateLimitWait    = time.Minute
-	jinaMaxEmbedAttempts = 3
-)
+const jinaMaxEmbedAttempts = 3
+
+// jinaRateLimitWait is a var so tests can shorten it.
+var jinaRateLimitWait = time.Minute
 
 // EmbedTexts embeds a batch of texts in one Jina request, one vector per input
 // in the same order. Treat failures as non-fatal; search and digest fall back

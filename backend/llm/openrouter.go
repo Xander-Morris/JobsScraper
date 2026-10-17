@@ -17,10 +17,18 @@ import (
 // (pricing.prompt == "0") and set OPENROUTER_MODEL rather than editing this.
 const defaultOpenRouterModel = "nvidia/nemotron-3-super-120b-a12b:free"
 
-const openRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
+const defaultOpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 
 func openRouterAPIKey() string {
 	return utils.Getenv("OPENROUTER_API_KEY")
+}
+
+func openRouterAPIURL() string {
+	if url := utils.Getenv("OPENROUTER_API_URL"); url != "" {
+		return url
+	}
+
+	return defaultOpenRouterAPIURL
 }
 
 func openRouterModel() string {
@@ -91,7 +99,7 @@ func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]an
 		Temperature:    temperature,
 	}
 
-	status, respBody, err := postJSON(ctx, openRouterAPIURL, apiKey, reqBody)
+	status, respBody, err := postJSON(ctx, openRouterAPIURL(), apiKey, reqBody)
 	if err != nil {
 		return "", fmt.Errorf("call openrouter: %w", err)
 	}

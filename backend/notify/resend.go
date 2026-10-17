@@ -12,7 +12,15 @@ import (
 	"main/utils"
 )
 
-const resendAPIURL = "https://api.resend.com/emails"
+const defaultResendAPIURL = "https://api.resend.com/emails"
+
+func resendAPIURL() string {
+	if url := utils.Getenv("RESEND_API_URL"); url != "" {
+		return url
+	}
+
+	return defaultResendAPIURL
+}
 
 const defaultFromAddress = "onboarding@resend.dev"
 
@@ -45,7 +53,7 @@ func SendEmail(ctx context.Context, to, subject, body string) error {
 		return fmt.Errorf("encode resend request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resendAPIURL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resendAPIURL(), bytes.NewReader(payload))
 
 	if err != nil {
 		return fmt.Errorf("build resend request: %w", err)
