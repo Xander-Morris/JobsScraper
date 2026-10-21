@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/src/api/client'
-import { useAutosave } from './use-autosave'
+import { useAutosave } from '@/src/hooks/use-autosave'
 
 function deferred() {
   let resolve!: () => void

@@ -9,8 +9,6 @@ type BulletSection = 'work_experience' | 'projects'
 const textareaClass = 'w-full resize-y rounded-md border border-border bg-background p-2 text-xs leading-relaxed'
 
 function move<T>(items: T[], from: number, to: number): T[] {
-  if (to < 0 || to >= items.length) return items
-
   const next = [...items]
   const [item] = next.splice(from, 1)
   next.splice(to, 0, item)

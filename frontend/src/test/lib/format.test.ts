@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatRelativeDate, formatSalary, formatWorkplaceType, matchLabel, STRONG_MATCH } from './format'
+import {
+  formatRelativeDate,
+  formatSalary,
+  formatWorkplaceType,
+  matchLabel,
+  STRONG_MATCH,
+  summarizeApplyResult
+} from '@/src/lib/format'
 
 describe('formatSalary', () => {
   it.each([
@@ -84,4 +91,49 @@ describe('formatRelativeDate', () => {
       expect(formatRelativeDate(iso)).toBeNull()
     }
   )
+})
+
+describe('summarizeApplyResult', () => {
+  const none = {
+    updatedBasicInfo: false,
+    addedEducation: 0,
+    updatedEducation: 0,
+    addedSkills: 0,
+    addedWorkExperience: 0,
+    updatedWorkExperience: 0
+  }
+
+  it('says when nothing changed', () => {
+    expect(summarizeApplyResult(none)).toBe('Nothing new to add, profile already has this information.')
+  })
+
+  it('uses singular counts', () => {
+    expect(
+      summarizeApplyResult({
+        updatedBasicInfo: true,
+        addedEducation: 1,
+        updatedEducation: 1,
+        addedSkills: 1,
+        addedWorkExperience: 1,
+        updatedWorkExperience: 1
+      })
+    ).toBe(
+      '1 education entry added, 1 education entry updated, 1 skill added, 1 work experience entry added, 1 work experience entry updated, basic info updated.'
+    )
+  })
+
+  it('uses plural counts', () => {
+    expect(
+      summarizeApplyResult({
+        ...none,
+        addedEducation: 2,
+        updatedEducation: 3,
+        addedSkills: 4,
+        addedWorkExperience: 5,
+        updatedWorkExperience: 6
+      })
+    ).toBe(
+      '2 education entries added, 3 education entries updated, 4 skills added, 5 work experience entries added, 6 work experience entries updated.'
+    )
+  })
 })

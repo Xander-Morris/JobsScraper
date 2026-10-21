@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { auth } from '@/src/test/auth-mock'
 import { renderWithProviders } from '@/src/test/render'
 import { api, server } from '@/src/test/server'
-import { AuthForms } from './AuthForms'
+import { AuthForms } from '@/src/components/auth/AuthForms'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 

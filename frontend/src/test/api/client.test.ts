@@ -10,7 +10,7 @@ import {
   sessionExpiredEvent,
   setAccessToken,
   tokenRefreshedEvent
-} from './client'
+} from '@/src/api/client'
 
 const okSchema = z.object({ ok: z.boolean() })
 
@@ -46,6 +46,11 @@ describe('apiFetch', () => {
       message: 'Internal Server Error',
       status: 500
     })
+
+    server.use(
+      http.get(api('/api/bare-error'), () => HttpResponse.json({}, { status: 400, statusText: 'Bad Request' }))
+    )
+    await expect(apiFetch('/api/bare-error', okSchema)).rejects.toMatchObject({ message: 'Bad Request', status: 400 })
   })
 
   it('attaches the access token, but keeps a caller Authorization header', async () => {
@@ -170,5 +175,36 @@ describe('apiFetchBlob', () => {
     server.use(http.get(api('/api/file'), () => HttpResponse.json({ error: 'resume not found' }, { status: 404 })))
 
     await expect(apiFetchBlob('/api/file')).rejects.toMatchObject({ message: 'resume not found', status: 404 })
+  })
+})
+
+describe('refreshAccessToken with Web Locks', () => {
+  it('serializes the refresh through navigator.locks', async () => {
+    const request = vi.fn((_name: string, fn: () => Promise<string | null>) => fn())
+    Object.defineProperty(navigator, 'locks', { value: { request }, configurable: true })
+    server.use(http.post(api('/api/profile/refresh'), () => HttpResponse.json({ token: 'locked' })))
+
+    try {
+      await expect(refreshAccessToken()).resolves.toBe('locked')
+      expect(request).toHaveBeenCalledWith('profile-refresh', expect.any(Function))
+    } finally {
+      delete (navigator as { locks?: unknown }).locks
+    }
+  })
+})
+
+describe('API_BASE_URL', () => {
+  it('falls back to localhost and trims trailing slashes', async () => {
+    vi.stubEnv('VITE_API_URL', undefined)
+    vi.resetModules()
+    try {
+      expect((await import('@/src/api/client')).API_BASE_URL).toBe('http://localhost:8090')
+      vi.stubEnv('VITE_API_URL', 'http://x.test//')
+      vi.resetModules()
+      expect((await import('@/src/api/client')).API_BASE_URL).toBe('http://x.test')
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })

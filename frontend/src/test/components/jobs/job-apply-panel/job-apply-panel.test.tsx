@@ -6,11 +6,12 @@ import type { Profile, ResumeExtraction } from '@/src/api/schemas'
 import { signIn } from '@/src/test/auth-mock'
 import { makeExtraction, makeJob, makeProfile, makeResume, makeTailoredResume } from '@/src/test/fixtures'
 import { renderWithProviders } from '@/src/test/render'
+import { gate } from '@/src/test/gate'
 import { api, server } from '@/src/test/server'
-import CoverLetterSection from './cover-letter-section'
-import FitSection from './fit-section'
-import JobApplyPanel from './job-apply-panel'
-import OpenAndToggle from './open-and-toggle'
+import CoverLetterSection from '@/src/components/jobs/job-apply-panel/cover-letter-section'
+import FitSection from '@/src/components/jobs/job-apply-panel/fit-section'
+import JobApplyPanel from '@/src/components/jobs/job-apply-panel/job-apply-panel'
+import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 
@@ -146,6 +147,62 @@ describe('JobApplyPanel', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await waitFor(() => expect(posts).toBe(2))
+  })
+
+  it('renders nothing when the profile fails to load', async () => {
+    let loads = 0
+    server.use(
+      http.get(api('/api/profile'), () => {
+        loads++
+        return HttpResponse.json({ error: 'profile not found' }, { status: 404 })
+      })
+    )
+    const { container } = await renderWithProviders(<JobApplyPanel job={job} />)
+
+    await waitFor(() => expect(loads).toBe(1))
+    await waitFor(() => expect(container.querySelector('.animate-pulse')).toBeNull())
+    expect(screen.queryByRole('heading', { name: 'Apply assist' })).not.toBeInTheDocument()
+  })
+
+  it('shows progress while drafting and regenerates the letter', async () => {
+    serve()
+    let posts = 0
+    const hold = gate()
+    server.use(
+      http.post(api('/api/jobs/1/generate'), async () => {
+        posts++
+        if (posts === 1) await hold.wait
+        return HttpResponse.json({ cover_letter: `Draft ${posts}`, tailored_bullets: [] })
+      })
+    )
+    await renderWithProviders(<JobApplyPanel job={job} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Draft letter for this role' }))
+    expect(await screen.findByRole('button', { name: /Generating…/ })).toBeDisabled()
+
+    hold.release()
+    expect(await screen.findByRole('textbox', { name: 'Cover letter draft' })).toHaveValue('Draft 1')
+
+    await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Cover letter draft' })).toHaveValue('Draft 2'))
+  })
+
+  it('shows tailoring progress and errors', async () => {
+    serve()
+    const hold = gate()
+    server.use(
+      http.post(api('/api/jobs/1/tailored-resume'), async () => {
+        await hold.wait
+        return HttpResponse.json({ error: 'tailoring failed' }, { status: 502 })
+      })
+    )
+    await renderWithProviders(<JobApplyPanel job={job} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Tailor resume for this role' }))
+    expect(await screen.findByRole('button', { name: /Tailoring…/ })).toBeDisabled()
+
+    hold.release()
+    expect(await screen.findByRole('alert')).toHaveTextContent('tailoring failed')
   })
 
   it('asks for a profile when it has nothing to copy', async () => {

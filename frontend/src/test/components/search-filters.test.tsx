@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { JobSearchState } from '@/src/lib/job-search'
 import { renderWithProviders } from '@/src/test/render'
 import { api, server } from '@/src/test/server'
-import { SearchFilters } from './search-filters'
+import { SearchFilters } from '@/src/components/search-filters'
 
 async function renderFilters(search: JobSearchState = {}) {
   const onChange = vi.fn()
@@ -146,5 +146,56 @@ describe('SearchFilters', () => {
     await userEvent.click(document.body)
     await act(() => new Promise((r) => setTimeout(r, 200)))
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('resets dropdowns to their any option', async () => {
+    const { onChange } = await renderFilters({ workplaceType: 'remote', jobType: 'intern', datePosted: 'week' })
+
+    await userEvent.click(screen.getByRole('button', { name: /^Remote/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Any workplace' }))
+    expect(onChange).toHaveBeenLastCalledWith({ workplaceType: undefined, jobType: 'intern', datePosted: 'week' })
+
+    await userEvent.click(screen.getByRole('button', { name: /Intern/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Any job type' }))
+    expect(onChange).toHaveBeenLastCalledWith({ workplaceType: 'remote', jobType: undefined, datePosted: 'week' })
+
+    await userEvent.click(screen.getByRole('button', { name: /Past week/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Any time' }))
+    expect(onChange).toHaveBeenLastCalledWith({ workplaceType: 'remote', jobType: 'intern', datePosted: undefined })
+  })
+
+  it('commits salary changes from the slider', async () => {
+    const { onChange } = await renderFilters({ minSalary: 50000 })
+    const [minThumb, maxThumb] = screen.getAllByRole('slider')
+
+    act(() => minThumb.focus())
+    await userEvent.keyboard('{Home}')
+    expect(onChange).toHaveBeenLastCalledWith({ minSalary: undefined, maxSalary: undefined })
+
+    act(() => minThumb.focus())
+    await userEvent.keyboard('{ArrowRight}')
+    expect(onChange).toHaveBeenLastCalledWith({ minSalary: 25000, maxSalary: undefined })
+
+    act(() => maxThumb.focus())
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(onChange).toHaveBeenLastCalledWith({ minSalary: 25000, maxSalary: 495000 })
+  })
+
+  it('empties the box when the search q is cleared from outside', async () => {
+    function Harness() {
+      const [search, setSearch] = useState<JobSearchState>({ q: 'go' })
+      return (
+        <>
+          <button type="button" onClick={() => setSearch({})}>
+            back
+          </button>
+          <SearchFilters search={search} onChange={setSearch} />
+        </>
+      )
+    }
+    await renderWithProviders(<Harness />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'back' }))
+    expect(screen.getByRole('searchbox')).toHaveValue('')
   })
 })

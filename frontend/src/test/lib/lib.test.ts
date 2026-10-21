@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import downloadBlob from './download-blob'
-import { decodeHtmlEntities } from './html'
-import { jobSearchSchema, lastJobSearch, rememberJobSearch } from './job-search'
-import { matchSkills } from './skills'
-import slugify from './slugify'
-import { cn, errorMessage } from './utils'
+import downloadBlob from '@/src/lib/download-blob'
+import { decodeHtmlEntities } from '@/src/lib/html'
+import { jobSearchSchema, lastJobSearch, rememberJobSearch } from '@/src/lib/job-search'
+import { matchSkills } from '@/src/lib/skills'
+import slugify from '@/src/lib/slugify'
+import { cn, errorMessage } from '@/src/lib/utils'
 
 describe('matchSkills', () => {
   it('matches whole tokens only', () => {

@@ -7,14 +7,15 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
-      include: ['src/**/*.test.{ts,tsx}'],
+      include: ['src/test/**/*.test.{ts,tsx}'],
       // Fixed so a local .env can't point tests at a real backend.
       env: { VITE_API_URL: 'http://api.test', VITE_MAPBOX_TOKEN: '' },
       css: false,
       coverage: {
         provider: 'v8',
         include: ['src/**/*.{ts,tsx}'],
-        exclude: ['src/routeTree.gen.ts', 'src/main.tsx', 'src/test/**', 'src/components/ui/**', 'src/**/*.test.*']
+        exclude: ['src/routeTree.gen.ts', 'src/main.tsx', 'src/test/**', 'src/components/ui/**'],
+        thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 }
       }
     }
   })

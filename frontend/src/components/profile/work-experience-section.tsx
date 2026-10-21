@@ -156,9 +156,9 @@ function WorkExperienceEntry({ entry, onDelete }: { entry: WorkExperience; onDel
           Remove
         </Button>
       </div>
-      {(entry.bullets ?? []).length > 0 && (
+      {!!entry.bullets?.length && (
         <ul className="mt-2 space-y-1 text-sm">
-          {(entry.bullets ?? []).map((item) => (
+          {entry.bullets.map((item) => (
             <BulletItem key={item.id} workExperienceId={entry.id} item={item} />
           ))}
         </ul>

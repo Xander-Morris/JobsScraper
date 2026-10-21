@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
+import { createBrowserHistory, createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -17,6 +17,7 @@ import {
   makeTailoredResume
 } from '@/src/test/fixtures'
 import { createTestQueryClient } from '@/src/test/render'
+import { gate } from '@/src/test/gate'
 import { api, server } from '@/src/test/server'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
@@ -26,11 +27,13 @@ vi.mock('@mapbox/search-js-react', () => ({
 }))
 
 // renderApp mounts the real route tree at path, like main.tsx does.
-async function renderApp(path: string) {
+async function renderApp(path: string, { browser = false } = {}) {
   const queryClient = createTestQueryClient()
+  if (browser) window.history.replaceState(null, '', path)
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [path] }),
+    // Only browser history wires up beforeunload.
+    history: browser ? createBrowserHistory() : createMemoryHistory({ initialEntries: [path] }),
     context: { queryClient, auth }
   })
 
@@ -82,6 +85,31 @@ describe('redirects', () => {
   })
 })
 
+describe('auth initializing', () => {
+  it.each(['/profile/basic', '/trivia'])('shows a skeleton on %s', async (path) => {
+    auth.isInitializing = true
+    await renderApp(path)
+
+    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
+    expect(screen.queryByRole('group', { name: 'Authentication mode' })).not.toBeInTheDocument()
+  })
+
+  it('skips job prefetching until auth settles', async () => {
+    auth.isInitializing = true
+    let fetches = 0
+    server.use(
+      http.get(api('/api/jobs/1'), () => {
+        fetches++
+        return HttpResponse.json(makeJob({ id: 1 }))
+      })
+    )
+    await renderApp('/jobs/1')
+
+    expect(screen.getByRole('link', { name: 'Back to jobs' })).toBeInTheDocument()
+    expect(fetches).toBe(0)
+  })
+})
+
 describe('profile pages', () => {
   it('renders the profile with section tabs', async () => {
     signIn()
@@ -125,6 +153,32 @@ describe('profile pages', () => {
       await screen.findByText('Unable to load your profile. Please try again.', {}, { timeout: 6000 })
     ).toBeInTheDocument()
   }, 10_000)
+
+  it('handles null profile lists on every tab', async () => {
+    signIn()
+    serveProfile(makeProfile({ skills: null, education: null, work_experience: null, resumes: null }))
+    const { router } = await renderApp('/profile/skills')
+
+    expect(await screen.findByRole('textbox', { name: 'Add a skill' })).toBeInTheDocument()
+    await router.navigate({ to: '/profile/education' })
+    expect(await screen.findByRole('textbox', { name: 'School' })).toBeInTheDocument()
+    await router.navigate({ to: '/profile/work-experience' })
+    expect(await screen.findByRole('textbox', { name: 'Company' })).toBeInTheDocument()
+    await router.navigate({ to: '/profile/resumes' })
+    expect(await screen.findByText('No resumes uploaded yet.')).toBeInTheDocument()
+  })
+
+  it('logs out from every log out button', async () => {
+    signIn()
+    serveProfile()
+    await renderApp('/profile/basic')
+    await screen.findByText('ada@example.com')
+
+    const buttons = screen.getAllByRole('button', { name: 'Log out' })
+    expect(buttons.length).toBeGreaterThan(1)
+    for (const button of buttons) await userEvent.click(button)
+    expect(auth.logout).toHaveBeenCalledTimes(buttons.length)
+  })
 
   it('logs out from the profile header', async () => {
     signIn()
@@ -234,6 +288,19 @@ describe('jobs pages', () => {
     expect(screen.getByRole('link', { name: 'Back to jobs' })).toHaveAttribute('href', '/jobs')
   })
 
+  it('says result for a single job and links back on a direct visit', async () => {
+    signIn()
+    serveProfile()
+    serveJobs(1)
+    const { router } = await renderApp('/jobs')
+
+    expect(await screen.findByText('1 result')).toBeInTheDocument()
+
+    await router.navigate({ to: '/jobs/$jobId', params: { jobId: '1' } })
+    await userEvent.click(await screen.findByRole('link', { name: 'Back to jobs' }))
+    await waitFor(() => expect(pathname(router)).toBe('/jobs'))
+  })
+
   it('shows a missing job', async () => {
     server.use(http.get(api('/api/jobs/404'), () => HttpResponse.json({ error: 'job not found' }, { status: 404 })))
     await renderApp('/jobs/404')
@@ -328,6 +395,63 @@ describe('tailored resume page', () => {
     await renderApp('/jobs/1/resume')
 
     expect(await screen.findByText(/No tailored resume for this job yet/)).toBeInTheDocument()
+  })
+
+  it('warns before unload and regenerating with unsaved changes', async () => {
+    signIn()
+    serveTailored()
+    await renderApp('/jobs/1/resume', { browser: true })
+
+    await userEvent.type(await screen.findByLabelText('Summary'), '!')
+
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }))
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Regenerating replaces this resume, including unsaved changes. Continue?'
+    )
+  })
+
+  it('shows save and regenerate progress and errors', async () => {
+    signIn()
+    serveTailored()
+    const saveHold = gate()
+    const regenHold = gate()
+    server.use(
+      http.put(api('/api/jobs/1/tailored-resume'), async () => {
+        await saveHold.wait
+        return HttpResponse.json({ error: 'save failed' }, { status: 500 })
+      }),
+      http.post(api('/api/jobs/1/tailored-resume'), async () => {
+        await regenHold.wait
+        return HttpResponse.json(makeTailoredResume())
+      })
+    )
+    await renderApp('/jobs/1/resume')
+
+    await userEvent.type(await screen.findByLabelText('Summary'), '!')
+    await userEvent.click(screen.getByRole('button', { name: /Save/ }))
+    expect(await screen.findByRole('button', { name: /Saving…/ })).toBeDisabled()
+    saveHold.release()
+    expect(await screen.findByRole('alert')).toHaveTextContent('save failed')
+
+    await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }))
+    expect(await screen.findByRole('button', { name: /Tailoring…/ })).toBeDisabled()
+    regenHold.release()
+  })
+
+  it('shows a load error', async () => {
+    signIn()
+    serveTailored()
+    server.use(
+      http.get(api('/api/jobs/1/tailored-resume'), () => HttpResponse.json({ error: 'load failed' }, { status: 500 }))
+    )
+    await renderApp('/jobs/1/resume')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('load failed')
   })
 
   it('asks anonymous visitors to log in', async () => {

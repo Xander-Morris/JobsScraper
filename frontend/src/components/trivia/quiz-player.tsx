@@ -26,8 +26,6 @@ export default function QuizPlayer({ quiz }: { quiz: TriviaQuiz }) {
   const revealed = chosen !== undefined
 
   function choose(option: number) {
-    if (revealed) return
-
     const next = [...answers.slice(0, index), option]
     setAnswers(next)
     saveAnswers.mutate({ id: quiz.id, answers: next })

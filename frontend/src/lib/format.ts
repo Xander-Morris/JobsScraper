@@ -1,3 +1,5 @@
+import type { ApplyResumeExtractionResult } from '@/src/api/profile-merge'
+
 // Matches the backend's MinSalary; anything lower would render as "$0k".
 const MIN_SALARY = 1000
 
@@ -63,4 +65,24 @@ export function formatRelativeDate(iso: string | undefined): string | null {
   if (diffDays < 30) return `${diffDays}d ago`
   if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
   return `${Math.floor(diffDays / 365)}y ago`
+}
+
+export function summarizeApplyResult(result: ApplyResumeExtractionResult): string {
+  const parts: string[] = []
+  if (result.addedEducation)
+    parts.push(`${result.addedEducation} education entr${result.addedEducation === 1 ? 'y' : 'ies'} added`)
+  if (result.updatedEducation)
+    parts.push(`${result.updatedEducation} education entr${result.updatedEducation === 1 ? 'y' : 'ies'} updated`)
+  if (result.addedSkills) parts.push(`${result.addedSkills} skill${result.addedSkills === 1 ? '' : 's'} added`)
+  if (result.addedWorkExperience)
+    parts.push(
+      `${result.addedWorkExperience} work experience entr${result.addedWorkExperience === 1 ? 'y' : 'ies'} added`
+    )
+  if (result.updatedWorkExperience)
+    parts.push(
+      `${result.updatedWorkExperience} work experience entr${result.updatedWorkExperience === 1 ? 'y' : 'ies'} updated`
+    )
+  if (result.updatedBasicInfo) parts.push('basic info updated')
+
+  return parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing new to add, profile already has this information.'
 }

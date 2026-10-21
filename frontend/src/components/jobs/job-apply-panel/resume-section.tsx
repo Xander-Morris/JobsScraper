@@ -12,10 +12,9 @@ export default function ResumeSection({
   activeResume: Resume | null
   downloadResume: ReturnType<typeof useDownloadResumeMutation>
 }) {
-  function handleDownload() {
-    if (!activeResume) return
-    downloadResume.mutate(activeResume.id, {
-      onSuccess: (file) => downloadBlob(file, activeResume.file_name)
+  function handleDownload(resume: Resume) {
+    downloadResume.mutate(resume.id, {
+      onSuccess: (file) => downloadBlob(file, resume.file_name)
     })
   }
 
@@ -29,7 +28,7 @@ export default function ResumeSection({
             type="button"
             variant="outline"
             size="xs"
-            onClick={handleDownload}
+            onClick={() => handleDownload(activeResume)}
             disabled={downloadResume.isPending}
           >
             <DownloadIcon aria-hidden="true" /> Download

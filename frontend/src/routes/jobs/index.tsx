@@ -14,7 +14,7 @@ import { useAuth } from '@/src/stores/auth-store'
 
 const PAGE_SIZE = 20
 
-function toJobSearchParams(search: JobSearchState): JobSearchParams {
+function toJobSearchParams(search: JobSearchState): JobSearchParams & { offset: number } {
   return {
     q: search.q,
     workplaceType: search.workplaceType,
@@ -50,14 +50,12 @@ function JobsPage() {
 
   const { data, isLoading, isError, error, isPlaceholderData } = useJobsQuery(params, { enabled: isAuthenticated })
 
-  const hasNextPage = !!data && !isPlaceholderData && (params.offset ?? 0) + PAGE_SIZE < data.total
+  const hasNextPage = !!data && !isPlaceholderData && params.offset + PAGE_SIZE < data.total
 
   // Next page is usually the next click.
   useEffect(() => {
     if (!hasNextPage) return
-    void queryClient.prefetchQuery(
-      jobsQueryOptions({ ...params, offset: (params.offset ?? 0) + PAGE_SIZE }, isAuthenticated)
-    )
+    void queryClient.prefetchQuery(jobsQueryOptions({ ...params, offset: params.offset + PAGE_SIZE }, isAuthenticated))
   }, [hasNextPage, isAuthenticated, params, queryClient])
 
   function updateFilters(next: JobSearchState) {

@@ -18,10 +18,10 @@ import {
   markJobApplied,
   saveTailoredResume,
   unmarkJobApplied
-} from './jobs'
-import * as profile from './profile'
-import { fetchTags } from './tags'
-import * as trivia from './trivia'
+} from '@/src/api/jobs'
+import * as profile from '@/src/api/profile'
+import { fetchTags } from '@/src/api/tags'
+import * as trivia from '@/src/api/trivia'
 
 interface Captured {
   method: string

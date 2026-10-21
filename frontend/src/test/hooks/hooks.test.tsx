@@ -14,11 +14,11 @@ import {
 } from '@/src/test/fixtures'
 import { renderHookWithClient } from '@/src/test/render'
 import { api, server } from '@/src/test/server'
-import useCopied from './use-copied'
-import * as jobsHooks from './use-jobs'
-import * as profileHooks from './use-profile'
-import { useTagsQuery } from './use-tags'
-import * as triviaHooks from './use-trivia'
+import useCopied from '@/src/hooks/use-copied'
+import * as jobsHooks from '@/src/hooks/use-jobs'
+import * as profileHooks from '@/src/hooks/use-profile'
+import { useTagsQuery } from '@/src/hooks/use-tags'
+import * as triviaHooks from '@/src/hooks/use-trivia'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 
@@ -256,6 +256,30 @@ describe('profile hooks', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(10_000))
     expect(calls).toBe(2)
+  })
+
+  it('retries a missing extraction but not other errors', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    signIn()
+
+    let calls = 0
+    server.use(
+      http.get(api('/api/profile/resumes/10/extraction'), () => {
+        calls++
+        return calls < 2
+          ? HttpResponse.json({ error: 'not found' }, { status: 404 })
+          : HttpResponse.json(makeExtraction())
+      }),
+      http.get(api('/api/profile/resumes/11/extraction'), () => HttpResponse.json({ error: 'boom' }, { status: 500 }))
+    )
+
+    const found = renderHookWithClient(() => profileHooks.useResumeExtractionQuery(10, { enabled: true }))
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    await waitFor(() => expect(found.result.current.data?.status).toBe('completed'))
+    expect(calls).toBe(2)
+
+    const failed = renderHookWithClient(() => profileHooks.useResumeExtractionQuery(11, { enabled: true }))
+    await waitFor(() => expect(failed.result.current.error).toBeInstanceOf(ApiError))
   })
 
   it('invalidates the extraction after triggering it', async () => {

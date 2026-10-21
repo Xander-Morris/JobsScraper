@@ -44,7 +44,7 @@ const JOB_TYPE_OPTIONS: { value: JobSearchState['jobType'] | ''; label: string }
 const triggerClass = 'min-w-36 justify-between font-normal text-secondary-foreground'
 
 function formatSalaryThousands(value: number): string {
-  return value >= 1000 ? `$${Math.round(value / 1000)}k` : `$${value}`
+  return `$${Math.round(value / 1000)}k`
 }
 
 function WorkplaceTypeFilter({
@@ -54,7 +54,7 @@ function WorkplaceTypeFilter({
   value: JobSearchState['workplaceType']
   onChange: (value: JobSearchState['workplaceType']) => void
 }) {
-  const label = WORKPLACE_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'Any workplace'
+  const label = WORKPLACE_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label
 
   return (
     <DropdownMenu>
@@ -83,7 +83,7 @@ function DatePostedFilter({
   value: JobSearchState['datePosted']
   onChange: (value: JobSearchState['datePosted']) => void
 }) {
-  const label = DATE_POSTED_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'Any time'
+  const label = DATE_POSTED_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label
 
   return (
     <DropdownMenu>
@@ -109,7 +109,7 @@ function JobTypeFilter({
   value: JobSearchState['jobType']
   onChange: (value: JobSearchState['jobType']) => void
 }) {
-  const label = JOB_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label ?? 'Any job type'
+  const label = JOB_TYPE_OPTIONS.find((opt) => opt.value === (value ?? ''))?.label
 
   return (
     <DropdownMenu>

@@ -8,13 +8,13 @@ import {
   useUploadResumeMutation
 } from '@/src/hooks/use-profile'
 import { useApplyResumeExtractionMutation } from '@/src/hooks/use-profile'
-import { type ApplyResumeExtractionResult } from '@/src/api/profile-merge'
 import type { Profile, Resume } from '@/src/api/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { Input } from '@/src/components/ui/input'
 import { Label } from '@/src/components/ui/label'
+import { summarizeApplyResult } from '@/src/lib/format'
 import { cn } from '@/src/lib/utils'
 import { DownloadIcon, FileTextIcon } from 'lucide-react'
 import { useId, useState } from 'react'
@@ -352,9 +352,9 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
                 {entry.location}
                 {entry.start_date ? ` · ${entry.start_date} – ${entry.end_date || 'present'}` : ''}
               </p>
-              {(entry.bullets ?? []).length > 0 && (
+              {!!entry.bullets?.length && (
                 <ul className="mt-1 space-y-0.5 text-xs">
-                  {(entry.bullets ?? []).map((bullet, bi) => (
+                  {entry.bullets.map((bullet, bi) => (
                     <li key={bi}>• {bullet}</li>
                   ))}
                 </ul>
@@ -380,12 +380,12 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
               ) : (
                 <p className="font-medium">{entry.name}</p>
               )}
-              {(entry.technologies ?? []).length > 0 && (
-                <p className="text-xs text-muted-foreground">{(entry.technologies ?? []).join(', ')}</p>
+              {!!entry.technologies?.length && (
+                <p className="text-xs text-muted-foreground">{entry.technologies.join(', ')}</p>
               )}
-              {(entry.bullets ?? []).length > 0 && (
+              {!!entry.bullets?.length && (
                 <ul className="mt-1 space-y-0.5 text-xs">
-                  {(entry.bullets ?? []).map((bullet, bi) => (
+                  {entry.bullets.map((bullet, bi) => (
                     <li key={bi}>• {bullet}</li>
                   ))}
                 </ul>
@@ -402,26 +402,6 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
         projects.length === 0 && <p className="text-sm text-muted-foreground">No details were found in this resume.</p>}
     </div>
   )
-}
-
-function summarizeApplyResult(result: ApplyResumeExtractionResult): string {
-  const parts: string[] = []
-  if (result.addedEducation)
-    parts.push(`${result.addedEducation} education entr${result.addedEducation === 1 ? 'y' : 'ies'} added`)
-  if (result.updatedEducation)
-    parts.push(`${result.updatedEducation} education entr${result.updatedEducation === 1 ? 'y' : 'ies'} updated`)
-  if (result.addedSkills) parts.push(`${result.addedSkills} skill${result.addedSkills === 1 ? '' : 's'} added`)
-  if (result.addedWorkExperience)
-    parts.push(
-      `${result.addedWorkExperience} work experience entr${result.addedWorkExperience === 1 ? 'y' : 'ies'} added`
-    )
-  if (result.updatedWorkExperience)
-    parts.push(
-      `${result.updatedWorkExperience} work experience entr${result.updatedWorkExperience === 1 ? 'y' : 'ies'} updated`
-    )
-  if (result.updatedBasicInfo) parts.push('basic info updated')
-
-  return parts.length > 0 ? `${parts.join(', ')}.` : 'Nothing new to add, profile already has this information.'
 }
 
 function formatFileSize(bytes: number) {

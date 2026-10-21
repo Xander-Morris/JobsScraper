@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ResumeExtraction, TailoredResumeContent } from '@/src/api/schemas'
 import { makeExtraction, makeTailoredContent } from '@/src/test/fixtures'
-import ResumeEditor from './resume-editor'
-import ResumePreview from './resume-preview'
+import ResumeEditor from '@/src/components/jobs/tailored-resume/resume-editor'
+import ResumePreview from '@/src/components/jobs/tailored-resume/resume-preview'
 
 const withProject = (): TailoredResumeContent =>
   makeTailoredContent({
@@ -94,6 +94,26 @@ describe('ResumeEditor', () => {
     await userEvent.click(within(project).getByRole('button', { name: /^Remove$/ }))
     expect(latest.current.projects).toEqual([])
     expect(screen.queryByText('Projects')).not.toBeInTheDocument()
+  })
+
+  it('edits only the targeted entry when there are several', async () => {
+    const base = withProject()
+    const latest = renderEditor({
+      ...base,
+      work_experience: [
+        base.work_experience[0],
+        { ...base.work_experience[0], company: 'Beta', bullets: [{ text: 'Second', source: '' }] }
+      ],
+      projects: [base.projects[0], { ...base.projects[0], name: 'Other', bullets: [{ text: 'Two', source: '' }] }]
+    })
+
+    const role = screen.getByText('Engineer · Beta').parentElement!
+    await userEvent.type(within(role).getByLabelText('Bullet 1'), '!')
+    expect(latest.current.work_experience.map((w) => w.bullets[0].text)).toEqual(['Built APIs', 'Second!'])
+
+    const project = screen.getByText('Other').closest('div')!.parentElement!
+    await userEvent.type(within(project).getByLabelText('Bullet 1'), '?')
+    expect(latest.current.projects.map((p) => p.bullets[0].text)).toEqual(['Indexed jobs', 'Two?'])
   })
 
   it('shows the original bullet once the text differs', async () => {
@@ -197,6 +217,22 @@ describe('ResumePreview', () => {
     expect(screen.getByText('Sep 2018 – May 2022')).toBeInTheDocument()
     expect(screen.getByText('Math, Stanford')).toBeInTheDocument()
     expect(screen.getByText('Fall 2020 – Present')).toBeInTheDocument()
+  })
+
+  it('handles an open start date and a project without technologies', () => {
+    render(
+      <ResumePreview
+        content={makeTailoredContent({
+          work_experience: [
+            { company: 'Acme', job_title: 'Dev', location: '', start_date: '', end_date: '2022-05-01', bullets: [] }
+          ],
+          projects: [{ name: 'Solo', url: '', technologies: [], bullets: [] }]
+        })}
+      />
+    )
+
+    expect(screen.getByText(/^\s*– May 2022$/)).toBeInTheDocument()
+    expect(screen.getByText('Solo')).toBeInTheDocument()
   })
 
   it('drops blank bullets, summary and contact line', () => {

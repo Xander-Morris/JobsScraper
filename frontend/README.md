@@ -42,7 +42,7 @@ npm run coverage        # vitest with a v8 coverage report in coverage/
 
 ## Tests
 
-Vitest with jsdom, React Testing Library and MSW. Tests sit next to the code they cover as `*.test.ts(x)`; shared setup lives in `src/test/`:
+Vitest with jsdom, React Testing Library and MSW. All tests live under `src/test/`, mirroring `src/` (e.g. `src/components/jobs/job-card.tsx` → `src/test/components/jobs/job-card.test.tsx`), and import code via `@/src/...`. Shared setup sits at the root of `src/test/`:
 
 - `setup.ts` starts MSW (any request without a handler fails the test), stubs browser APIs jsdom lacks, and resets storage and auth between tests.
 - `server.ts` holds the MSW server and default handlers; override per test with `server.use(...)`.
@@ -50,7 +50,7 @@ Vitest with jsdom, React Testing Library and MSW. Tests sit next to the code the
 - `auth-mock.ts` stands in for the auth store: `vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))`, then `signIn()`.
 - `render.tsx` has `renderWithProviders` (query client plus a memory router) and `renderHookWithClient`.
 
-`src/routes/routes.test.tsx` mounts the real route tree for page-level flows. `VITE_API_URL` is pinned in `vitest.config.ts`, so a local `.env` can't send test traffic to a real backend.
+`src/test/routes/routes.test.tsx` mounts the real route tree for page-level flows. `VITE_API_URL` is pinned in `vitest.config.ts`, so a local `.env` can't send test traffic to a real backend.
 
 CI runs `test`, `lint` and `build` on every push and PR. On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead.
 

@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeExtraction, makeProfile } from '@/src/test/fixtures'
 import { api, server } from '@/src/test/server'
-import { applyResumeExtractionToProfile } from './profile-merge'
+import { applyResumeExtractionToProfile } from '@/src/api/profile-merge'
 
 interface Call {
   method: string
@@ -250,5 +250,78 @@ describe('applyResumeExtractionToProfile', () => {
 
     expect(result.updatedWorkExperience).toBe(0)
     expect(calls).toEqual([])
+  })
+
+  it('handles null lists on both sides', async () => {
+    const profile = makeProfile({
+      name: 'A',
+      linked_in: 'a',
+      github: 'a',
+      portfolio: 'a',
+      skills: null,
+      education: null,
+      work_experience: null
+    })
+
+    const result = await applyResumeExtractionToProfile(
+      profile,
+      makeExtraction({ skills: null, education: null, work_experience: null })
+    )
+
+    expect(calls).toEqual([])
+    expect(result.addedSkills).toBe(0)
+  })
+
+  it('treats missing dates on both sides as unchanged', async () => {
+    const profile = makeProfile({
+      name: 'A',
+      linked_in: 'a',
+      github: 'a',
+      portfolio: 'a',
+      education: [
+        { id: 7, school_name: 'MIT', major: 'CS', degree: 'BS', gpa: null, start_date: null, end_date: null }
+      ],
+      work_experience: [
+        {
+          id: 9,
+          company: 'Acme',
+          job_title: 'Dev',
+          job_type: 'full_time',
+          location: null,
+          start_date: null,
+          end_date: null,
+          bullets: null
+        },
+        {
+          id: 10,
+          company: 'Beta',
+          job_title: 'Dev',
+          job_type: 'full_time',
+          location: 'Remote',
+          start_date: '2020-01-01',
+          end_date: null,
+          bullets: []
+        }
+      ]
+    })
+
+    const result = await applyResumeExtractionToProfile(
+      profile,
+      makeExtraction({
+        skills: [],
+        education: [
+          { school_name: 'MIT', major: 'CS', degree: 'BS', start_date: 'soon', end_date: '' },
+          { school_name: 'Yale', major: 'Art', degree: 'BA', start_date: 'soon', end_date: '' }
+        ],
+        work_experience: [
+          { company: 'Acme', job_title: 'Dev', location: '', start_date: 'bad', end_date: '', bullets: null },
+          { company: 'Beta', job_title: 'Dev', location: '', start_date: '', end_date: '', bullets: ['Added'] }
+        ]
+      })
+    )
+
+    expect(result).toMatchObject({ addedEducation: 1, updatedEducation: 0, updatedWorkExperience: 1 })
+    expect(calls.map(summary)).toEqual(['POST /api/profile/education', 'POST /api/profile/work-experience/10/bullets'])
+    expect(calls[0].body).toEqual({ school_name: 'Yale', major: 'Art', degree: 'BA' })
   })
 })

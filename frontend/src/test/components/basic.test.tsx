@@ -4,11 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { auth, signIn } from '@/src/test/auth-mock'
 import { makeJobListItem } from '@/src/test/fixtures'
 import { renderWithProviders } from '@/src/test/render'
-import { Header } from './Header'
-import { JobCard } from './jobs/job-card'
-import { MatchRing } from './jobs/match-ring'
-import Pagination from './pagination'
-import { ProgressBar } from './progress-bar'
+import { Header } from '@/src/components/Header'
+import { JobCard } from '@/src/components/jobs/job-card'
+import { MatchRing } from '@/src/components/jobs/match-ring'
+import Pagination from '@/src/components/pagination'
+import { ProgressBar } from '@/src/components/progress-bar'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 

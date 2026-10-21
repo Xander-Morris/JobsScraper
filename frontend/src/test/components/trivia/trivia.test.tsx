@@ -6,11 +6,12 @@ import type { ResumeExtraction } from '@/src/api/schemas'
 import { signIn } from '@/src/test/auth-mock'
 import { makeExtraction, makeProfile, makeQuiz, makeQuizSummary, makeResume } from '@/src/test/fixtures'
 import { renderWithProviders } from '@/src/test/render'
+import { gate } from '@/src/test/gate'
 import { api, server } from '@/src/test/server'
-import QuizPlayer from './quiz-player'
-import SegmentedControl from './segmented-control'
-import TriviaGenerator from './trivia-generator'
-import TriviaHistory from './trivia-history'
+import QuizPlayer from '@/src/components/trivia/quiz-player'
+import SegmentedControl from '@/src/components/trivia/segmented-control'
+import TriviaGenerator from '@/src/components/trivia/trivia-generator'
+import TriviaHistory from '@/src/components/trivia/trivia-history'
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 
@@ -122,6 +123,21 @@ describe('QuizPlayer', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/trivia/6'))
   })
 
+  it('shows retake progress', async () => {
+    const hold = gate()
+    server.use(
+      http.post(api('/api/trivia/5/retake'), async () => {
+        await hold.wait
+        return HttpResponse.json(makeQuiz({ id: 6 }))
+      })
+    )
+    await renderWithProviders(<QuizPlayer quiz={makeQuiz({ answers: [1, 0] })} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Retake/ }))
+    expect(await screen.findByRole('button', { name: /Starting…/ })).toBeDisabled()
+    hold.release()
+  })
+
   it('shows a retake error', async () => {
     server.use(
       http.post(api('/api/trivia/5/retake'), () =>
@@ -210,6 +226,24 @@ describe('TriviaGenerator', () => {
     expect(await screen.findByText('Your resume is still being parsed.')).toBeInTheDocument()
   })
 
+  it('shows generation progress', async () => {
+    serveProfile({ resume: false })
+    const hold = gate()
+    server.use(
+      http.post(api('/api/trivia'), async () => {
+        await hold.wait
+        return HttpResponse.json(makeQuiz({ id: 9 }))
+      })
+    )
+    await renderWithProviders(<TriviaGenerator />)
+
+    await userEvent.type(await screen.findByLabelText('Topic'), 'Postgres')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate quiz' }))
+    expect(await screen.findByText('This can take up to a minute.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeInTheDocument()
+    hold.release()
+  })
+
   it('shows a generation error', async () => {
     serveProfile({ resume: false })
     server.use(
@@ -255,6 +289,25 @@ describe('TriviaHistory', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete quiz: Go' }))
     await waitFor(() => expect(deleted).toBe(1))
+  })
+
+  it('marks only the quiz being deleted', async () => {
+    const hold = gate()
+    server.use(
+      http.get(api('/api/trivia'), () =>
+        HttpResponse.json([makeQuizSummary({ id: 1, topic: 'Go' }), makeQuizSummary({ id: 2, topic: 'SQL' })])
+      ),
+      http.delete(api('/api/trivia/1'), async () => {
+        await hold.wait
+        return HttpResponse.json({ status: 'deleted' })
+      })
+    )
+    await renderWithProviders(<TriviaHistory />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete quiz: Go' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete quiz: Go' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Delete quiz: SQL' })).toBeEnabled()
+    hold.release()
   })
 
   it('shows the empty state', async () => {
