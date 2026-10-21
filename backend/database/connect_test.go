@@ -118,21 +118,26 @@ func TestCreateProfileVerificationOutcomes(t *testing.T) {
 
 func TestPasswordOverBcryptLimit(t *testing.T) {
 	newTestDB(t)
-	long := strings.Repeat("p", 80)
+	ctx := t.Context()
+	long := strings.Repeat("p", 73)
 
 	if _, err := HashPassword(long); err == nil {
 		t.Error("HashPassword over 72 bytes succeeded")
 	}
-	if _, err := CreateProfile(t.Context(), &ProfileRequest{Email: "long@example.com", Password: long}); err == nil {
-		t.Error("CreateProfile with 80-byte password succeeded")
+	if _, err := CreateProfile(ctx, &ProfileRequest{Email: "long@example.com", Password: long}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("CreateProfile with 73-byte password = %v, want invalid input", err)
+	}
+	// Exactly 72 bytes is still allowed, even when multibyte characters get it there.
+	if _, err := CreateProfile(ctx, &ProfileRequest{Email: "max@example.com", Password: strings.Repeat("é", 36)}); err != nil {
+		t.Errorf("CreateProfile with 72-byte password = %v", err)
 	}
 
-	token, err := CreatePasswordResetToken(t.Context(), newTestProfile(t))
+	token, err := CreatePasswordResetToken(ctx, newTestProfile(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResetPassword(t.Context(), token, long); err == nil {
-		t.Error("ResetPassword with 80-byte password succeeded")
+	if _, err := ResetPassword(ctx, token, long); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("ResetPassword with 73-byte password = %v, want invalid input", err)
 	}
 }
 

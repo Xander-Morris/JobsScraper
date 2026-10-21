@@ -37,14 +37,12 @@ func CreatePasswordResetToken(ctx context.Context, profileID int64) (string, err
 // ResetPassword consumes a valid reset token, sets the new password, and signs out every session.
 // Returns sql.ErrNoRows if the token is unknown, used, or expired.
 func ResetPassword(ctx context.Context, token, password string) (int64, error) {
-	if len(password) < 8 {
-		return 0, invalidInput("password must be at least 8 characters")
-	}
-
-	hash, err := HashPassword(password)
-	if err != nil {
+	if err := validatePassword(password); err != nil {
 		return 0, err
 	}
+
+	// validatePassword kept it within bcrypt's limit, so hashing can't fail.
+	hash, _ := HashPassword(password)
 
 	tx, err := db().BeginTx(ctx, nil)
 	if err != nil {

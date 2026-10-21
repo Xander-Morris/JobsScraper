@@ -1,6 +1,7 @@
 import { AuthPanel } from '@/src/components/auth/AuthForms'
 import { useConfirmPasswordResetMutation } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
+import { newPasswordSchema } from '@/src/lib/password'
 import { errorMessage } from '@/src/lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
 import { revalidateLogic } from '@tanstack/react-form'
@@ -13,7 +14,7 @@ export const Route = createFileRoute('/reset-password')({
 })
 
 const resetPasswordSchema = z
-  .object({ password: z.string().min(8, 'At least 8 characters'), confirm: z.string() })
+  .object({ password: newPasswordSchema, confirm: z.string() })
   .refine((v) => v.password === v.confirm, { message: "Passwords don't match", path: ['confirm'] })
 
 function ResetPasswordPage() {

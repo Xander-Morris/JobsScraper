@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
+
+	"main/database"
 )
 
 func TestParseJobSearchParamsMaxSalaryAndRelevance(t *testing.T) {
@@ -135,4 +138,18 @@ func TestAPIExtractionWithoutEmbeddings(t *testing.T) {
 	if trigger["status"] != "completed" {
 		t.Errorf("trigger = %v, want completed despite the embedding failure", trigger)
 	}
+}
+
+func TestAPIRejectsPasswordsOverBcryptLimit(t *testing.T) {
+	a := newAPI(t)
+	long := strings.Repeat("p", 73)
+
+	a.must(http.StatusBadRequest, "POST", "/api/profile/create", map[string]string{"email": "api-long@example.com", "password": long}, nil)
+
+	a.signup("api-long-reset@example.com")
+	token, err := database.CreatePasswordResetToken(t.Context(), a.profile().ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.must(http.StatusBadRequest, "POST", "/api/profile/password-reset/confirm", map[string]string{"token": token, "password": long}, nil)
 }

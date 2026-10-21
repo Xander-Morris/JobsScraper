@@ -66,6 +66,20 @@ func HashPassword(password string) (string, error) {
 	return string(bytes), nil
 }
 
+// maxPasswordBytes is bcrypt's input limit; it rejects anything longer.
+const maxPasswordBytes = 72
+
+func validatePassword(password string) error {
+	if len(password) < 8 {
+		return invalidInput("password must be at least 8 characters")
+	}
+	if len(password) > maxPasswordBytes {
+		return invalidInput("password must be at most 72 bytes")
+	}
+
+	return nil
+}
+
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 
@@ -120,8 +134,8 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 	if len(req.Email) == 0 || len(req.Password) == 0 {
 		return 0, invalidInput("email and password are required")
 	}
-	if len(req.Password) < 8 {
-		return 0, invalidInput("password must be at least 8 characters")
+	if err := validatePassword(req.Password); err != nil {
+		return 0, err
 	}
 
 	result, err := checkEmail(req.Email)
@@ -135,11 +149,8 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 		return 0, invalidInput("email is invalid or undeliverable")
 	}
 
-	hashedPassword, err := HashPassword(req.Password)
-
-	if err != nil {
-		return 0, err
-	}
+	// validatePassword kept it within bcrypt's limit, so hashing can't fail.
+	hashedPassword, _ := HashPassword(req.Password)
 
 	var profileID int64
 

@@ -3,6 +3,7 @@ import downloadBlob from '@/src/lib/download-blob'
 import { decodeHtmlEntities } from '@/src/lib/html'
 import { jobSearchSchema, lastJobSearch, rememberJobSearch } from '@/src/lib/job-search'
 import { matchSkills } from '@/src/lib/skills'
+import { newPasswordSchema } from '@/src/lib/password'
 import slugify from '@/src/lib/slugify'
 import { cn, errorMessage } from '@/src/lib/utils'
 
@@ -131,5 +132,17 @@ describe('downloadBlob', () => {
     expect(create).toHaveBeenCalledWith(blob)
     expect(click).toHaveBeenCalledOnce()
     expect(revoke).toHaveBeenCalledWith('blob:resume')
+  })
+})
+
+describe('newPasswordSchema', () => {
+  const error = (p: string) => newPasswordSchema.safeParse(p).error?.issues[0].message
+
+  it('requires 8 characters and caps at 72 bytes', () => {
+    expect(error('short')).toBe('At least 8 characters')
+    expect(error('p'.repeat(72))).toBeUndefined()
+    expect(error('p'.repeat(73))).toBe('Too long (72 bytes max)')
+    // 37 two-byte characters is 74 bytes.
+    expect(error('é'.repeat(37))).toBe('Too long (72 bytes max)')
   })
 })

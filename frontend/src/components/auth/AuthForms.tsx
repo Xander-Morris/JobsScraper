@@ -1,6 +1,7 @@
 import { useCreateProfileMutation, useLoginMutation, useRequestPasswordResetMutation } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
 import { Button } from '@/src/components/ui/button'
+import { newPasswordSchema } from '@/src/lib/password'
 import { cn, errorMessage } from '@/src/lib/utils'
 import { useAuth } from '@/src/stores/auth-store'
 import { revalidateLogic } from '@tanstack/react-form'
@@ -12,7 +13,7 @@ const email = z.email('Enter a valid email')
 const rememberMe = z.boolean()
 
 const loginSchema = z.object({ email, password: z.string().min(1, 'Required'), rememberMe })
-const signupSchema = z.object({ email, password: z.string().min(8, 'At least 8 characters'), rememberMe })
+const signupSchema = z.object({ email, password: newPasswordSchema, rememberMe })
 
 export function AuthPanel({ className, children }: { className?: string; children: ReactNode }) {
   return (
