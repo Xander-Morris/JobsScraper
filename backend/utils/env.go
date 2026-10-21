@@ -10,8 +10,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// getwd is a var so tests can make it fail.
+var getwd = os.Getwd
+
 func findEnvFile() string {
-	dir, err := os.Getwd()
+	dir, err := getwd()
 
 	if err != nil {
 		return ""

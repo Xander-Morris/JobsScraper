@@ -9,10 +9,7 @@ const PasswordResetTokenLifetime = time.Hour
 
 // CreatePasswordResetToken replaces the profile's outstanding reset token and sweeps expired ones.
 func CreatePasswordResetToken(ctx context.Context, profileID int64) (string, error) {
-	token, err := NewRefreshToken()
-	if err != nil {
-		return "", err
-	}
+	token := NewRefreshToken()
 
 	tx, err := db().BeginTx(ctx, nil)
 	if err != nil {

@@ -36,15 +36,8 @@ func capNewestJobs(fetched []jobs.Job, max int) []jobs.Job {
 		return fetched
 	}
 
-	slices.SortStableFunc(fetched, func(a, b jobs.Job) int {
-		if a.PostedAt.IsZero() != b.PostedAt.IsZero() {
-			if a.PostedAt.IsZero() {
-				return 1
-			}
-			return -1
-		}
-		return b.PostedAt.Compare(a.PostedAt)
-	})
+	// Newest first; the zero time is the earliest, so undated jobs land last.
+	slices.SortStableFunc(fetched, func(a, b jobs.Job) int { return b.PostedAt.Compare(a.PostedAt) })
 
 	return fetched[:max]
 }

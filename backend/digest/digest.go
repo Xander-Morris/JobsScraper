@@ -61,10 +61,13 @@ func sendForProfileSafely(ctx context.Context, profile database.DigestProfile) {
 		}
 	}()
 
-	if err := sendForProfile(ctx, profile); err != nil {
+	if err := sendDigest(ctx, profile); err != nil {
 		slog.Error("digest: profile", "profile_id", profile.ProfileID, "error", err)
 	}
 }
+
+// sendDigest is a var so tests can make one profile's send panic.
+var sendDigest = sendForProfile
 
 func sendForProfile(ctx context.Context, profile database.DigestProfile) error {
 	extraction, found, err := database.GetActiveResumeExtraction(ctx, profile.ProfileID)

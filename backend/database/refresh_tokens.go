@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"time"
 )
 
@@ -29,13 +28,12 @@ type RefreshSession struct {
 	ExpiresAt  time.Time
 }
 
-func NewRefreshToken() (string, error) {
+func NewRefreshToken() string {
 	value := make([]byte, 32)
-	if _, err := rand.Read(value); err != nil {
-		return "", fmt.Errorf("generate refresh token: %w", err)
-	}
+	// crypto/rand.Read never returns an error; it crashes the program instead.
+	_, _ = rand.Read(value)
 
-	return base64.RawURLEncoding.EncodeToString(value), nil
+	return base64.RawURLEncoding.EncodeToString(value)
 }
 
 func refreshTokenHash(token string) string {

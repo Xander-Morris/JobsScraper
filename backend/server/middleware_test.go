@@ -41,10 +41,7 @@ func TestWithAuthRejectsBadTokens(t *testing.T) {
 func TestWithAuthPassesProfileID(t *testing.T) {
 	t.Setenv("SECRET_KEY", "test-secret-key")
 
-	token, err := createToken(42)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
+	token := createToken(42)
 
 	var got int64
 	handler := withAuth(func(w http.ResponseWriter, r *http.Request, profileID int64) {

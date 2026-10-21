@@ -43,12 +43,10 @@ func GetTailoredResume(ctx context.Context, profileID, jobID int64) (TailoredRes
 }
 
 func UpsertTailoredResume(ctx context.Context, profileID, jobID, resumeID int64, sourceUpdatedAt time.Time, content llm.TailoredResume) error {
-	encoded, err := json.Marshal(content)
-	if err != nil {
-		return fmt.Errorf("encode tailored resume: %w", err)
-	}
+	// Marshal can't fail on this plain struct.
+	encoded, _ := json.Marshal(content)
 
-	_, err = db().ExecContext(ctx, `INSERT INTO profile_tailored_resumes (profile_id, job_id, resume_id, source_updated_at, content)
+	_, err := db().ExecContext(ctx, `INSERT INTO profile_tailored_resumes (profile_id, job_id, resume_id, source_updated_at, content)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (profile_id, job_id) DO UPDATE SET
 			resume_id = excluded.resume_id, source_updated_at = excluded.source_updated_at,
@@ -59,10 +57,7 @@ func UpsertTailoredResume(ctx context.Context, profileID, jobID, resumeID int64,
 }
 
 func UpdateTailoredResumeContent(ctx context.Context, profileID, jobID int64, content llm.TailoredResume) error {
-	encoded, err := json.Marshal(content)
-	if err != nil {
-		return fmt.Errorf("encode tailored resume: %w", err)
-	}
+	encoded, _ := json.Marshal(content)
 
 	result, err := db().ExecContext(ctx, `UPDATE profile_tailored_resumes SET content = $1, updated_at = NOW()
 		WHERE profile_id = $2 AND job_id = $3`, string(encoded), profileID, jobID)

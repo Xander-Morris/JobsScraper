@@ -9,16 +9,30 @@ import (
 	"main/database"
 )
 
-func main() {
-	coldstart.Ensure("DATABASE_CONNECTION")
+// Vars so tests can run main without exiting or touching a real database.
+var (
+	exit         = os.Exit
+	ensure       = coldstart.Ensure
+	createTables = database.CreateTables
+)
 
-	err := database.CreateTables()
+func main() {
+	exit(run())
+}
+
+func run() int {
+	if err := ensure("DATABASE_CONNECTION"); err != nil {
+		return 1
+	}
+
+	err := createTables()
 	database.CloseDb()
 
 	if err != nil {
 		slog.Error("migrate: apply migrations failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	slog.Info("migrate: up to date")
+	return 0
 }

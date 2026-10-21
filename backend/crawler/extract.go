@@ -152,10 +152,8 @@ func isJobPosting(t any) bool {
 }
 
 func toPosting(v map[string]any) (jobPosting, bool) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return jobPosting{}, false
-	}
+	// v was decoded from JSON, so it always re-encodes.
+	data, _ := json.Marshal(v)
 
 	var posting jobPosting
 

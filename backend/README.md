@@ -22,9 +22,9 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 You need Go 1.26+ and a Postgres database.
 
 1. Copy `.env.example` to `.env` and fill in `DATABASE_CONNECTION` (a Postgres connection string) and `SECRET_KEY` (any long random string, `openssl rand -base64 48` works fine)
-2. `go run .`
+2. `go run ./cmd/server`
 
-The server listens on `:8090` by default (override with `PORT`). `go run .` applies migrations on startup, so there's no separate step locally. The Vercel function skips them to keep cold starts fast; run `go run ./cmd/migrate` (or let CI's `migrate` job do it) before deploying a schema change there.
+The server listens on `:8090` by default (override with `PORT`). `go run ./cmd/server` applies migrations on startup, so there's no separate step locally. The Vercel function skips them to keep cold starts fast; run `go run ./cmd/migrate` (or let CI's `migrate` job do it) before deploying a schema change there.
 
 Resume extraction, cover letter generation, and trivia need `OPENROUTER_API_KEY` set (a free key from [openrouter.ai/keys](https://openrouter.ai/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
 
@@ -45,9 +45,23 @@ docker run -d --name crawler-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_D
 TEST_DATABASE_CONNECTION=postgresql://postgres:postgres@localhost:55432/crawlerandindexer_test go test -p 1 ./...
 ```
 
+### Coverage
+
+CI requires 100% statement coverage. Check it locally with:
+
+```bash
+go test -p 1 -coverpkg=./... -coverprofile=cover.out ./...
+grep -v "main/internal/" cover.out > cover.app.out
+go tool cover -func=cover.app.out | grep -v "100.0%"
+```
+
+`-coverpkg=./...` counts code a test reaches in another package, so the API tests count toward `database`. `internal/faultdb` is test-only tooling and is left out of the total. It wraps the Postgres driver so a test can fail, or corrupt the rows of, the Nth database call; `faultdb.Sweep` reruns a call failing each of its calls in turn and checks the error comes back. That's how the `if err != nil` branches a healthy database never takes get covered.
+
+The entrypoints (`cmd/server`, `cmd/cron`, `cmd/migrate`, `api`) keep `main` to one line and put the work in a `run` function that returns an exit code. Package-level vars (`exit`, `ensure`, ...) let tests stub out exiting and startup.
+
 No test calls a real outside service. OpenRouter, Jina and Resend are faked with local servers through `OPENROUTER_API_URL`, `JINA_API_URL` and `RESEND_API_URL`, and the signup email check is swapped for an offline one (`database.SetEmailVerifier`), so no DNS lookups either. The `server` tests drive the full HTTP handler (routing, auth, CORS) as well as calling handlers directly.
 
-CI runs `go vet`, `go build`, and `go test` against a throwaway Postgres service container, so you don't need Docker locally just to get a green check. It also runs `gofmt -w` and commits the result back to the branch (fork PRs just fail on unformatted files instead).
+CI runs `go vet`, `go build`, and `go test` with the coverage check against a throwaway Postgres service container, so you don't need Docker locally just to get a green check. It also runs `gofmt -w` and commits the result back to the branch (fork PRs just fail on unformatted files instead).
 
 ## Config
 

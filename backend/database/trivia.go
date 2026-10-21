@@ -37,13 +37,11 @@ type TriviaQuizSummary struct {
 }
 
 func CreateTriviaQuiz(ctx context.Context, profileID int64, source, topic, difficulty string, questions []llm.TriviaQuestion) (int64, error) {
-	encoded, err := json.Marshal(questions)
-	if err != nil {
-		return 0, fmt.Errorf("encode trivia questions: %w", err)
-	}
+	// Marshal can't fail on these plain types.
+	encoded, _ := json.Marshal(questions)
 
 	var id int64
-	err = db().QueryRowContext(ctx, `INSERT INTO trivia_quizzes (profile_id, source, topic, difficulty, questions)
+	err := db().QueryRowContext(ctx, `INSERT INTO trivia_quizzes (profile_id, source, topic, difficulty, questions)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 		profileID, source, topic, difficulty, string(encoded)).Scan(&id)
 
@@ -133,10 +131,7 @@ func SaveTriviaAnswers(ctx context.Context, profileID, id int64, answers []int) 
 		completedAt = &now
 	}
 
-	encoded, err := json.Marshal(answers)
-	if err != nil {
-		return fmt.Errorf("encode trivia answers: %w", err)
-	}
+	encoded, _ := json.Marshal(answers)
 
 	_, err = db().ExecContext(ctx, `UPDATE trivia_quizzes SET answers = $1, score = $2, completed_at = $3
 		WHERE id = $4 AND profile_id = $5`, string(encoded), score, completedAt, id, profileID)

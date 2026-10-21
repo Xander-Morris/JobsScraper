@@ -34,10 +34,7 @@ func TestPasswordResetFlow(t *testing.T) {
 		t.Fatalf("create profile: %v", err)
 	}
 
-	oldSession, err := database.NewRefreshToken()
-	if err != nil {
-		t.Fatalf("new refresh token: %v", err)
-	}
+	oldSession := database.NewRefreshToken()
 	if err := database.StoreRefreshToken(ctx, profileID, oldSession, time.Now().Add(time.Hour), true); err != nil {
 		t.Fatalf("store refresh token: %v", err)
 	}

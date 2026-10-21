@@ -93,3 +93,21 @@ func TestRequireEnv(t *testing.T) {
 		t.Errorf("error %q should name exactly the missing keys", msg)
 	}
 }
+
+func TestFindEnvFileNone(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if got := findEnvFile(); got != "" {
+		t.Skipf("a .env above the temp dir (%s) makes this untestable here", got)
+	}
+}
+
+func TestFindEnvFileNoWorkingDir(t *testing.T) {
+	prev := getwd
+	getwd = func() (string, error) { return "", os.ErrNotExist }
+	t.Cleanup(func() { getwd = prev })
+
+	if got := findEnvFile(); got != "" {
+		t.Errorf("findEnvFile() = %q, want empty", got)
+	}
+}

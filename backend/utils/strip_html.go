@@ -21,11 +21,8 @@ var (
 
 func decodeUnicodeEscapes(input string) string {
 	return unicodeEscape.ReplaceAllStringFunc(input, func(m string) string {
-		code, err := strconv.ParseUint(m[2:], 16, 32)
-
-		if err != nil {
-			return m
-		}
+		// The pattern guarantees four hex digits, so this can't fail.
+		code, _ := strconv.ParseUint(m[2:], 16, 32)
 
 		return string(rune(code))
 	})

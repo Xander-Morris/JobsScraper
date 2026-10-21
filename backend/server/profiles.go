@@ -14,19 +14,17 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func createToken(profileID int64) (string, error) {
+func createToken(profileID int64) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"profileID": profileID,
 			"exp":       time.Now().Add(15 * time.Minute).Unix(),
 		})
 
-	tokenString, err := token.SignedString([]byte(utils.Getenv("SECRET_KEY")))
-	if err != nil {
-		return "", err
-	}
+	// HMAC signing with a []byte key can't fail.
+	tokenString, _ := token.SignedString([]byte(utils.Getenv("SECRET_KEY")))
 
-	return tokenString, nil
+	return tokenString
 }
 
 const refreshCookieName = "profile_refresh"
@@ -66,15 +64,8 @@ func clearRefreshCookie(w http.ResponseWriter) {
 }
 
 func createSession(ctx context.Context, w http.ResponseWriter, profileID int64, persistent bool) (string, error) {
-	accessToken, err := createToken(profileID)
-	if err != nil {
-		return "", err
-	}
-
-	refreshToken, err := database.NewRefreshToken()
-	if err != nil {
-		return "", err
-	}
+	accessToken := createToken(profileID)
+	refreshToken := database.NewRefreshToken()
 
 	expiresAt := database.RefreshTokenExpiry(persistent)
 	if err := database.StoreRefreshToken(ctx, profileID, refreshToken, expiresAt, persistent); err != nil {
@@ -156,12 +147,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newRefreshToken, err := database.NewRefreshToken()
-	if err != nil {
-		slog.Error("generate refresh token", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not refresh session")
-		return
-	}
+	newRefreshToken := database.NewRefreshToken()
 
 	session, err := database.RotateRefreshToken(r.Context(), cookie.Value, newRefreshToken)
 	if err != nil {
@@ -191,12 +177,7 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := createToken(profileID)
-	if err != nil {
-		slog.Error("refresh profile: create token", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not refresh session")
-		return
-	}
+	accessToken := createToken(profileID)
 
 	setRefreshCookie(w, newRefreshToken, session.ExpiresAt, session.Persistent)
 	writeJSON(w, http.StatusOK, map[string]string{"token": accessToken})

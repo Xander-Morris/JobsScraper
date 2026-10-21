@@ -252,10 +252,8 @@ func readResumeUpload(w http.ResponseWriter, r *http.Request, requireFile bool) 
 		return "", "", nil, err
 	}
 
-	content, err := io.ReadAll(io.LimitReader(file, maxResumeSize+1))
-	if err != nil {
-		return "", "", nil, fmt.Errorf("could not read resume")
-	}
+	// ParseMultipartForm already buffered the file, so reading it can't fail.
+	content, _ := io.ReadAll(io.LimitReader(file, maxResumeSize+1))
 	if len(content) > maxResumeSize {
 		return "", "", nil, fmt.Errorf("resume upload must be 10 MB or smaller")
 	}

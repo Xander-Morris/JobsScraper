@@ -114,9 +114,21 @@ jobs:
 
       - run: go vet ./...
       - run: go build ./...
-      - run: go test -p 1 ./...
+      # -coverpkg counts code a test reaches in other packages, e.g. server tests running database code.
+      - run: go test -p 1 -coverpkg=./... -coverprofile=cover.out ./...
         env:
           TEST_DATABASE_CONNECTION: postgresql://postgres:postgres@localhost:5432/crawlerandindexer_test
+
+      # internal/ is test-only tooling, so it doesn't count.
+      - name: Require 100% coverage
+        run: |
+          grep -v "main/internal/" cover.out > cover.app.out
+          total=$(go tool cover -func=cover.app.out | tail -1 | awk '{print $3}')
+          echo "coverage: $total"
+          if [ "$total" != "100.0%" ]; then
+            go tool cover -func=cover.app.out | grep -v "100.0%"
+            exit 1
+          fi
 
   # The Vercel function no longer migrates on cold start. Vercel deploys on its
   # own schedule, so migrations must stay compatible with the previous deploy.
@@ -154,5 +166,16 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
-      - run: npm test
+
+      - name: Tests live under src/test
+        run: |
+          stray=$(find src -name '*.test.*' -not -path 'src/test/*')
+          if [ -n "$stray" ]; then
+            echo "Move these under src/test/:"
+            echo "$stray"
+            exit 1
+          fi
+
+      # Thresholds in vitest.config.ts fail this below 100%.
+      - run: npm run coverage
       - run: npm run build

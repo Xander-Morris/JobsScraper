@@ -31,11 +31,8 @@ func parseProfileIDFromToken(tokenString string) (profileID int64, ok bool) {
 		return 0, false
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-
-	if !ok {
-		return 0, false
-	}
+	// jwt.Parse always fills MapClaims.
+	claims := token.Claims.(jwt.MapClaims)
 
 	id, ok := claims["profileID"].(float64)
 

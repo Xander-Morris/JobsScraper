@@ -129,3 +129,12 @@ func TestSendEmailUnreachable(t *testing.T) {
 		t.Fatal("SendEmail() = nil, want error")
 	}
 }
+
+func TestSendEmailBadURL(t *testing.T) {
+	t.Setenv("RESEND_API_KEY", "re_test")
+	t.Setenv("RESEND_API_URL", "://bad")
+
+	if err := SendEmail(t.Context(), "a@b.co", "s", "b"); err == nil {
+		t.Error("want error for an unparseable API URL")
+	}
+}

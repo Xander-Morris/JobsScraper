@@ -88,7 +88,7 @@ func TestLimitAuthAndLLMUseTheirLimiters(t *testing.T) {
 
 func TestWithOptionalAuth(t *testing.T) {
 	t.Setenv("SECRET_KEY", "optional-auth")
-	token, _ := createToken(5)
+	token := createToken(5)
 
 	tests := map[string]struct {
 		header string

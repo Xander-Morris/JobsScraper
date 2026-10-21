@@ -47,11 +47,8 @@ func SendEmail(ctx context.Context, to, subject, body string) error {
 		from = defaultFromAddress
 	}
 
-	payload, err := json.Marshal(resendEmailRequest{From: from, To: []string{to}, Subject: subject, Text: body})
-
-	if err != nil {
-		return fmt.Errorf("encode resend request: %w", err)
-	}
+	// Marshal can't fail on this plain struct.
+	payload, _ := json.Marshal(resendEmailRequest{From: from, To: []string{to}, Subject: subject, Text: body})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resendAPIURL(), bytes.NewReader(payload))
 

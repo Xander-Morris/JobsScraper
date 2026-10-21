@@ -73,21 +73,16 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 // Compared against on a lookup miss so login timing doesn't leak whether an email exists.
-var DummyPasswordHash = mustHashPassword("this is not anybody's real password")
-
-func mustHashPassword(password string) string {
-	hash, err := HashPassword(password)
-
-	if err != nil {
-		panic(fmt.Errorf("hash dummy password: %w", err))
-	}
-
-	return hash
-}
+// HashPassword only fails past bcrypt's 72-byte limit, which this is well under.
+var DummyPasswordHash, _ = HashPassword("this is not anybody's real password")
 
 var errEmailVerificationTimeout = errors.New("email verification timed out")
 
-const emailVerificationTimeout = 8 * time.Second
+// Vars so tests can stub the lookup and shorten the wait.
+var (
+	emailVerificationTimeout = 8 * time.Second
+	verifyAddress            = verifier.Verify
+)
 
 func verifyEmail(email string) (*emailverifier.Result, error) {
 	type outcome struct {
@@ -98,7 +93,7 @@ func verifyEmail(email string) (*emailverifier.Result, error) {
 	done := make(chan outcome, 1)
 
 	go func() {
-		result, err := verifier.Verify(email)
+		result, err := verifyAddress(email)
 		done <- outcome{result, err}
 	}()
 

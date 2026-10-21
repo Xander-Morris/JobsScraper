@@ -17,14 +17,18 @@ type visitor struct {
 }
 
 type ipLimiter struct {
-	mu       sync.Mutex
-	visitors map[string]*visitor
-	rate     rate.Limit
-	burst    int
+	mu           sync.Mutex
+	visitors     map[string]*visitor
+	rate         rate.Limit
+	burst        int
+	cleanupEvery time.Duration
 }
 
+// limiterCleanupInterval is a var so tests can watch a sweep happen.
+var limiterCleanupInterval = time.Minute
+
 func newIPLimiter(r rate.Limit, burst int) *ipLimiter {
-	l := &ipLimiter{visitors: make(map[string]*visitor), rate: r, burst: burst}
+	l := &ipLimiter{visitors: make(map[string]*visitor), rate: r, burst: burst, cleanupEvery: limiterCleanupInterval}
 	go l.cleanupLoop()
 
 	return l
@@ -48,7 +52,7 @@ func (l *ipLimiter) allow(ip string) bool {
 
 func (l *ipLimiter) cleanupLoop() {
 	for {
-		time.Sleep(time.Minute)
+		time.Sleep(l.cleanupEvery)
 
 		l.mu.Lock()
 		for ip, v := range l.visitors {

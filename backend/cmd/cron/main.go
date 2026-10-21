@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,27 +16,44 @@ import (
 	"main/scraper"
 )
 
-func main() {
-	job := flag.String("job", "", "scrape or digest")
-	flag.Parse()
-
-	jobs := map[string]func(context.Context){
+// Vars so tests can run main without exiting or running a real job.
+var (
+	exit   = os.Exit
+	ensure = coldstart.Ensure
+	jobs   = map[string]func(context.Context){
 		"scrape": scraper.RunScrapeCycle,
 		"digest": digest.RunCycle,
 	}
+)
 
-	run, ok := jobs[*job]
-	if !ok {
-		fmt.Fprintln(os.Stderr, "usage: cron -job=scrape|digest")
-		os.Exit(2)
-	}
-
-	coldstart.Ensure("DATABASE_CONNECTION", "SECRET_KEY")
-	defer database.CloseDb()
-
+func main() {
 	// A cancelled workflow sends SIGTERM; stop the run instead of being killed mid-write.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	code := run(ctx, os.Args[1:], os.Stderr)
+	stop()
+	exit(code)
+}
 
-	run(ctx)
+func run(ctx context.Context, args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("cron", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	job := flags.String("job", "", "scrape or digest")
+
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+
+	runJob, ok := jobs[*job]
+	if !ok {
+		fmt.Fprintln(stderr, "usage: cron -job=scrape|digest")
+		return 2
+	}
+
+	if err := ensure("DATABASE_CONNECTION", "SECRET_KEY"); err != nil {
+		return 1
+	}
+	defer database.CloseDb()
+
+	runJob(ctx)
+	return 0
 }

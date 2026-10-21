@@ -46,12 +46,9 @@ func TestRefreshTokenExpiry(t *testing.T) {
 }
 
 func TestNewRefreshTokenUnique(t *testing.T) {
-	a, err := NewRefreshToken()
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := NewRefreshToken()
 
-	b, _ := NewRefreshToken()
+	b := NewRefreshToken()
 
 	if a == b || len(a) < 40 {
 		t.Errorf("tokens %q / %q should be long and distinct", a, b)
@@ -123,12 +120,12 @@ func TestRefreshTokenRotation(t *testing.T) {
 	id := newTestProfile(t)
 
 	for _, persistent := range []bool{true, false} {
-		old, _ := NewRefreshToken()
+		old := NewRefreshToken()
 		if err := StoreRefreshToken(ctx, id, old, RefreshTokenExpiry(persistent), persistent); err != nil {
 			t.Fatalf("StoreRefreshToken: %v", err)
 		}
 
-		next, _ := NewRefreshToken()
+		next := NewRefreshToken()
 		session, err := RotateRefreshToken(ctx, old, next)
 		if err != nil {
 			t.Fatalf("RotateRefreshToken: %v", err)
@@ -144,7 +141,7 @@ func TestRefreshTokenRotation(t *testing.T) {
 		}
 
 		// The new one works once.
-		final, _ := NewRefreshToken()
+		final := NewRefreshToken()
 		if _, err := RotateRefreshToken(ctx, next, final); err != nil {
 			t.Errorf("rotating new token: %v", err)
 		}
@@ -156,7 +153,7 @@ func TestRotateExpiredRefreshToken(t *testing.T) {
 	ctx := t.Context()
 	id := newTestProfile(t)
 
-	token, _ := NewRefreshToken()
+	token := NewRefreshToken()
 	if err := StoreRefreshToken(ctx, id, token, time.Now().Add(-time.Minute), true); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +172,7 @@ func TestDeleteRefreshToken(t *testing.T) {
 	ctx := t.Context()
 	id := newTestProfile(t)
 
-	token, _ := NewRefreshToken()
+	token := NewRefreshToken()
 	if err := StoreRefreshToken(ctx, id, token, RefreshTokenExpiry(true), true); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +195,7 @@ func TestResetPassword(t *testing.T) {
 	ctx := t.Context()
 	id := newTestProfile(t)
 
-	session, _ := NewRefreshToken()
+	session := NewRefreshToken()
 	if err := StoreRefreshToken(ctx, id, session, RefreshTokenExpiry(true), true); err != nil {
 		t.Fatal(err)
 	}

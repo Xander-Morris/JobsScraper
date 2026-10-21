@@ -9,6 +9,11 @@ func TestStripHTML(t *testing.T) {
 		want  string
 	}{
 		{
+			name:  "unicode escapes are decoded",
+			input: `caf\u00e9 \u0026 more`,
+			want:  "café & more",
+		},
+		{
 			name:  "paragraphs become a blank line apart",
 			input: "<p>Company Overview:</p><p>We build things.</p>",
 			want:  "Company Overview:\n\nWe build things.",

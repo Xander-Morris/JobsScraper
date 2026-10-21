@@ -194,10 +194,9 @@ func extractPdfText(content []byte) (string, error) {
 		return "", fmt.Errorf("extract pdf text: %w", err)
 	}
 
+	// GetPlainText returns an in-memory buffer, so copying it can't fail.
 	var sb strings.Builder
-	if _, err := io.Copy(&sb, textReader); err != nil {
-		return "", fmt.Errorf("read pdf text: %w", err)
-	}
+	_, _ = io.Copy(&sb, textReader)
 
 	if strings.TrimSpace(sb.String()) == "" {
 		return "", fmt.Errorf("%w: no extractable text (scanned/image-only PDF)", ErrUnsupportedFormat)

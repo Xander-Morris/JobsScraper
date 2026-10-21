@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"log/slog"
 	"main/utils"
 	"sync"
@@ -26,11 +25,7 @@ func Connect(ctx context.Context) error {
 		return nil
 	}
 
-	pool, err := openPool()
-
-	if err != nil {
-		return err
-	}
+	pool := openPool()
 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -54,45 +49,23 @@ func db() *sql.DB {
 	defer mu.Unlock()
 
 	if cachedDb == nil {
-		pool, err := openPool()
-
-		if err != nil {
-			// Only an unparseable connection string reaches this. Hand back a
-			// pool that fails every query with that error rather than a nil
-			// one that panics on first use.
-			slog.Error("open database pool", "error", err)
-			pool = sql.OpenDB(failingConnector{err: err})
-		}
-
-		cachedDb = pool
+		cachedDb = openPool()
 	}
 
 	return cachedDb
 }
 
-func openPool() (*sql.DB, error) {
-	pool, err := sql.Open("pgx", utils.Getenv("DATABASE_CONNECTION"))
-
-	if err != nil {
-		return nil, err
-	}
+func openPool() *sql.DB {
+	// sql.Open only fails for an unregistered driver, and pgx registers on import;
+	// a bad connection string surfaces on first use instead.
+	pool, _ := sql.Open("pgx", utils.Getenv("DATABASE_CONNECTION"))
 
 	pool.SetMaxOpenConns(5)
 	pool.SetMaxIdleConns(5)
 	pool.SetConnMaxLifetime(5 * time.Minute)
 
-	return pool, nil
+	return pool
 }
-
-// failingConnector backs a pool whose every query reports why the real one
-// could not be opened.
-type failingConnector struct {
-	err error
-}
-
-func (c failingConnector) Connect(context.Context) (driver.Conn, error) { return nil, c.err }
-
-func (c failingConnector) Driver() driver.Driver { return nil }
 
 // DB exposes the shared pool for tests in other packages that set up rows
 // directly. Production code goes through this package's own functions.

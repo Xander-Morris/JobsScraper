@@ -361,12 +361,12 @@ type rowScanner interface {
 func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 	var job jobs.Job
 	var salaryMin, salaryMax, matchPercent sql.NullInt64
-	var postedAtRaw any
+	var postedAt sql.NullTime
 	var matchScore sql.NullFloat64
 	var tags []byte
 
 	dest := []any{&job.ID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAtRaw, &job.URL, &matchScore, &matchPercent, &tags, &job.Applied}
+		&salaryMin, &salaryMax, &postedAt, &job.URL, &matchScore, &matchPercent, &tags, &job.Applied}
 
 	if withDescription {
 		dest = append(dest, &job.Description)
@@ -400,17 +400,8 @@ func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 		job.MatchPercent = &percent
 	}
 
-	switch v := postedAtRaw.(type) {
-	case time.Time:
-		job.PostedAt = v
-	case string:
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			job.PostedAt = t
-		}
-	case []byte:
-		if t, err := time.Parse(time.RFC3339, string(v)); err == nil {
-			job.PostedAt = t
-		}
+	if postedAt.Valid {
+		job.PostedAt = postedAt.Time
 	}
 
 	return job, nil

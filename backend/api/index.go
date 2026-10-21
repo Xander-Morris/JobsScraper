@@ -14,8 +14,14 @@ import (
 var once sync.Once
 var httpHandler http.Handler
 
+// ensure is a var so tests can fail startup.
+var ensure = coldstart.Ensure
+
 func Handler(w http.ResponseWriter, r *http.Request) {
-	coldstart.Ensure("DATABASE_CONNECTION", "SECRET_KEY")
+	if err := ensure("DATABASE_CONNECTION", "SECRET_KEY"); err != nil {
+		http.Error(w, `{"error":"server is misconfigured"}`, http.StatusInternalServerError)
+		return
+	}
 
 	once.Do(func() { httpHandler = server.Handler() })
 

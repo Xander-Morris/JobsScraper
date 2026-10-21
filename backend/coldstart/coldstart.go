@@ -4,6 +4,7 @@ package coldstart
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -12,24 +13,33 @@ import (
 	"main/utils"
 )
 
-var once sync.Once
+var (
+	once      sync.Once
+	ensureErr error
+)
 
-// Ensure runs startup once per process, or per warm container on serverless.
-// requiredEnv names the variables that entrypoint cannot run without. Failures
-// are fatal here rather than deeper down, so misconfiguration surfaces at
-// startup instead of as a mystery error on the first request.
-func Ensure(requiredEnv ...string) {
+// Ensure runs startup once per process, or per warm container on serverless,
+// and returns the same result on every later call. requiredEnv names the
+// variables that entrypoint cannot run without. Callers treat an error as
+// fatal, so misconfiguration surfaces at startup instead of as a mystery error
+// on the first request.
+func Ensure(requiredEnv ...string) error {
 	once.Do(func() {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 		if err := utils.RequireEnv(requiredEnv...); err != nil {
-			slog.Error("startup: env validation failed", "error", err)
-			os.Exit(1)
+			ensureErr = fmt.Errorf("env validation failed: %w", err)
+			return
 		}
 
 		if err := database.Connect(context.Background()); err != nil {
-			slog.Error("startup: database connection failed", "error", err)
-			os.Exit(1)
+			ensureErr = fmt.Errorf("database connection failed: %w", err)
 		}
 	})
+
+	if ensureErr != nil {
+		slog.Error("startup failed", "error", ensureErr)
+	}
+
+	return ensureErr
 }

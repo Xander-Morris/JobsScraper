@@ -72,7 +72,7 @@ func TestAPIRejectsMissingAndBadTokens(t *testing.T) {
 
 	// A token signed with another key is rejected.
 	t.Setenv("SECRET_KEY", "other-secret")
-	forged, _ := createToken(1)
+	forged := createToken(1)
 	t.Setenv("SECRET_KEY", "api-test-secret")
 
 	req, _ := http.NewRequest("GET", a.srv.URL+"/api/profile", nil)
@@ -192,10 +192,7 @@ func TestSetRefreshCookiePersistence(t *testing.T) {
 func TestCreateTokenRoundTrip(t *testing.T) {
 	t.Setenv("SECRET_KEY", "round-trip")
 
-	token, err := createToken(77)
-	if err != nil {
-		t.Fatal(err)
-	}
+	token := createToken(77)
 
 	if id, ok := parseProfileIDFromToken(token); !ok || id != 77 {
 		t.Errorf("parse = %d, %v", id, ok)

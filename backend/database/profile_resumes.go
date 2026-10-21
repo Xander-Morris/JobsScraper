@@ -171,27 +171,13 @@ func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
 }
 
 func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) error {
-	skills, err := json.Marshal(extracted.Skills)
-	if err != nil {
-		return fmt.Errorf("encode skills: %w", err)
-	}
+	// Marshal can't fail on these plain types.
+	skills, _ := json.Marshal(extracted.Skills)
+	education, _ := json.Marshal(extracted.Education)
+	workExperience, _ := json.Marshal(extracted.WorkExperience)
+	projects, _ := json.Marshal(extracted.Projects)
 
-	education, err := json.Marshal(extracted.Education)
-	if err != nil {
-		return fmt.Errorf("encode education: %w", err)
-	}
-
-	workExperience, err := json.Marshal(extracted.WorkExperience)
-	if err != nil {
-		return fmt.Errorf("encode work experience: %w", err)
-	}
-
-	projects, err := json.Marshal(extracted.Projects)
-	if err != nil {
-		return fmt.Errorf("encode projects: %w", err)
-	}
-
-	_, err = db().ExecContext(ctx, `INSERT INTO profile_resume_extractions
+	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions
 			(resume_id, status, full_name, email, phone, linked_in, github, portfolio, summary, skills, education, work_experience, projects, error)
 		VALUES ($1, 'completed', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL)
 		ON CONFLICT (resume_id) DO UPDATE SET

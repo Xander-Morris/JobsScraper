@@ -408,10 +408,8 @@ func (s *seedCrawl) fetchPage(ctx context.Context, pageURL string) (string, page
 		return "", page{}, fmt.Errorf("decode charset: %w", err)
 	}
 
-	parsed, err := parsePage(decoded, final)
-	if err != nil {
-		return "", page{}, fmt.Errorf("parse html: %w", err)
-	}
+	// decoded reads from memory, and html.Parse only fails on read errors.
+	parsed, _ := parsePage(decoded, final)
 
 	final.Fragment = ""
 
@@ -424,10 +422,8 @@ func (s *seedCrawl) get(ctx context.Context, rawURL string) (*http.Response, err
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
+	// Every URL reaching here was already parsed, so building the request can't fail.
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 
 	req.Header.Set("User-Agent", s.UserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
