@@ -37,7 +37,7 @@ npm run format:check   # prettier --check
 npm run preview         # serve the production build locally
 npm test                # vitest, run once
 npm run test:watch      # vitest in watch mode
-npm run coverage        # vitest with a v8 coverage report in coverage/
+npm run coverage        # vitest with a v8 coverage report in coverage/, fails below 100%
 ```
 
 ## Tests
@@ -52,7 +52,11 @@ Vitest with jsdom, React Testing Library and MSW. All tests live under `src/test
 
 `src/test/routes/routes.test.tsx` mounts the real route tree for page-level flows. `VITE_API_URL` is pinned in `vitest.config.ts`, so a local `.env` can't send test traffic to a real backend.
 
-CI runs `test`, `lint` and `build` on every push and PR. On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead.
+Coverage must stay at 100% statements, branches, functions and lines (thresholds in `vitest.config.ts`; `src/components/ui/`, `src/main.tsx` and the generated route tree are excluded). Under Vitest the router plugin skips its HMR wrappers, which would otherwise show up as uncovered branches in every route file. `src/test/gate.ts` holds an MSW handler open so tests can check pending states.
+
+CI runs `coverage`, `lint` and `build` on every push and PR, and fails if any `*.test.*` file sits outside `src/test/`.
+
+On pushes and same-repo PRs it first runs `lint:fix` and `format`, commits any changes back to the branch as `style: auto-format [skip ci]`, then fails if lint errors remain. Fork PRs can't be pushed to, so they get `format:check` and `lint` instead.
 
 On Windows with `core.autocrlf=true`, `format:check` flags every file locally because of CRLF line endings. That's harmless, git stores LF and CI checks LF.
 
