@@ -34,7 +34,7 @@ export default function SegmentedControl<T extends string | number>({
             aria-pressed={option.value === value}
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
-            className={option.value === value ? 'border-accent-border text-primary' : undefined}
+            className={option.value === value ? 'border-accent-border text-brand' : undefined}
           >
             {option.label}
           </Button>

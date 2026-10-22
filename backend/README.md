@@ -69,7 +69,7 @@ Full list with comments is in `.env.example`. The short version:
 
 | Var | Required | Notes |
 |---|---|---|
-| `DATABASE_CONNECTION` | yes | Postgres connection string |
+| `DATABASE_CONNECTION` | yes | Postgres connection string; on Vercel + Supabase, use the transaction pooler (6543) with `?default_query_exec_mode=simple_protocol` |
 | `SECRET_KEY` | yes | JWT signing key |
 | `ALLOWED_ORIGIN` | recommended | CORS origin and base URL for password reset links, defaults to `localhost:5173` which is wrong for any real deploy |
 | `COOKIE_SECURE` | recommended | set `true` once you're on HTTPS |
@@ -79,7 +79,7 @@ Full list with comments is in `.env.example`. The short version:
 | `PUBLIC_BACKEND_URL` | optional | needed for unsubscribe links in digest emails to actually work |
 | `TEST_DATABASE_CONNECTION` | dev only | separate DB for `go test` |
 | `OPENROUTER_API_KEY` | recommended | resume extraction/generation fail without it |
-| `OPENROUTER_MODEL` | optional | defaults to `nvidia/nemotron-3-super-120b-a12b:free`; must be a `:free` model to stay free, and reasoning is sent disabled |
+| `OPENROUTER_MODEL` | optional | comma-separated fallback list, up to 3, tried in order; defaults to `dots-studio/dots-3-note-preview:free,nvidia/nemotron-3-ultra-550b-a55b:free,xingchen-agi/xing4.0-29b-a4b:free`. Use `:free` models to stay free; reasoning is sent disabled, so models that require it won't work |
 | `JINA_API_KEY` | recommended | embeddings fail without it (search/digest fall back to keyword matching) |
 | `JINA_EMBED_MODEL` | optional | defaults to `jina-embeddings-v2-base-en`; must stay 768-dim to match the `vector(768)` columns |
 

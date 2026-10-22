@@ -40,7 +40,7 @@ function ResetPasswordPage() {
         <p role="alert" className="text-sm text-muted-foreground">
           This reset link is incomplete. Request a new one from the log in page.
         </p>
-        <Link to="/profile" className="mt-4 inline-block text-sm text-primary hover:underline">
+        <Link to="/profile" className="mt-4 inline-block text-sm text-brand hover:underline">
           Go to log in
         </Link>
       </AuthPanel>

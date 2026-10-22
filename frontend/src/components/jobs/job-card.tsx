@@ -29,7 +29,7 @@ export function JobCard({ job }: { job: JobListItem }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h3 className="text-[15px] leading-snug font-medium text-heading transition-colors group-hover:text-primary">
+              <h3 className="text-[15px] leading-snug font-medium text-heading transition-colors group-hover:text-brand">
                 {job.title}
               </h3>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">

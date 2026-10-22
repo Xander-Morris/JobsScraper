@@ -104,14 +104,6 @@ func TestGetProfileByEmailAndExists(t *testing.T) {
 	if _, _, err := GetProfileByEmail(ctx, "missing@example.com"); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("GetProfileByEmail(missing) = %v, want sql.ErrNoRows", err)
 	}
-
-	if ok, err := ProfileExists(ctx, id); err != nil || !ok {
-		t.Errorf("ProfileExists(%d) = %v, %v", id, ok, err)
-	}
-
-	if ok, err := ProfileExists(ctx, id+100); err != nil || ok {
-		t.Errorf("ProfileExists(missing) = %v, %v", ok, err)
-	}
 }
 
 func TestRefreshTokenRotation(t *testing.T) {

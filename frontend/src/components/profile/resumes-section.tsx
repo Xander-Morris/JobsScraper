@@ -284,7 +284,7 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
           {data.linked_in && (
             <p>
               <span className="text-muted-foreground">LinkedIn:</span>{' '}
-              <a href={data.linked_in} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href={data.linked_in} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                 {data.linked_in}
               </a>
             </p>
@@ -292,7 +292,7 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
           {data.github && (
             <p>
               <span className="text-muted-foreground">GitHub:</span>{' '}
-              <a href={data.github} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href={data.github} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                 {data.github}
               </a>
             </p>
@@ -300,7 +300,7 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
           {data.portfolio && (
             <p>
               <span className="text-muted-foreground">Portfolio:</span>{' '}
-              <a href={data.portfolio} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href={data.portfolio} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                 {data.portfolio}
               </a>
             </p>
@@ -369,12 +369,7 @@ function ResumeExtractionPanel({ resumeId, profile }: { resumeId: number; profil
           {projects.map((entry, i) => (
             <div key={i} className="rounded-lg border border-border p-2">
               {entry.url ? (
-                <a
-                  href={entry.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-primary hover:underline"
-                >
+                <a href={entry.url} target="_blank" rel="noreferrer" className="font-medium text-brand hover:underline">
                   {entry.name}
                 </a>
               ) : (

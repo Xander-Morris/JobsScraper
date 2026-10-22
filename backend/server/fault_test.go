@@ -243,23 +243,14 @@ func latestResume(t *testing.T, profileID int64) int64 {
 	return id
 }
 
-func TestRefreshWhenProfileVanishesMidRequest(t *testing.T) {
-	a, inj := faultAPI(t)
-	a.signup("fault-vanish@example.com")
+func TestRefreshAfterProfileDeleted(t *testing.T) {
+	a := newAPI(t).signup("vanish@example.com")
 	id := a.profile().ID
 
-	// Delete the profile after the token rotates but before the existence check.
-	inj.Before("SELECT EXISTS(SELECT 1 FROM profiles", func() {
-		if _, err := database.DB().Exec("DELETE FROM profiles WHERE id = $1", id); err != nil {
-			t.Error(err)
-		}
-	})
-
-	// Cleaning up the orphaned token fails too; the answer is the same.
-	lift := inj.Only("DELETE FROM profile_refresh_tokens WHERE token_hash = $1")
-	defer lift()
-	inj.Arm(1, faultdb.Fail)
-	defer inj.Disarm()
+	// Its refresh tokens cascade-delete with it.
+	if _, err := database.DB().Exec("DELETE FROM profiles WHERE id = $1", id); err != nil {
+		t.Fatal(err)
+	}
 
 	a.must(http.StatusUnauthorized, "POST", "/api/profile/refresh", nil, nil)
 }

@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
@@ -108,30 +107,19 @@ const jobTagsColumn = `COALESCE((SELECT json_agg(t.tag ORDER BY jt.tag_id) FROM 
 	JOIN tags t ON t.id = jt.tag_id WHERE jt.job_id = j.id), '[]')`
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	from, whereArgs := buildJobSearchFromWhere(params)
-	query, args := buildJobSearchSelect(params, from, whereArgs)
+	where, whereArgs := buildJobSearchWhere(params)
+	query, args := buildJobSearchSelect(params, where, whereArgs)
 
-	// Page and total don't depend on each other, so run them over separate connections.
-	var results []jobs.Job
-	var total int
-	var pageErr, countErr error
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		results, pageErr = queryJobs(ctx, query, args)
-	})
-
-	wg.Go(func() {
-		total, countErr = countJobSearchResults(ctx, from, whereArgs)
-	})
-
-	wg.Wait()
-
-	if pageErr != nil {
-		return nil, fmt.Errorf("search jobs: %w", pageErr)
+	results, total, err := queryJobPage(ctx, query, args)
+	if err != nil {
+		return nil, fmt.Errorf("search jobs: %w", err)
 	}
-	if countErr != nil {
-		return nil, fmt.Errorf("count jobs: %w", countErr)
+
+	// Past the last page no row carries the total, so count it separately.
+	if len(results) == 0 && params.Offset > 0 {
+		if total, err = countJobSearchResults(ctx, where, whereArgs); err != nil {
+			return nil, fmt.Errorf("count jobs: %w", err)
+		}
 	}
 
 	return &SearchResult{Jobs: results, Total: total}, nil
@@ -141,11 +129,19 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	args := []any{id}
 	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
 	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
-	percentJoin, percentColumn := matchPercentJoin(&args, resumeScore)
+	percentColumn := "NULL::int"
+	with := ""
+
+	if resumeScore != "" {
+		args = append(args, time.Now().Add(-JobMaxAge))
+		with = scoredCTEs(resumeScore, len(args))
+		percentColumn = "(SELECT floor(r.pct * 100)::int FROM ranked r WHERE r.id = j.id)"
+	}
+
 	appliedColumn := appliedExpr(&args, params.ProfileID)
 
-	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, %s, COALESCE(j.description, '')
-		FROM jobs j %s WHERE j.id = $1`, jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn, percentJoin)
+	query := fmt.Sprintf(`%sSELECT %s, %s AS match_score, %s, %s, %s, COALESCE(j.description, '')
+		FROM jobs j WHERE j.id = $1`, with, jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn)
 
 	job, err := scanJob(db().QueryRowContext(ctx, query, args...), true)
 
@@ -156,41 +152,42 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	return &job, nil
 }
 
-func queryJobs(ctx context.Context, query string, args []any) ([]jobs.Job, error) {
+// queryJobPage scans a search page whose rows each end with the pre-LIMIT total.
+func queryJobPage(ctx context.Context, query string, args []any) ([]jobs.Job, int, error) {
 	rows, err := db().QueryContext(ctx, query, args...)
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	defer rows.Close()
 
 	var results []jobs.Job
+	var total int
 
 	for rows.Next() {
-		job, err := scanJob(rows, false)
+		job, err := scanJob(rows, false, &total)
 
 		if err != nil {
-			return nil, fmt.Errorf("scan job row: %w", err)
+			return nil, 0, fmt.Errorf("scan job row: %w", err)
 		}
 
 		results = append(results, job)
 	}
 
-	return results, rows.Err()
+	return results, total, rows.Err()
 }
 
-func countJobSearchResults(ctx context.Context, from string, args []any) (int, error) {
+func countJobSearchResults(ctx context.Context, where string, args []any) (int, error) {
 	var total int
 
-	query := "SELECT COUNT(*) " + from
-	err := db().QueryRowContext(ctx, query, args...).Scan(&total)
+	err := db().QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs j"+where, args...).Scan(&total)
 
 	return total, err
 }
 
-func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
-	from := "FROM jobs j"
+// buildJobSearchWhere returns " WHERE ..." with the age cutoff always first, as $1.
+func buildJobSearchWhere(params *JobSearchParams) (string, []any) {
 	var conditions []string
 	var args []any
 
@@ -254,16 +251,12 @@ func buildJobSearchFromWhere(params *JobSearchParams) (string, []any) {
 		))
 	}
 
-	if len(conditions) > 0 {
-		from += " WHERE " + strings.Join(conditions, " AND ")
-	}
-
-	return from, args
+	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
-// buildJobSearchSelect sorts and pages over (id, sort_key) only, then fetches display
-// columns, score, tags and applied for just the rows on the page.
-func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any) (string, []any) {
+// buildJobSearchSelect sorts and pages over (id, sort_key, score) only, then fetches display
+// columns, percent, tags and applied for just the rows on the page.
+func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any) (string, []any) {
 	args := slices.Clone(whereArgs)
 
 	rankable := params.Sort != SortDate
@@ -273,6 +266,17 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
 	hasResumeScore := resumeScore != ""
 
+	with, scoredJoin, score, percentJoin, percentColumn := "", "", "NULL::real", "", "NULL::int"
+
+	if hasResumeScore {
+		// $1 is the age cutoff, so scored covers exactly the jobs search can list.
+		with = scoredCTEs(resumeScore, 1)
+		scoredJoin = " JOIN scored s ON s.id = j.id"
+		score = "s.score"
+		percentJoin = " LEFT JOIN ranked r ON r.id = page.id"
+		percentColumn = "floor(r.pct * 100)::int"
+	}
+
 	var sortKey string
 
 	switch {
@@ -280,13 +284,13 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 		// Typed search stays primary; resume score just nudges ties toward a
 		// good skill match, doesn't override an explicit query.
 		args = append(args, params.SearchQuery)
-		sortKey = fmt.Sprintf("ts_rank(j.search_vector, plainto_tsquery('english', $%d)) + 0.5 * coalesce(%s, 0)", len(args), resumeScore)
+		sortKey = fmt.Sprintf("ts_rank(j.search_vector, (SELECT plainto_tsquery('english', $%d))) + 0.5 * coalesce(s.score, 0)", len(args))
 	case rankable && hasSearchQuery:
 		args = append(args, params.SearchQuery)
-		sortKey = fmt.Sprintf("ts_rank(j.search_vector, plainto_tsquery('english', $%d))", len(args))
+		sortKey = fmt.Sprintf("ts_rank(j.search_vector, (SELECT plainto_tsquery('english', $%d)))", len(args))
 	case rankable && hasResumeScore:
 		// NULLS LAST below puts jobs not embedded yet after scored ones.
-		sortKey = resumeScore
+		sortKey = "s.score"
 	default:
 		sortKey = jobAgeColumn
 	}
@@ -297,34 +301,27 @@ func buildJobSearchSelect(params *JobSearchParams, from string, whereArgs []any)
 	}
 
 	args = append(args, limit, max(params.Offset, 0))
-	page := fmt.Sprintf("SELECT j.id, %s AS sort_key %s ORDER BY sort_key DESC NULLS LAST, j.id DESC LIMIT $%d OFFSET $%d",
-		sortKey, from, len(args)-1, len(args))
+	page := fmt.Sprintf(`SELECT j.id, %s AS sort_key, %s AS score, count(*) OVER () AS total FROM jobs j%s%s
+		ORDER BY sort_key DESC NULLS LAST, j.id DESC LIMIT $%d OFFSET $%d`,
+		sortKey, score, scoredJoin, where, len(args)-1, len(args))
 
-	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
-	percentJoin, percentColumn := matchPercentJoin(&args, resumeScore)
 	appliedColumn := appliedExpr(&args, params.ProfileID)
 
-	query := fmt.Sprintf(`SELECT %s, %s AS match_score, %s, %s, %s
-		FROM (%s) page JOIN jobs j ON j.id = page.id %s
+	query := fmt.Sprintf(`%sSELECT %s, page.score AS match_score, %s, %s, %s, page.total
+		FROM (%s) page JOIN jobs j ON j.id = page.id%s
 		ORDER BY page.sort_key DESC NULLS LAST, page.id DESC`,
-		jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn, page, percentJoin)
+		with, jobColumns, percentColumn, jobTagsColumn, appliedColumn, page, percentJoin)
 
 	return query, args
 }
 
-// matchPercentJoin ranks score across every listed job, so match_percent reads the same on any page, filter, or sort.
-// Returns the join and the column selecting it; both are no-ops when score is empty.
-func matchPercentJoin(args *[]any, score string) (join, column string) {
-	if score == "" {
-		return "", "NULL::int"
-	}
-
-	*args = append(*args, time.Now().Add(-JobMaxAge))
-
-	join = fmt.Sprintf(`LEFT JOIN (SELECT j.id, percent_rank() OVER (ORDER BY %s) AS pct FROM jobs j
-		WHERE %s >= $%d AND %s IS NOT NULL) mp ON mp.id = j.id`, score, jobAgeColumn, len(*args), score)
-
-	return join, "floor(mp.pct * 100)::int"
+// scoredCTEs scores every listable job once (scored) and ranks those scores (ranked),
+// so match_percent reads the same on any page, filter, or sort. ageArg is the cutoff's $n.
+func scoredCTEs(score string, ageArg int) string {
+	return fmt.Sprintf(`WITH scored AS MATERIALIZED (
+			SELECT j.id, %s AS score FROM jobs j WHERE %s >= $%d),
+		ranked AS (SELECT id, percent_rank() OVER (ORDER BY score) AS pct FROM scored WHERE score IS NOT NULL)
+		`, score, jobAgeColumn, ageArg)
 }
 
 // resumeScoreExpr scores j against the caller's resume, appending its arg to args.
@@ -336,7 +333,7 @@ func resumeScoreExpr(args *[]any, embedding *pgvector.Vector, query string) stri
 		return fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(*args))
 	case query != "":
 		*args = append(*args, query)
-		return fmt.Sprintf("ts_rank(j.search_vector, websearch_to_tsquery('english', $%d), 1)", len(*args))
+		return fmt.Sprintf("ts_rank(j.search_vector, (SELECT websearch_to_tsquery('english', $%d)), 1)", len(*args))
 	default:
 		return ""
 	}
@@ -357,8 +354,9 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanJob reads jobColumns, match_score, match_percent, tags and applied, plus description when withDescription.
-func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
+// scanJob reads jobColumns, match_score, match_percent, tags and applied, plus description
+// when withDescription, then any extra trailing columns into extra.
+func scanJob(row rowScanner, withDescription bool, extra ...any) (jobs.Job, error) {
 	var job jobs.Job
 	var salaryMin, salaryMax, matchPercent sql.NullInt64
 	var postedAt sql.NullTime
@@ -372,7 +370,7 @@ func scanJob(row rowScanner, withDescription bool) (jobs.Job, error) {
 		dest = append(dest, &job.Description)
 	}
 
-	if err := row.Scan(dest...); err != nil {
+	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return jobs.Job{}, err
 	}
 

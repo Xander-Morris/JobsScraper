@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -107,7 +108,7 @@ func TestEnvDefaults(t *testing.T) {
 	t.Setenv("JINA_API_URL", "")
 	t.Setenv("JINA_EMBED_MODEL", "")
 
-	if openRouterAPIURL() != defaultOpenRouterAPIURL || openRouterModel() != defaultOpenRouterModel {
+	if openRouterAPIURL() != defaultOpenRouterAPIURL || !slices.Equal(openRouterModels(), defaultOpenRouterModels) {
 		t.Error("openrouter defaults not used")
 	}
 	if jinaAPIURL() != defaultJinaAPIURL || jinaEmbedModel() != defaultJinaEmbedModel {
@@ -117,7 +118,7 @@ func TestEnvDefaults(t *testing.T) {
 	t.Setenv("OPENROUTER_MODEL", "m")
 	t.Setenv("JINA_EMBED_MODEL", "e")
 
-	if openRouterModel() != "m" || jinaEmbedModel() != "e" {
+	if !slices.Equal(openRouterModels(), []string{"m"}) || jinaEmbedModel() != "e" {
 		t.Error("model overrides ignored")
 	}
 }
@@ -143,6 +144,37 @@ func TestCallOpenRouterChat(t *testing.T) {
 	if len(req.Messages) != 1 || !strings.HasPrefix(req.Messages[0].Content, "Say hi") ||
 		!strings.Contains(req.Messages[0].Content, `{"type":"object"}`) {
 		t.Errorf("prompt should carry the schema: %q", req.Messages[0].Content)
+	}
+}
+
+func TestOpenRouterModelsList(t *testing.T) {
+	t.Setenv("OPENROUTER_MODEL", " a , ,b,c,d ")
+
+	if got := openRouterModels(); !slices.Equal(got, []string{"a", "b", "c"}) {
+		t.Errorf("openRouterModels() = %v, want first 3 trimmed", got)
+	}
+}
+
+func TestCallOpenRouterChatSendsFallbackModels(t *testing.T) {
+	reqs := fakeOpenRouter(t, `{"ok":true}`)
+	t.Setenv("OPENROUTER_MODEL", "a,b")
+
+	if _, err := callOpenRouterChat(t.Context(), "p", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if req := (*reqs)[0]; req.Model != "" || !slices.Equal(req.Models, []string{"a", "b"}) {
+		t.Errorf("model = %q, models = %v", req.Model, req.Models)
+	}
+}
+
+func TestCallOpenRouterChatBusy(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		fakeOpenRouterRaw(t, status, func() string { return "slow down" })
+
+		if _, err := callOpenRouterChat(t.Context(), "p", nil, 0); !errors.Is(err, ErrUpstreamBusy) {
+			t.Errorf("status %d: err = %v, want ErrUpstreamBusy", status, err)
+		}
 	}
 }
 

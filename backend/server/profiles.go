@@ -161,23 +161,8 @@ func handleRefreshProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileID := session.ProfileID
-	exists, err := database.ProfileExists(r.Context(), profileID)
-	if err != nil {
-		slog.Error("check refreshed profile", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not refresh session")
-		return
-	}
-	if !exists {
-		if err := database.DeleteRefreshToken(r.Context(), newRefreshToken); err != nil {
-			slog.Error("delete orphaned refresh token", "error", err)
-		}
-		clearRefreshCookie(w)
-		writeError(w, http.StatusUnauthorized, "profile no longer exists")
-		return
-	}
-
-	accessToken := createToken(profileID)
+	// Tokens cascade-delete with their profile, so a rotated token's profile exists.
+	accessToken := createToken(session.ProfileID)
 
 	setRefreshCookie(w, newRefreshToken, session.ExpiresAt, session.Persistent)
 	writeJSON(w, http.StatusOK, map[string]string{"token": accessToken})

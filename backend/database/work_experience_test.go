@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -309,4 +310,28 @@ func TestDeleteWorkExperienceWrongProfile(t *testing.T) {
 	if err := UpdateWorkExperience(ctx, other, weID, &AddWorkExperienceRequest{Company: "A", JobTitle: "B"}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("update err = %v, want sql.ErrNoRows", err)
 	}
+}
+
+// listWorkExperienceBullets reads one entry's bullets the way GetProfile does.
+func listWorkExperienceBullets(ctx context.Context, weID int64) ([]ProfileWorkExperienceBullet, error) {
+	var profileID int64
+	if err := db().QueryRowContext(ctx, "SELECT profile_id FROM profiles_work_experience WHERE id = $1", weID).Scan(&profileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	entries, err := listWorkExperience(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.ID == weID {
+			return entry.Bullets, nil
+		}
+	}
+
+	return nil, nil
 }

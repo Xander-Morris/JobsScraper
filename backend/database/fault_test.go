@@ -74,9 +74,6 @@ func TestFaultsProfiles(t *testing.T) {
 	t.Run("GetProfile", func(t *testing.T) {
 		faultdb.Sweep(t, inj, nil, func() error { _, err := GetProfile(ctx, pid); return err })
 	})
-	t.Run("ProfileExists", func(t *testing.T) {
-		faultdb.Sweep(t, inj, nil, func() error { _, err := ProfileExists(ctx, pid); return err })
-	})
 	t.Run("GetProfileByEmail", func(t *testing.T) {
 		faultdb.Sweep(t, inj, nil, func() error { _, _, err := GetProfileByEmail(ctx, "test@example.com"); return err })
 	})
@@ -242,15 +239,12 @@ func TestFaultsJobs(t *testing.T) {
 		_, err := KnownJobURLs(ctx, []string{"https://example.com/f1"})
 		return err
 	})
-	search := func() error {
-		_, err := SearchForJobs(ctx, &JobSearchParams{SearchQuery: "go", ResumeEmbedding: &emb, ProfileID: pid, PostedAfter: &posted, MaxSalary: 500000, Tags: []string{"go"}})
-		return err
-	}
-	// Page and count run concurrently, so sweep each query on its own.
-	for _, query := range []string{"LIMIT", "COUNT(*)"} {
-		lift := inj.Only(query)
-		faultdb.Sweep(t, inj, nil, search)
-		lift()
+	// Offset past the end also runs the fallback count query.
+	for _, offset := range []int{0, 1000} {
+		faultdb.Sweep(t, inj, nil, func() error {
+			_, err := SearchForJobs(ctx, &JobSearchParams{SearchQuery: "go", ResumeEmbedding: &emb, ProfileID: pid, PostedAfter: &posted, MaxSalary: 500000, Tags: []string{"go"}, Offset: offset})
+			return err
+		})
 	}
 	faultdb.Sweep(t, inj, nil, func() error {
 		_, err := GetJobByID(ctx, jobID, JobDetailParams{ResumeEmbedding: &emb, ProfileID: pid})

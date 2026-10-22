@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -44,6 +45,18 @@ func llmContext(w http.ResponseWriter, r *http.Request, logLabel string) (contex
 	return context.WithTimeout(r.Context(), generationTimeout)
 }
 
+// writeLLMError maps a failed LLM call to a status and message the UI can explain.
+func writeLLMError(w http.ResponseWriter, err error, failMsg string) {
+	switch {
+	case errors.Is(err, llm.ErrUpstreamBusy):
+		writeError(w, http.StatusServiceUnavailable, "AI provider is busy, try again in a minute")
+	case errors.Is(err, context.DeadlineExceeded):
+		writeError(w, http.StatusGatewayTimeout, "AI generation took too long, try again")
+	default:
+		writeError(w, http.StatusBadGateway, failMsg)
+	}
+}
+
 func jobPosting(job *jobs.Job) llm.JobPosting {
 	return llm.JobPosting{
 		Title:       job.Title,
@@ -76,7 +89,7 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request, pr
 	generated, err := llm.GenerateApplicationContent(ctx, extraction.Profile(), jobPosting(job))
 	if err != nil {
 		slog.Error("generate application content", "profile_id", profileID, "job_id", jobID, "error", err)
-		writeError(w, http.StatusBadGateway, "failed to generate application content")
+		writeLLMError(w, err, "failed to generate application content")
 		return
 	}
 

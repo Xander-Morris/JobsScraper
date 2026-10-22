@@ -1,14 +1,13 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import '@fontsource-variable/geist';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-heading: var(--foreground);
+  --color-heading: var(--heading);
   --color-raised: var(--raised);
-  --color-brand: var(--primary);
+  --color-brand: var(--brand);
   --color-accent-bg: var(--accent-bg);
   --color-accent-border: var(--accent-border);
   --color-success: var(--success);
@@ -24,46 +23,48 @@
   }
 }
 
-/* Light only: white surfaces, navy text, blue accent. */
+/* VS Code Dark+ palette. */
 :root {
-  --background: #f5f8ff;
-  --foreground: #0f1e3d;
-  --card: #ffffff;
-  --card-foreground: #0f1e3d;
-  --raised: #eaf0fc;
-  --popover: #ffffff;
-  --popover-foreground: #0f1e3d;
-  --primary: #2563eb;
+  --background: #1e1e1e;
+  --foreground: #d4d4d4;
+  --heading: #e7e7e7;
+  --card: #252526;
+  --card-foreground: #cccccc;
+  --raised: #2d2d30;
+  --popover: #252526;
+  --popover-foreground: #cccccc;
+  --primary: #0e639c;
   --primary-foreground: #ffffff;
-  --secondary: #e8effc;
-  --secondary-foreground: #1e3a8a;
-  --muted: #eef2f9;
-  --muted-foreground: #5b6b88;
-  --accent: #e8effc;
-  --accent-foreground: #1e3a8a;
-  --accent-bg: rgb(37 99 235 / 0.08);
-  --accent-border: rgb(37 99 235 / 0.3);
-  --destructive: #dc2626;
-  --success: #15803d;
-  --border: #dde5f2;
-  --input: #cbd7ea;
-  --ring: rgb(37 99 235 / 0.5);
-  --chart-1: #2563eb;
-  --chart-2: #3b82f6;
-  --chart-3: #60a5fa;
-  --chart-4: #93c5fd;
-  --chart-5: #1e3a8a;
+  --brand: #3794ff;
+  --secondary: #2d2d30;
+  --secondary-foreground: #cccccc;
+  --muted: #2a2d2e;
+  --muted-foreground: #9d9d9d;
+  --accent: #2a2d2e;
+  --accent-foreground: #e7e7e7;
+  --accent-bg: rgb(0 122 204 / 0.15);
+  --accent-border: rgb(0 122 204 / 0.4);
+  --destructive: #f14c4c;
+  --success: #89d185;
+  --border: #3c3c3c;
+  --input: #454545;
+  --ring: #007fd4;
+  --chart-1: #569cd6;
+  --chart-2: #4ec9b0;
+  --chart-3: #dcdcaa;
+  --chart-4: #ce9178;
+  --chart-5: #c586c0;
   --radius: 0.625rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f1e3d;
-  --sidebar-primary: #2563eb;
+  --sidebar: #252526;
+  --sidebar-foreground: #cccccc;
+  --sidebar-primary: #0e639c;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8effc;
-  --sidebar-accent-foreground: #1e3a8a;
-  --sidebar-border: #dde5f2;
-  --sidebar-ring: rgb(37 99 235 / 0.5);
+  --sidebar-accent: #2a2d2e;
+  --sidebar-accent-foreground: #e7e7e7;
+  --sidebar-border: #3c3c3c;
+  --sidebar-ring: #007fd4;
 
-  color-scheme: light;
+  color-scheme: dark;
   font-size: 16px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -123,8 +124,8 @@
   }
   body {
     @apply m-0 bg-background text-foreground;
-    /* Faint blue glow behind the header. */
-    background-image: radial-gradient(60rem 28rem at 50% -8rem, rgb(37 99 235 / 0.1), transparent 70%);
+    /* Faint status-bar blue glow behind the header. */
+    background-image: radial-gradient(60rem 28rem at 50% -8rem, rgb(0 122 204 / 0.06), transparent 70%);
     background-repeat: no-repeat;
   }
   #root {
@@ -137,7 +138,7 @@
     text-wrap: balance;
   }
   ::selection {
-    background: rgb(37 99 235 / 0.2);
+    background: #264f78;
   }
   code {
     @apply rounded bg-raised px-1.5 py-0.5 font-mono text-[0.9em] text-heading;

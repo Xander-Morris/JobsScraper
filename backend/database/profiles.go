@@ -166,15 +166,6 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 	return profileID, nil
 }
 
-func ProfileExists(ctx context.Context, id int64) (bool, error) {
-	var exists bool
-	if err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles WHERE id = $1)`, id).Scan(&exists); err != nil {
-		return false, err
-	}
-
-	return exists, nil
-}
-
 func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 	profile := &Profile{ID: id}
 

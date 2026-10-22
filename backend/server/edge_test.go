@@ -153,3 +153,20 @@ func TestAPIRejectsPasswordsOverBcryptLimit(t *testing.T) {
 	}
 	a.must(http.StatusBadRequest, "POST", "/api/profile/password-reset/confirm", map[string]string{"token": token, "password": long}, nil)
 }
+
+// ResponseRecorder can't set deadlines, so these hit the log-and-continue branches.
+func TestDeadlineErrorsAreNonFatal(t *testing.T) {
+	r := httptest.NewRequest("POST", "/api/trivia", nil)
+
+	ctx, cancel := llmContext(httptest.NewRecorder(), r, "test")
+	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		t.Error("llmContext should still set a deadline")
+	}
+
+	r = httptest.NewRequest("POST", "/api/resumes", strings.NewReader(""))
+	r.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	if _, _, _, err := readResumeUpload(httptest.NewRecorder(), r, true); err == nil {
+		t.Error("empty upload: want error")
+	}
+}

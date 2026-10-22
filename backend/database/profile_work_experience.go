@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 type ProfileWorkExperienceBullet struct {
@@ -41,34 +42,12 @@ type UpdateWorkExperienceBulletRequest struct {
 	Bullet string `json:"bullet"`
 }
 
-func listWorkExperienceBullets(ctx context.Context, workExperienceID int64) ([]ProfileWorkExperienceBullet, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, bullet, position FROM profiles_work_experience_bullets
-		WHERE work_experience_id = $1 ORDER BY position, id`, workExperienceID)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	var bullets []ProfileWorkExperienceBullet
-
-	for rows.Next() {
-		var bullet ProfileWorkExperienceBullet
-
-		if err := rows.Scan(&bullet.ID, &bullet.Bullet, &bullet.Position); err != nil {
-			return nil, err
-		}
-
-		bullets = append(bullets, bullet)
-	}
-
-	return bullets, rows.Err()
-}
-
 func listWorkExperience(ctx context.Context, profileID int64) ([]ProfileWorkExperience, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, company, job_title, job_type, location, start_date, end_date
-		FROM profiles_work_experience WHERE profile_id = $1 ORDER BY start_date DESC NULLS LAST, id`, profileID)
+	// Bullets ride along as JSON so the profile loads in one query, not one per entry.
+	rows, err := db().QueryContext(ctx, `SELECT w.id, w.company, w.job_title, w.job_type, w.location, w.start_date, w.end_date,
+		(SELECT json_agg(json_build_object('id', b.id, 'bullet', b.bullet, 'position', b.position) ORDER BY b.position, b.id)
+			FROM profiles_work_experience_bullets b WHERE b.work_experience_id = w.id)
+		FROM profiles_work_experience w WHERE w.profile_id = $1 ORDER BY w.start_date DESC NULLS LAST, w.id`, profileID)
 
 	if err != nil {
 		return nil, err
@@ -82,9 +61,17 @@ func listWorkExperience(ctx context.Context, profileID int64) ([]ProfileWorkExpe
 		var entry ProfileWorkExperience
 		var location sql.NullString
 		var startDate, endDate sql.NullTime
+		var bullets []byte
 
-		if err := rows.Scan(&entry.ID, &entry.Company, &entry.JobTitle, &entry.JobType, &location, &startDate, &endDate); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.Company, &entry.JobTitle, &entry.JobType, &location, &startDate, &endDate, &bullets); err != nil {
 			return nil, err
+		}
+
+		// json_agg is NULL with no bullets, leaving Bullets nil as before.
+		if bullets != nil {
+			if err := json.Unmarshal(bullets, &entry.Bullets); err != nil {
+				return nil, fmt.Errorf("decode bullets: %w", err)
+			}
 		}
 
 		if location.Valid {
@@ -104,21 +91,7 @@ func listWorkExperience(ctx context.Context, profileID int64) ([]ProfileWorkExpe
 		entries = append(entries, entry)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	for i := range entries {
-		bullets, err := listWorkExperienceBullets(ctx, entries[i].ID)
-
-		if err != nil {
-			return nil, err
-		}
-
-		entries[i].Bullets = bullets
-	}
-
-	return entries, nil
+	return entries, rows.Err()
 }
 
 func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperienceRequest) (int64, error) {

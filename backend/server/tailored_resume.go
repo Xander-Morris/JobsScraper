@@ -54,7 +54,7 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request, profil
 
 	if err != nil {
 		slog.Error("tailor resume", "profile_id", profileID, "job_id", jobID, "error", err)
-		writeError(w, http.StatusBadGateway, "failed to tailor resume")
+		writeLLMError(w, err, "failed to tailor resume")
 		return
 	}
 

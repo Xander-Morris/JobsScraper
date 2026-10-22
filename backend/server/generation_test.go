@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -78,5 +80,27 @@ func TestHandleGenerateApplicationContentJobNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestWriteLLMError(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want int
+	}{
+		"busy":    {fmt.Errorf("wrap: %w", llm.ErrUpstreamBusy), http.StatusServiceUnavailable},
+		"timeout": {fmt.Errorf("call openrouter: %w", context.DeadlineExceeded), http.StatusGatewayTimeout},
+		"other":   {errors.New("bad json"), http.StatusBadGateway},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			writeLLMError(rec, tt.err, "failed")
+
+			if rec.Code != tt.want {
+				t.Errorf("status = %d, want %d", rec.Code, tt.want)
+			}
+		})
 	}
 }

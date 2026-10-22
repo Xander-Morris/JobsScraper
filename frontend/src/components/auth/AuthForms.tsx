@@ -19,7 +19,7 @@ export function AuthPanel({ className, children }: { className?: string; childre
   return (
     <div
       className={cn(
-        'mx-auto w-full max-w-sm rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_60px_-24px_rgb(30_64_175/0.25)] backdrop-blur-sm',
+        'mx-auto w-full max-w-sm rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_60px_-24px_rgb(0_0_0/0.5)] backdrop-blur-sm',
         className
       )}
     >
@@ -79,7 +79,7 @@ export function AuthForms({ prompt }: { prompt?: string } = {}) {
                   type="button"
                   aria-pressed={mode === m}
                   onClick={() => setMode(m)}
-                  className="h-8 rounded-md font-medium text-muted-foreground/80 transition-colors outline-none hover:text-heading focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent-bg aria-pressed:text-primary aria-pressed:ring-1 aria-pressed:ring-accent-border"
+                  className="h-8 rounded-md font-medium text-muted-foreground/80 transition-colors outline-none hover:text-heading focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent-bg aria-pressed:text-brand aria-pressed:ring-1 aria-pressed:ring-accent-border"
                 >
                   {m === 'login' ? 'Log in' : 'Sign up'}
                 </button>

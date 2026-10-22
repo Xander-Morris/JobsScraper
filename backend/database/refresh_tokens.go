@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"time"
 )
@@ -47,32 +46,20 @@ func StoreRefreshToken(ctx context.Context, profileID int64, token string, expir
 	return err
 }
 
-// RotateRefreshToken consumes a valid token and replaces it with a new one of the same persistence.
+// RotateRefreshToken consumes a valid token and replaces it with a new one of the same persistence,
+// in one atomic statement. sql.ErrNoRows means the token was unknown, expired, used, or its profile deleted.
 func RotateRefreshToken(ctx context.Context, oldToken, newToken string) (RefreshSession, error) {
-	tx, err := db().BeginTx(ctx, nil)
-	if err != nil {
-		return RefreshSession{}, err
-	}
-	defer tx.Rollback()
-
 	var session RefreshSession
-	err = tx.QueryRowContext(ctx, `DELETE FROM profile_refresh_tokens
-		WHERE token_hash = $1 AND expires_at > NOW()
-		RETURNING profile_id, persistent`, refreshTokenHash(oldToken)).Scan(&session.ProfileID, &session.Persistent)
+
+	err := db().QueryRowContext(ctx, `WITH old AS (
+			DELETE FROM profile_refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()
+			RETURNING profile_id, persistent)
+		INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at, persistent)
+		SELECT $2, profile_id, CASE WHEN persistent THEN $3::timestamptz ELSE $4::timestamptz END, persistent FROM old
+		RETURNING profile_id, persistent, expires_at`,
+		refreshTokenHash(oldToken), refreshTokenHash(newToken), RefreshTokenExpiry(true), RefreshTokenExpiry(false),
+	).Scan(&session.ProfileID, &session.Persistent, &session.ExpiresAt)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return RefreshSession{}, sql.ErrNoRows
-		}
-		return RefreshSession{}, err
-	}
-
-	session.ExpiresAt = RefreshTokenExpiry(session.Persistent)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at, persistent)
-		VALUES ($1, $2, $3, $4)`, refreshTokenHash(newToken), session.ProfileID, session.ExpiresAt, session.Persistent); err != nil {
-		return RefreshSession{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return RefreshSession{}, err
 	}
 

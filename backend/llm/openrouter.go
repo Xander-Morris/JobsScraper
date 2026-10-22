@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,12 +11,21 @@ import (
 	"main/utils"
 )
 
-// defaultOpenRouterModel is free-tier (":free", rate limited), tested against
-// resumeSchema(). With reasoning off it takes ~5-10s per extraction, well under
-// resumeExtractionTimeout. Free models on OpenRouter come and go, so if this
-// one dies, grab a live one from https://openrouter.ai/api/v1/models
-// (pricing.prompt == "0") and set OPENROUTER_MODEL rather than editing this.
-const defaultOpenRouterModel = "nvidia/nemotron-3-super-120b-a12b:free"
+// defaultOpenRouterModels are free-tier fallbacks OpenRouter tries in order, smoke-tested
+// 2026-10-21 against triviaSchema() and resumeSchema(). Free models come and go, so if
+// these die, grab live ones from https://openrouter.ai/api/v1/models (pricing.prompt ==
+// "0") and set OPENROUTER_MODEL (comma-separated) rather than editing this.
+var defaultOpenRouterModels = []string{
+	"dots-studio/dots-3-note-preview:free",
+	"nvidia/nemotron-3-ultra-550b-a55b:free",
+	"xingchen-agi/xing4.0-29b-a4b:free",
+}
+
+// maxOpenRouterModels is OpenRouter's cap on the models fallback list.
+const maxOpenRouterModels = 3
+
+// ErrUpstreamBusy means OpenRouter rate limited or was overloaded; retrying later can work.
+var ErrUpstreamBusy = errors.New("openrouter is busy")
 
 const defaultOpenRouterAPIURL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -31,16 +41,25 @@ func openRouterAPIURL() string {
 	return defaultOpenRouterAPIURL
 }
 
-func openRouterModel() string {
-	if model := utils.Getenv("OPENROUTER_MODEL"); model != "" {
-		return model
+func openRouterModels() []string {
+	var models []string
+
+	for model := range strings.SplitSeq(utils.Getenv("OPENROUTER_MODEL"), ",") {
+		if model = strings.TrimSpace(model); model != "" {
+			models = append(models, model)
+		}
 	}
 
-	return defaultOpenRouterModel
+	if len(models) == 0 {
+		return defaultOpenRouterModels
+	}
+
+	return models[:min(len(models), maxOpenRouterModels)]
 }
 
 type openRouterChatRequest struct {
-	Model          string                   `json:"model"`
+	Model          string                   `json:"model,omitempty"`
+	Models         []string                 `json:"models,omitempty"`
 	Messages       []openRouterChatMessage  `json:"messages"`
 	ResponseFormat openRouterResponseFormat `json:"response_format"`
 	Temperature    float64                  `json:"temperature"`
@@ -91,7 +110,6 @@ func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]an
 		"(same field names and types, no extra commentary, no markdown fences):\n" + string(schemaJSON)
 
 	reqBody := openRouterChatRequest{
-		Model: openRouterModel(),
 		Messages: []openRouterChatMessage{
 			{Role: "user", Content: fullPrompt},
 		},
@@ -99,9 +117,20 @@ func callOpenRouterChat(ctx context.Context, prompt string, schema map[string]an
 		Temperature:    temperature,
 	}
 
+	// A single model goes in model; several go in models so OpenRouter falls back on failure.
+	if models := openRouterModels(); len(models) == 1 {
+		reqBody.Model = models[0]
+	} else {
+		reqBody.Models = models
+	}
+
 	status, respBody, err := postJSON(ctx, openRouterAPIURL(), apiKey, reqBody)
 	if err != nil {
 		return "", fmt.Errorf("call openrouter: %w", err)
+	}
+
+	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+		return "", fmt.Errorf("%w: openrouter returned %d: %s", ErrUpstreamBusy, status, errorBody(respBody))
 	}
 
 	if status != http.StatusOK {

@@ -107,7 +107,7 @@ func handleGenerateTrivia(w http.ResponseWriter, r *http.Request, profileID int6
 	questions, err := llm.GenerateTrivia(ctx, llmReq)
 	if err != nil {
 		slog.Error("generate trivia", "profile_id", profileID, "source", req.Source, "error", err)
-		writeError(w, http.StatusBadGateway, "failed to generate quiz")
+		writeLLMError(w, err, "failed to generate quiz")
 		return
 	}
 

@@ -121,10 +121,7 @@ function TailoredResumePage() {
         </div>
 
         {tailored?.stale && (
-          <p
-            role="status"
-            className="mt-4 rounded-lg border border-accent-border bg-accent-bg p-3 text-sm text-primary"
-          >
+          <p role="status" className="mt-4 rounded-lg border border-accent-border bg-accent-bg p-3 text-sm text-brand">
             Your resume changed since this was tailored. Regenerate to pick up the changes.
           </p>
         )}

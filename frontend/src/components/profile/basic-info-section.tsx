@@ -12,6 +12,21 @@ import { AddressAutofill } from '@mapbox/search-js-react'
 import { useId } from 'react'
 import { z } from 'zod'
 
+// Dark+ colors for Mapbox's suggestion list, which renders outside our CSS.
+const autofillTheme = {
+  variables: {
+    colorText: '#cccccc',
+    colorPrimary: '#3794ff',
+    colorSecondary: '#9d9d9d',
+    colorBackground: '#252526',
+    colorBackgroundHover: '#2a2d2e',
+    colorBackgroundActive: '#04395e',
+    border: '1px solid #454545',
+    boxShadow: '0 8px 24px rgb(0 0 0 / 0.5)',
+    fontFamily: "'Geist Variable', system-ui, sans-serif"
+  }
+}
+
 const optionalUrl = z.union([z.literal(''), z.url('Enter a valid URL')])
 
 const basicInfoSchema = z.object({
@@ -75,7 +90,7 @@ export function BasicInfoSection({ profile }: { profile: Profile }) {
               {(f) => (
                 <div className="space-y-1.5">
                   <Label htmlFor={`${id}-address`}>Address</Label>
-                  <AddressAutofill accessToken={import.meta.env.VITE_MAPBOX_TOKEN ?? ''}>
+                  <AddressAutofill accessToken={import.meta.env.VITE_MAPBOX_TOKEN ?? ''} theme={autofillTheme}>
                     <Input
                       id={`${id}-address`}
                       name={f.name}

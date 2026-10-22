@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestWithAuthRejectsBadTokens(t *testing.T) {
@@ -108,6 +109,9 @@ func TestWithCORSPreflight(t *testing.T) {
 	if called {
 		t.Errorf("next handler should not be called for OPTIONS preflight")
 	}
+	if got := rec.Header().Get("Access-Control-Max-Age"); got != "7200" {
+		t.Errorf("Access-Control-Max-Age = %q, want 7200", got)
+	}
 }
 
 func TestWithRecoveryCatchesPanic(t *testing.T) {
@@ -134,5 +138,23 @@ func TestWithLoggingCapturesStatus(t *testing.T) {
 
 	if rec.Code != http.StatusTeapot {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusTeapot)
+	}
+}
+
+func TestWithLoggingAllowsWriteDeadline(t *testing.T) {
+	errs := make(chan error, 1)
+	srv := httptest.NewServer(withLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		errs <- http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute))
+	})))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if err := <-errs; err != nil {
+		t.Errorf("SetWriteDeadline through withLogging: %v", err)
 	}
 }

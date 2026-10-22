@@ -34,8 +34,8 @@ type triviaResponse struct {
 }
 
 const triviaBasePrompt = "Write a multiple-choice quiz of exactly %d %s-difficulty questions. Each question has " +
-	"exactly 4 answer options with exactly one correct answer, set correct_index to its 0-based position, and give a " +
-	"1-2 sentence explanation of why it is correct. Set topic to the skill or framework the question covers. " +
+	"exactly 4 answer options with exactly one correct answer, set correct_index to its 0-based position, and give " +
+	"a one-sentence explanation of why it is correct. Set topic to the skill or framework the question covers. " +
 	"Questions must be factually accurate, unambiguous, and distinct from each other. Wrong options should be " +
 	"plausible, not joke answers."
 

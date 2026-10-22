@@ -58,7 +58,7 @@ function QuizRow({ quiz, onDelete, deleting }: { quiz: TriviaQuizSummary; onDele
       <Link
         to="/trivia/$quizId"
         params={{ quizId: String(quiz.id) }}
-        className="min-w-0 flex-1 text-sm text-heading no-underline hover:text-primary"
+        className="min-w-0 flex-1 text-sm text-heading no-underline hover:text-brand"
       >
         <span className="block truncate">{quiz.topic}</span>
         <span className="text-xs text-muted-foreground">{formatRelativeDate(quiz.created_at)}</span>
