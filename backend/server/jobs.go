@@ -14,8 +14,12 @@ import (
 
 	"main/database"
 	"main/jobs"
+	"main/llm"
 	"main/relevance"
 )
+
+// embedSearchQuery is a var so tests can stub Jina.
+var embedSearchQuery = llm.EmbedQuery
 
 var datePostedLookback = map[string]time.Duration{
 	"24h":   24 * time.Hour,
@@ -34,12 +38,19 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 
+	if params.SearchQuery != "" {
+		if vector, ok := embedSearchQuery(r.Context(), params.SearchQuery); ok {
+			embedding := pgvector.NewVector(vector)
+			params.SearchEmbedding = &embedding
+		}
+	}
+
 	if profileID, ok := profileIDFromContext(r.Context()); ok {
 		params.ProfileID = profileID
 		params.ResumeQuery, params.ResumeEmbedding = activeResumeSearchContext(r.Context(), profileID, "search jobs")
 	}
 
-	resumeDone := time.Now()
+	prepDone := time.Now()
 	result, err := database.SearchForJobs(r.Context(), params)
 
 	if err != nil {
@@ -53,8 +64,8 @@ func handleSearchJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Shows in DevTools' Timing tab where a slow search spent its time.
-	w.Header().Set("Server-Timing", fmt.Sprintf("resume;dur=%d, search;dur=%d",
-		resumeDone.Sub(start).Milliseconds(), time.Since(resumeDone).Milliseconds()))
+	w.Header().Set("Server-Timing", fmt.Sprintf("prep;dur=%d, search;dur=%d",
+		prepDone.Sub(start).Milliseconds(), time.Since(prepDone).Milliseconds()))
 	w.Header().Set("Timing-Allow-Origin", allowedOrigin())
 
 	writeJSON(w, http.StatusOK, jobSearchResponse{

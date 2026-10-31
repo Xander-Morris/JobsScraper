@@ -87,6 +87,8 @@ Full list with comments is in `.env.example`. The short version:
 
 Routes are all registered in `server/routes.go`. Roughly: job search/detail is public, marking a job as applied and everything under `/api/profile` requires a bearer token, login/signup are rate limited separately from everything else.
 
+Typed job search (`database/search_query.go`) is hybrid. Keyword side: the query is split into terms, common abbreviations expand (`dev` → developer/engineer, `swe`, `pm`, `ml`, ...), and each job scores by where each term hits: unstemmed title, stemmed title, then description, with rarer terms weighted higher (IDF). A job shows up when at least half the terms hit its title or every term appears somewhere. `intern` matches unstemmed only, so it skips "internal" and "international". Semantic side: when `JINA_API_KEY` works, the query is embedded and the 50 nearest jobs by pgvector cosine distance join the results, with similarity added to the score. Without embeddings it's keyword-only.
+
 Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout. Checking "Remember me" at login gives a 30-day persistent cookie; leaving it unchecked ends the session once the user leaves the site (the frontend revokes it on the next visit if no other tab is still open), with a browser-session cookie and a one-day idle expiry as backstops. Password reset emails a one-time link (stored hashed, expires in an hour); using it sets the new password and revokes every refresh token for that profile.
 
 ## Background jobs

@@ -38,6 +38,7 @@ func offlineEmailCheck(email string) (*emailverifier.Result, error) {
 
 func TestMain(m *testing.M) {
 	database.SetEmailVerifier(offlineEmailCheck)
+	embedSearchQuery = func(context.Context, string) ([]float32, bool) { return nil, false }
 
 	connString := testDBConnString()
 

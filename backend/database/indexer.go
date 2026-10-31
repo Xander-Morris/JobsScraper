@@ -64,6 +64,8 @@ func jobTypeFlagsFor(job jobs.Job) jobTypeFlags {
 
 type JobSearchParams struct {
 	SearchQuery string
+	// SearchEmbedding, when set, blends query-to-job cosine similarity into typed search.
+	SearchEmbedding *pgvector.Vector
 	// ResumeQuery is a fallback keyword score, used only when ResumeEmbedding is nil.
 	ResumeQuery string
 	// ResumeEmbedding, when set, scores jobs by cosine similarity instead of
@@ -89,6 +91,9 @@ type JobDetailParams struct {
 	ProfileID       int64
 }
 
+// resumeNudgeWeight scales resume fit when a typed query is the primary ranking.
+const resumeNudgeWeight = 0.2
+
 const (
 	DefaultSearchLimit = 20
 	MaxSearchLimit     = 50
@@ -107,8 +112,8 @@ const jobTagsColumn = `COALESCE((SELECT json_agg(t.tag ORDER BY jt.tag_id) FROM 
 	JOIN tags t ON t.id = jt.tag_id WHERE jt.job_id = j.id), '[]')`
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	where, whereArgs := buildJobSearchWhere(params)
-	query, args := buildJobSearchSelect(params, where, whereArgs)
+	where, whereArgs, text := buildJobSearchWhere(params)
+	query, args := buildJobSearchSelect(params, where, whereArgs, text)
 
 	results, total, err := queryJobPage(ctx, query, args)
 	if err != nil {
@@ -186,8 +191,9 @@ func countJobSearchResults(ctx context.Context, where string, args []any) (int, 
 	return total, err
 }
 
-// buildJobSearchWhere returns " WHERE ..." with the age cutoff always first, as $1.
-func buildJobSearchWhere(params *JobSearchParams) (string, []any) {
+// buildJobSearchWhere returns " WHERE ..." with the age cutoff always first, as $1, plus the
+// typed query, nil without one.
+func buildJobSearchWhere(params *JobSearchParams) (string, []any, *textSearch) {
 	var conditions []string
 	var args []any
 
@@ -195,9 +201,11 @@ func buildJobSearchWhere(params *JobSearchParams) (string, []any) {
 	args = append(args, time.Now().Add(-JobMaxAge))
 	conditions = append(conditions, fmt.Sprintf("%s >= $%d", jobAgeColumn, len(args)))
 
-	if params.SearchQuery != "" {
-		args = append(args, params.SearchQuery)
-		conditions = append(conditions, fmt.Sprintf("j.search_vector @@ plainto_tsquery('english', $%d)", len(args)))
+	var text *textSearch
+
+	if terms := parseSearchQuery(params.SearchQuery); len(terms) > 0 {
+		text = newTextSearch(&args, terms, params.SearchEmbedding)
+		conditions = append(conditions, text.match())
 	}
 
 	if params.WorkplaceType != jobs.Unknown {
@@ -251,16 +259,16 @@ func buildJobSearchWhere(params *JobSearchParams) (string, []any) {
 		))
 	}
 
-	return " WHERE " + strings.Join(conditions, " AND "), args
+	return " WHERE " + strings.Join(conditions, " AND "), args, text
 }
 
 // buildJobSearchSelect sorts and pages over (id, sort_key, score) only, then fetches display
 // columns, percent, tags and applied for just the rows on the page.
-func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any) (string, []any) {
+func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any, text *textSearch) (string, []any) {
 	args := slices.Clone(whereArgs)
 
 	rankable := params.Sort != SortDate
-	hasSearchQuery := params.SearchQuery != ""
+	hasSearchQuery := text != nil
 
 	// match_score shows as a fit signal even when sorting by date.
 	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
@@ -283,11 +291,9 @@ func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any
 	case rankable && hasSearchQuery && hasResumeScore:
 		// Typed search stays primary; resume score just nudges ties toward a
 		// good skill match, doesn't override an explicit query.
-		args = append(args, params.SearchQuery)
-		sortKey = fmt.Sprintf("ts_rank(j.search_vector, (SELECT plainto_tsquery('english', $%d))) + 0.5 * coalesce(s.score, 0)", len(args))
+		sortKey = fmt.Sprintf("%s + %g * coalesce(s.score, 0)", text.score(&args), resumeNudgeWeight)
 	case rankable && hasSearchQuery:
-		args = append(args, params.SearchQuery)
-		sortKey = fmt.Sprintf("ts_rank(j.search_vector, (SELECT plainto_tsquery('english', $%d)))", len(args))
+		sortKey = text.score(&args)
 	case rankable && hasResumeScore:
 		// NULLS LAST below puts jobs not embedded yet after scored ones.
 		sortKey = "s.score"

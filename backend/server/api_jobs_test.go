@@ -68,6 +68,30 @@ func giveActiveResume(t *testing.T, profileID int64, extracted *llm.ExtractedRes
 	}
 }
 
+func TestAPISearchJobsEmbedsQuery(t *testing.T) {
+	a := newAPI(t)
+	seedUniqueJobs(t, "Plmkq", jobs.Job{Title: "Dev", Company: "Acme"})
+
+	var embedded []string
+	prev := embedSearchQuery
+	embedSearchQuery = func(_ context.Context, q string) ([]float32, bool) {
+		embedded = append(embedded, q)
+		return make([]float32, 768), true
+	}
+	t.Cleanup(func() { embedSearchQuery = prev })
+
+	var resp searchResponse
+	a.must(http.StatusOK, "GET", "/api/jobs?q=Plmkq", nil, &resp)
+	if resp.Total < 1 || len(embedded) != 1 || embedded[0] != "Plmkq" {
+		t.Errorf("search = %+v, embedded = %v", resp, embedded)
+	}
+
+	a.must(http.StatusOK, "GET", "/api/jobs", nil, &resp)
+	if len(embedded) != 1 {
+		t.Errorf("empty query should not embed, embedded = %v", embedded)
+	}
+}
+
 func TestAPISearchJobs(t *testing.T) {
 	a := newAPI(t)
 	salaryMin, salaryMax := 150000, 180000
