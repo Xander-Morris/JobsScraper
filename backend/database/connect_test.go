@@ -79,6 +79,34 @@ func TestLazyPoolOpensFromEnv(t *testing.T) {
 	}
 }
 
+// Migrate holds a conn; if it isn't released, closing the pgxpool blocks forever.
+func TestCloseAfterMigrationsDoesNotHang(t *testing.T) {
+	conn := utils.Getenv("TEST_DATABASE_CONNECTION")
+	if conn == "" {
+		t.Skip("TEST_DATABASE_CONNECTION not set")
+	}
+	swapPool(t)
+	t.Setenv("DATABASE_CONNECTION", conn)
+	migrated = false
+
+	if err := CreateTables(); err != nil {
+		t.Fatalf("CreateTables: %v", err)
+	}
+	// The shared pool still works after migrate closes its handle.
+	if err := Ping(t.Context()); err != nil {
+		t.Fatalf("Ping after migrations: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() { CloseDb(); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("CloseDb hung after migrations")
+	}
+}
+
 func TestVerifyEmail(t *testing.T) {
 	prevVerify, prevTimeout := verifyAddress, emailVerificationTimeout
 	t.Cleanup(func() { verifyAddress, emailVerificationTimeout = prevVerify, prevTimeout })

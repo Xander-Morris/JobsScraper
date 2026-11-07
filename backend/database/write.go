@@ -30,7 +30,15 @@ func CreateTables() error {
 		return nil
 	}
 
-	if err := runMigrations(db()); err != nil {
+	var err error
+
+	if view := migrationDB(); view != nil {
+		err = runMigrations(view, true)
+	} else {
+		err = runMigrations(db(), false)
+	}
+
+	if err != nil {
 		return err
 	}
 

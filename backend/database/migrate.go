@@ -22,7 +22,12 @@ var migrationsDir = "migrations"
 
 // runMigrations applies every pending migration in migrations/ to db, tracked
 // via golang-migrate's schema_migrations table. Safe to call every boot.
-func runMigrations(db *sql.DB) error {
+// closeAfter closes db and the conn migrate holds; without it that conn is never released.
+func runMigrations(db *sql.DB, closeAfter bool) error {
+	if closeAfter {
+		defer db.Close()
+	}
+
 	source, err := iofs.New(migrationsFS, migrationsDir)
 
 	if err != nil {
@@ -37,6 +42,10 @@ func runMigrations(db *sql.DB) error {
 
 	// NewWithInstance never returns an error.
 	m, _ := migrate.NewWithInstance("iofs", source, "pgx5", dbDriver)
+
+	if closeAfter {
+		defer m.Close()
+	}
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply migrations: %w", err)
