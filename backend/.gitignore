@@ -4,3 +4,5 @@
 *.db-wal
 .env
 cover*.out
+.info/
+skills-lock.json
