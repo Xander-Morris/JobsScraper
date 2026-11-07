@@ -1,6 +1,6 @@
 import { useAddSkillMutation, useDeleteSkillMutation } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
-import type { Skill } from '@/src/api/schemas'
+import type { Skill } from '@/src/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { cn } from '@/src/lib/utils'

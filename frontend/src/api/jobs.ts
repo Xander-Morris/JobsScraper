@@ -10,7 +10,7 @@ import {
   type JobSearchResponse,
   type TailoredResume,
   type TailoredResumeContent
-} from './schemas'
+} from '../schemas'
 
 export interface JobSearchParams {
   q?: string

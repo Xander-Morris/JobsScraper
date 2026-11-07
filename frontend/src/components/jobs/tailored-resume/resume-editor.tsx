@@ -1,5 +1,5 @@
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
-import type { ResumeExtraction, TailoredBullet, TailoredResumeContent } from '@/src/api/schemas'
+import type { ResumeExtraction, TailoredBullet, TailoredResumeContent } from '@/src/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { cn } from '@/src/lib/utils'

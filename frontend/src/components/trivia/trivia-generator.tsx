@@ -1,4 +1,4 @@
-import type { TriviaDifficulty, TriviaSource } from '@/src/api/schemas'
+import type { TriviaDifficulty, TriviaSource } from '@/src/schemas'
 import { Card, CardContent, CardFooter, CardHeader } from '@/src/components/ui/card'
 import { Label } from '@/src/components/ui/label'
 import { Skeleton } from '@/src/components/ui/skeleton'

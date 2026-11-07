@@ -1,6 +1,6 @@
 import { DownloadIcon } from 'lucide-react'
 import type { useDownloadResumeMutation } from '@/src/hooks/use-profile'
-import type { Resume } from '@/src/api/schemas'
+import type { Resume } from '@/src/schemas'
 import downloadBlob from '@/src/lib/download-blob'
 import { Button } from '../../ui/button'
 import SectionHeading from './section-heading'

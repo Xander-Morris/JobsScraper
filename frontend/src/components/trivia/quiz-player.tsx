@@ -1,4 +1,4 @@
-import type { TriviaQuestion, TriviaQuiz } from '@/src/api/schemas'
+import type { TriviaQuestion, TriviaQuiz } from '@/src/schemas'
 import { Badge } from '@/src/components/ui/badge'
 import { Button, buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/src/components/ui/card'

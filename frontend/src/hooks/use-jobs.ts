@@ -11,7 +11,7 @@ import {
   type JobSearchParams
 } from '@/src/api/jobs'
 import { queryKeys } from '@/src/api/query-keys'
-import type { TailoredResumeContent } from '@/src/api/schemas'
+import type { TailoredResumeContent } from '@/src/schemas'
 import { useAuth } from '@/src/stores/auth-store'
 
 // The query options are exported separately so route prefetches can use the

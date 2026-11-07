@@ -6,7 +6,7 @@ import {
   useUpdateWorkExperienceBulletMutation
 } from '@/src/hooks/use-profile'
 import { useAppForm } from '@/src/hooks/use-app-form'
-import { jobTypeSchema, type JobType, type WorkExperience, type WorkExperienceBullet } from '@/src/api/schemas'
+import { jobTypeSchema, type JobType, type WorkExperience, type WorkExperienceBullet } from '@/src/schemas'
 import { Button, buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import {

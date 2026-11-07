@@ -8,7 +8,7 @@ import {
   type AuthResponse,
   type Profile,
   type ResumeExtraction
-} from './schemas'
+} from '../schemas'
 
 export interface UpdateProfileRequest {
   name: string

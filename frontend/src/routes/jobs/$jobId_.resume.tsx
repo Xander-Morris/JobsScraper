@@ -10,7 +10,7 @@ import {
   useTailoredResumeQuery
 } from '@/src/hooks/use-jobs'
 import { useProfileQuery, useResumeExtractionQuery } from '@/src/hooks/use-profile'
-import type { TailoredResumeContent } from '@/src/api/schemas'
+import type { TailoredResumeContent } from '@/src/schemas'
 import ResumeEditor from '@/src/components/jobs/tailored-resume/resume-editor'
 import ResumePreview from '@/src/components/jobs/tailored-resume/resume-preview'
 import { Button } from '@/src/components/ui/button'

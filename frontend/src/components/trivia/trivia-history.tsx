@@ -1,4 +1,4 @@
-import type { TriviaQuizSummary } from '@/src/api/schemas'
+import type { TriviaQuizSummary } from '@/src/schemas'
 import { Badge } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { Skeleton } from '@/src/components/ui/skeleton'

@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { FileTextIcon, SparklesIcon } from 'lucide-react'
 import { useGenerateTailoredResumeMutation, useTailoredResumeQuery } from '@/src/hooks/use-jobs'
-import type { Job } from '@/src/api/schemas'
+import type { Job } from '@/src/schemas'
 import { formatRelativeDate } from '@/src/lib/format'
 import { cn } from '@/src/lib/utils'
 import { Badge } from '../../ui/badge'

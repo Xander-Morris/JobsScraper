@@ -8,7 +8,7 @@ import {
   type TriviaQuiz,
   type TriviaQuizSummary,
   type TriviaSource
-} from './schemas'
+} from '../schemas'
 
 export interface GenerateTriviaRequest {
   source: TriviaSource

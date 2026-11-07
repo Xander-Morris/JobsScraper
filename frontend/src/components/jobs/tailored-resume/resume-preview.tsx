@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { TailoredBullet, TailoredResumeContent } from '@/src/api/schemas'
+import type { TailoredBullet, TailoredResumeContent } from '@/src/schemas'
 
 function formatMonth(date: string): string {
   const match = /^(\d{4})-(\d{2})/.exec(date)

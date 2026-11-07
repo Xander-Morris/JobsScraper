@@ -1,6 +1,6 @@
 import { CheckIcon, ClipboardIcon, CornerDownLeftIcon, DownloadIcon, SparklesIcon } from 'lucide-react'
 import { useState } from 'react'
-import type { GeneratedContent, Job } from '@/src/api/schemas'
+import type { GeneratedContent, Job } from '@/src/schemas'
 import useCopied from '@/src/hooks/use-copied'
 import downloadBlob from '@/src/lib/download-blob'
 import slugify from '@/src/lib/slugify'

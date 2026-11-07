@@ -1,5 +1,5 @@
 import { useMarkJobAppliedMutation, useUnmarkJobAppliedMutation } from '@/src/hooks/use-jobs'
-import type { Job } from '@/src/api/schemas'
+import type { Job } from '@/src/schemas'
 import { CircleCheckIcon } from 'lucide-react'
 import { Button } from '../../ui/button'
 

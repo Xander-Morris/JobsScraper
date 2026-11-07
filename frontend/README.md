@@ -9,7 +9,7 @@ React + Vite single page app for CrawlerAndIndexer. Browse and filter jobs, mana
 - TanStack Router for routing (file-based, see `src/routes/`)
 - TanStack Query for all server data fetching, no manual `fetch` + `useState` in components
 - Tailwind v4 + shadcn-style components in `src/components/ui/`
-- Zod for validating API responses in `src/api/schemas.ts`
+- Zod for validating API responses in `src/schemas/`
 
 ## Running locally
 

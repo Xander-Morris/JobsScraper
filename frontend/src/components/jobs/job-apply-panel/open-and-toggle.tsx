@@ -1,4 +1,4 @@
-import type { Job } from '@/src/api/schemas'
+import type { Job } from '@/src/schemas'
 import { ExternalLinkIcon } from 'lucide-react'
 import { buttonVariants } from '../../ui/button'
 import { cn } from '@/src/lib/utils'

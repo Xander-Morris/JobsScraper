@@ -2,7 +2,7 @@ import { fireEvent, renderHook, screen, waitFor, within } from '@testing-library
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ResumeExtraction } from '@/src/api/schemas'
+import type { ResumeExtraction } from '@/src/schemas'
 import { signIn } from '@/src/test/auth-mock'
 import { makeExtraction, makeProfile, makeResume } from '@/src/test/fixtures'
 import { useProfileQuery } from '@/src/hooks/use-profile'

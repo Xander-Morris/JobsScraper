@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { Profile } from '@/src/api/schemas'
+import type { Profile } from '@/src/schemas'
 
 interface ProfileOutletContextValue {
   profile: Profile

@@ -8,9 +8,9 @@ import type {
   TailoredResumeContent,
   TriviaQuiz,
   TriviaQuizSummary
-} from '@/src/api/schemas'
+} from '@/src/schemas'
 
-// Builders return wire-shaped objects that pass api/schemas.ts, with overrides.
+// Builders return wire-shaped objects that pass src/schemas, with overrides.
 
 export function makeJob(overrides: Partial<Job> = {}): Job {
   return {

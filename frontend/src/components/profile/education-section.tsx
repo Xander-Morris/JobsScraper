@@ -1,5 +1,5 @@
 import type { AddEducationRequest } from '@/src/api/profile'
-import type { Education } from '@/src/api/schemas'
+import type { Education } from '@/src/schemas'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'
 import { useAppForm } from '@/src/hooks/use-app-form'
 import {

@@ -1,6 +1,6 @@
 import { useGenerateApplicationContentMutation } from '@/src/hooks/use-jobs'
 import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '@/src/hooks/use-profile'
-import type { Job } from '@/src/api/schemas'
+import type { Job } from '@/src/schemas'
 import { matchSkills } from '@/src/lib/skills'
 import { SparklesIcon } from 'lucide-react'
 import { Button } from '../../ui/button'

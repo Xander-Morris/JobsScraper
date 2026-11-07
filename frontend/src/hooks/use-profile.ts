@@ -33,7 +33,7 @@ import {
 } from '@/src/api/profile'
 import { applyResumeExtractionToProfile } from '@/src/api/profile-merge'
 import { queryKeys } from '@/src/api/query-keys'
-import type { Profile, ResumeExtraction } from '@/src/api/schemas'
+import type { Profile, ResumeExtraction } from '@/src/schemas'
 import { useAuth } from '@/src/stores/auth-store'
 
 export function useCreateProfileMutation() {

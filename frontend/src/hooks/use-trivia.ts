@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/src/api/query-keys'
-import type { TriviaQuiz } from '@/src/api/schemas'
+import type { TriviaQuiz } from '@/src/schemas'
 import {
   deleteTrivia,
   fetchTriviaQuiz,

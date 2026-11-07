@@ -8,7 +8,7 @@ import {
   useUploadResumeMutation
 } from '@/src/hooks/use-profile'
 import { useApplyResumeExtractionMutation } from '@/src/hooks/use-profile'
-import type { Profile, Resume } from '@/src/api/schemas'
+import type { Profile, Resume } from '@/src/schemas'
 import { badgeVariants } from '@/src/components/ui/badge'
 import { Button } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/src/components/ui/card'

@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { MapPinIcon } from 'lucide-react'
-import type { JobListItem } from '../../api/schemas'
+import type { JobListItem } from '../../schemas'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, STRONG_MATCH } from '../../lib/format'
 import { cn } from '../../lib/utils'
 import { Badge } from '../ui/badge'

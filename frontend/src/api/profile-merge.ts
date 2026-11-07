@@ -8,7 +8,7 @@ import {
   updateProfile,
   updateWorkExperience
 } from './profile'
-import type { Profile, ResumeExtraction } from './schemas'
+import type { Profile, ResumeExtraction } from '../schemas'
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/
 
