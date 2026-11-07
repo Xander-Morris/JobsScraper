@@ -2,18 +2,29 @@ package database
 
 import (
 	"context"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 func MarkJobApplied(ctx context.Context, profileID, jobID int64) error {
-	var id int64
+	var row model.ProfileJobApplications
 
-	return db().QueryRowContext(ctx, `INSERT INTO profile_job_applications (profile_id, job_id) VALUES ($1, $2)
-		ON CONFLICT (profile_id, job_id) DO UPDATE SET applied_at = NOW()
-		RETURNING id`, profileID, jobID).Scan(&id)
+	applications := table.ProfileJobApplications
+	stmt := applications.INSERT(applications.ProfileID, applications.JobID).
+		VALUES(pg.Int(profileID), pg.Int(jobID)).
+		ON_CONFLICT(applications.ProfileID, applications.JobID).DO_UPDATE(pg.SET(applications.AppliedAt.SET(pg.NOW()))).
+		RETURNING(applications.ID)
+
+	return queryOne(ctx, db(), stmt, &row)
 }
 
 func UnmarkJobApplied(ctx context.Context, profileID, jobID int64) error {
-	_, err := db().ExecContext(ctx, `DELETE FROM profile_job_applications WHERE profile_id = $1 AND job_id = $2`, profileID, jobID)
+	applications := table.ProfileJobApplications
+	_, err := exec(ctx, db(), applications.DELETE().
+		WHERE(applications.ProfileID.EQ(pg.Int(profileID)).AND(applications.JobID.EQ(pg.Int(jobID)))))
 
 	return err
 }

@@ -2,11 +2,12 @@ package database
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"fmt"
 	"time"
 
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 	"main/llm"
 )
 
@@ -17,64 +18,65 @@ type TailoredResume struct {
 	UpdatedAt time.Time          `json:"updated_at"`
 }
 
+// ownedTailoredResume matches profileID's tailored resume for jobID.
+func ownedTailoredResume(profileID, jobID int64) pg.BoolExpression {
+	tailored := table.ProfileTailoredResumes
+
+	return tailored.ProfileID.EQ(pg.Int(profileID)).AND(tailored.JobID.EQ(pg.Int(jobID)))
+}
+
 // GetTailoredResume marks it stale if the source resume was deleted, deactivated, or re-extracted.
 func GetTailoredResume(ctx context.Context, profileID, jobID int64) (TailoredResume, error) {
-	var tailored TailoredResume
-	var content string
+	var row struct {
+		model.ProfileTailoredResumes
+		Stale bool
+	}
 
-	err := db().QueryRowContext(ctx, `SELECT t.job_id, t.content, t.updated_at,
-			(r.id IS NULL OR NOT r.is_active OR e.updated_at IS NULL OR e.updated_at > t.source_updated_at)
-		FROM profile_tailored_resumes t
-		LEFT JOIN profile_resumes r ON r.id = t.resume_id
-		LEFT JOIN profile_resume_extractions e ON e.resume_id = t.resume_id
-		WHERE t.profile_id = $1 AND t.job_id = $2`, profileID, jobID).Scan(
-		&tailored.JobID, &content, &tailored.UpdatedAt, &tailored.Stale,
-	)
+	tailored, resumes, extractions := table.ProfileTailoredResumes, table.ProfileResumes, table.ProfileResumeExtractions
+	stale := resumes.ID.IS_NULL().
+		OR(pg.NOT(resumes.IsActive)).
+		OR(extractions.UpdatedAt.IS_NULL()).
+		OR(extractions.UpdatedAt.GT(tailored.SourceUpdatedAt))
 
-	if err != nil {
+	stmt := pg.SELECT(tailored.JobID, tailored.Content, tailored.UpdatedAt, stale.AS("stale")).
+		FROM(tailored.
+			LEFT_JOIN(resumes, resumes.ID.EQ(tailored.ResumeID)).
+			LEFT_JOIN(extractions, extractions.ResumeID.EQ(tailored.ResumeID))).
+		WHERE(ownedTailoredResume(profileID, jobID))
+
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return TailoredResume{}, err
 	}
 
-	if err := json.Unmarshal([]byte(content), &tailored.Content); err != nil {
-		return TailoredResume{}, fmt.Errorf("decode tailored resume: %w", err)
+	result := TailoredResume{JobID: int64(row.JobID), Stale: row.Stale, UpdatedAt: row.UpdatedAt}
+
+	if err := decodeJSON(&row.Content, &result.Content, "tailored resume"); err != nil {
+		return TailoredResume{}, err
 	}
 
-	return tailored, nil
+	return result, nil
 }
 
 func UpsertTailoredResume(ctx context.Context, profileID, jobID, resumeID int64, sourceUpdatedAt time.Time, content llm.TailoredResume) error {
-	// Marshal can't fail on this plain struct.
-	encoded, _ := json.Marshal(content)
+	tailored := table.ProfileTailoredResumes
+	key := pg.ColumnList{tailored.ProfileID, tailored.JobID}
+	cols := pg.ColumnList{tailored.ProfileID, tailored.JobID, tailored.ResumeID, tailored.SourceUpdatedAt, tailored.Content}
 
-	_, err := db().ExecContext(ctx, `INSERT INTO profile_tailored_resumes (profile_id, job_id, resume_id, source_updated_at, content)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (profile_id, job_id) DO UPDATE SET
-			resume_id = excluded.resume_id, source_updated_at = excluded.source_updated_at,
-			content = excluded.content, updated_at = NOW()`,
-		profileID, jobID, resumeID, sourceUpdatedAt, string(encoded))
+	// Ids go in as int8 params, so an out-of-range one errors instead of wrapping.
+	_, err := exec(ctx, db(), tailored.INSERT(cols).
+		VALUES(pg.Int(profileID), pg.Int(jobID), pg.Int(resumeID), pg.TimestampzT(sourceUpdatedAt), arg(encodeJSON(content), "jsonb")).
+		ON_CONFLICT(key...).DO_UPDATE(pg.SET(
+		setExcluded(cols, tailored.EXCLUDED.AllColumns, key...),
+		tailored.UpdatedAt.SET(pg.NOW()),
+	)))
 
 	return err
 }
 
 func UpdateTailoredResumeContent(ctx context.Context, profileID, jobID int64, content llm.TailoredResume) error {
-	encoded, _ := json.Marshal(content)
+	tailored := table.ProfileTailoredResumes
 
-	result, err := db().ExecContext(ctx, `UPDATE profile_tailored_resumes SET content = $1, updated_at = NOW()
-		WHERE profile_id = $2 AND job_id = $3`, string(encoded), profileID, jobID)
-
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, tailored.UPDATE().
+		SET(tailored.Content.SET(pg.StringExp(arg(encodeJSON(content), "jsonb"))), tailored.UpdatedAt.SET(pg.NOW())).
+		WHERE(ownedTailoredResume(profileID, jobID)))
 }

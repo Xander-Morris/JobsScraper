@@ -112,6 +112,11 @@ jobs:
           go-version: "1.26"
           cache-dependency-path: backend/go.sum
 
+      # internal/gen must match the migrations, so regenerate it and fail on any change.
+      - run: bash scripts/gen-db.sh && test -z "$(git status --porcelain -- internal/gen)"
+        env:
+          DATABASE_GEN_ADMIN_DSN: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
+
       - run: go vet ./...
       - run: go build ./...
       # -coverpkg counts code a test reaches in other packages, e.g. server tests running database code.
@@ -119,7 +124,7 @@ jobs:
         env:
           TEST_DATABASE_CONNECTION: postgresql://postgres:postgres@localhost:5432/crawlerandindexer_test
 
-      # internal/ is test-only tooling, so it doesn't count.
+      # internal/ is test-only tooling and generated code, so it doesn't count.
       - name: Require 100% coverage
         run: |
           grep -v "main/internal/" cover.out > cover.app.out

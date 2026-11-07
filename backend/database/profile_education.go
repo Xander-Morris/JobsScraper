@@ -2,7 +2,12 @@ package database
 
 import (
 	"context"
-	"database/sql"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+	"github.com/shopspring/decimal"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 type ProfileEducation struct {
@@ -25,136 +30,109 @@ type AddEducationRequest struct {
 }
 
 func listEducation(ctx context.Context, profileID int64) ([]ProfileEducation, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, school_name, major, degree, gpa, start_date, end_date
-		FROM profiles_education WHERE profile_id = $1 ORDER BY start_date DESC NULLS LAST, id`, profileID)
+	var rows []model.ProfilesEducation
 
-	if err != nil {
+	education := table.ProfilesEducation
+	stmt := pg.SELECT(education.AllColumns).FROM(education).
+		WHERE(education.ProfileID.EQ(pg.Int(profileID))).
+		ORDER_BY(education.StartDate.DESC().NULLS_LAST(), education.ID)
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	var list []ProfileEducation
 
-	var education []ProfileEducation
-
-	for rows.Next() {
-		var entry ProfileEducation
-		var gpa sql.NullFloat64
-		var startDate, endDate sql.NullTime
-
-		if err := rows.Scan(&entry.ID, &entry.SchoolName, &entry.Major, &entry.Degree, &gpa, &startDate, &endDate); err != nil {
-			return nil, err
+	for _, row := range rows {
+		entry := ProfileEducation{
+			ID:         int64(row.ID),
+			SchoolName: row.SchoolName,
+			Major:      row.Major,
+			Degree:     row.Degree,
+			StartDate:  formatDate(row.StartDate),
+			EndDate:    formatDate(row.EndDate),
 		}
 
-		if gpa.Valid {
-			entry.GPA = &gpa.Float64
+		if row.Gpa != nil {
+			entry.GPA = new(row.Gpa.InexactFloat64())
 		}
 
-		if startDate.Valid {
-			formatted := startDate.Time.Format(dateLayout)
-			entry.StartDate = &formatted
-		}
-
-		if endDate.Valid {
-			formatted := endDate.Time.Format(dateLayout)
-			entry.EndDate = &formatted
-		}
-
-		education = append(education, entry)
+		list = append(list, entry)
 	}
 
-	return education, rows.Err()
+	return list, nil
 }
 
-func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest) (int64, error) {
+// educationRow validates req into the row AddEducation and UpdateEducation write.
+func educationRow(profileID int64, req *AddEducationRequest) (model.ProfilesEducation, error) {
 	if req.SchoolName == "" || req.Major == "" || req.Degree == "" {
-		return 0, invalidInput("school_name, major, and degree are required")
+		return model.ProfilesEducation{}, invalidInput("school_name, major, and degree are required")
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return 0, invalidInput("invalid start_date: %s", err)
+		return model.ProfilesEducation{}, invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return 0, invalidInput("invalid end_date: %s", err)
+		return model.ProfilesEducation{}, invalidInput("invalid end_date: %s", err)
 	}
 
-	var educationID int64
+	row := model.ProfilesEducation{
+		ProfileID:  new(int32(profileID)),
+		SchoolName: req.SchoolName,
+		Major:      req.Major,
+		Degree:     req.Degree,
+		StartDate:  startDate,
+		EndDate:    endDate,
+	}
 
-	err = db().QueryRowContext(ctx, `INSERT INTO profiles_education (profile_id, school_name, major, degree, gpa, start_date, end_date)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (profile_id, school_name, major, degree) DO UPDATE SET
-			gpa = excluded.gpa,
-			start_date = excluded.start_date,
-			end_date = excluded.end_date
-		RETURNING id`,
-		profileID, req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate).Scan(&educationID)
+	if req.GPA != nil {
+		row.Gpa = new(decimal.NewFromFloat(*req.GPA))
+	}
+
+	return row, nil
+}
+
+func AddEducation(ctx context.Context, profileID int64, req *AddEducationRequest) (int64, error) {
+	row, err := educationRow(profileID, req)
 
 	if err != nil {
 		return 0, err
 	}
 
-	return educationID, nil
+	education := table.ProfilesEducation
+	key := pg.ColumnList{education.ProfileID, education.SchoolName, education.Major, education.Degree}
+	stmt := education.INSERT(education.MutableColumns).MODEL(row).
+		ON_CONFLICT(key...).DO_UPDATE(pg.SET(setExcluded(education.MutableColumns, education.EXCLUDED.AllColumns, key...))).
+		RETURNING(education.ID)
+
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
+		return 0, err
+	}
+
+	return int64(row.ID), nil
 }
 
 func UpdateEducation(ctx context.Context, profileID, educationID int64, req *AddEducationRequest) error {
-	if req.SchoolName == "" || req.Major == "" || req.Degree == "" {
-		return invalidInput("school_name, major, and degree are required")
-	}
-
-	startDate, err := parseOptionalDate(req.StartDate)
-
-	if err != nil {
-		return invalidInput("invalid start_date: %s", err)
-	}
-
-	endDate, err := parseOptionalDate(req.EndDate)
-
-	if err != nil {
-		return invalidInput("invalid end_date: %s", err)
-	}
-
-	result, err := db().ExecContext(ctx, `UPDATE profiles_education
-		SET school_name = $1, major = $2, degree = $3, gpa = $4, start_date = $5, end_date = $6
-		WHERE id = $7 AND profile_id = $8`,
-		req.SchoolName, req.Major, req.Degree, req.GPA, startDate, endDate, educationID, profileID)
+	row, err := educationRow(profileID, req)
 
 	if err != nil {
 		return err
 	}
 
-	rows, err := result.RowsAffected()
+	education := table.ProfilesEducation
 
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, education.UPDATE(education.MutableColumns.Except(education.ProfileID)).MODEL(row).
+		WHERE(education.ID.EQ(pg.Int(educationID)).AND(education.ProfileID.EQ(pg.Int(profileID)))))
 }
 
 func DeleteEducation(ctx context.Context, profileID, educationID int64) error {
-	result, err := db().ExecContext(ctx, `DELETE FROM profiles_education WHERE id = $1 AND profile_id = $2`, educationID, profileID)
+	education := table.ProfilesEducation
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, education.DELETE().
+		WHERE(education.ID.EQ(pg.Int(educationID)).AND(education.ProfileID.EQ(pg.Int(profileID)))))
 }

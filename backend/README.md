@@ -5,7 +5,8 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 ## Layout
 
 - `server/`: HTTP handlers, routing, auth middleware, rate limiting
-- `database/`: Postgres access, migrations, schema
+- `database/`: Postgres access and migrations. Queries are built with [go-jet](https://github.com/go-jet/jet) on the generated `internal/gen` tables, not hand-written SQL (see "Schema changes" below)
+- `internal/gen/`: table and model code generated from the migrations. Don't edit it by hand
 - `scraper/`: runs the job source fetchers on a 10 minute ticker
 - `jobs/`: one file per job source: public feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and company boards on Greenhouse, Lever, and Ashby, whose company lists sit at the top of `greenhouse.go`, `lever.go`, and `ashby.go`
 - `crawler/`: a web crawler for career sites with no API (NVIDIA, Salesforce, Adobe, Intel, Mastercard, Cisco, Red Hat, Target, HP, all on Workday), seeded from `seeds.go`. See "Crawler" below
@@ -27,6 +28,18 @@ You need Go 1.26+ and a Postgres database.
 The server listens on `:8090` by default (override with `PORT`). `go run ./cmd/server` applies migrations on startup, so there's no separate step locally. The Vercel function skips them to keep cold starts fast; run `go run ./cmd/migrate` (or let CI's `migrate` job do it) before deploying a schema change there.
 
 Resume extraction, cover letter generation, and trivia need `OPENROUTER_API_KEY` set (a free key from [openrouter.ai/keys](https://openrouter.ai/keys)); semantic job matching needs `JINA_API_KEY` too (free from [jina.ai/api-dashboard](https://jina.ai/api-dashboard)). If you're not testing those features you can skip them, they'll just fail (or silently fall back to keyword matching, for search) until set.
+
+## Schema changes
+
+The migrations in `database/migrations/` are the only place the schema is defined. `internal/gen/` is generated from them: a table type per table (columns, `AllColumns`, `MutableColumns`, `EXCLUDED` for upserts) and a model struct per row. Queries in `database/` use those, so they never list column names by hand.
+
+To change the schema:
+
+1. Add a new `NNNNNN_name.up.sql` / `.down.sql` pair. Never edit a migration that has already shipped
+2. Regenerate with the test Postgres from "Tests" running: `go generate ./database`. This applies every migration to a scratch `jetgen` database on that server and runs jet against it. Point `DATABASE_GEN_ADMIN_DSN` at another server's `postgres` database to use that instead
+3. Fix whatever no longer compiles, then commit the migration and `internal/gen` together
+
+Inserts that write a whole row pick up new columns on their own: `INSERT(t.MutableColumns).MODEL(row)`, with `setExcluded` turning those columns into the upsert's `col = excluded.col` list. CI regenerates `internal/gen` and fails if it differs from what's committed.
 
 ## Tests
 
@@ -55,7 +68,7 @@ grep -v "main/internal/" cover.out > cover.app.out
 go tool cover -func=cover.app.out | grep -v "100.0%"
 ```
 
-`-coverpkg=./...` counts code a test reaches in another package, so the API tests count toward `database`. `internal/faultdb` is test-only tooling and is left out of the total. It wraps the Postgres driver so a test can fail, or corrupt the rows of, the Nth database call; `faultdb.Sweep` reruns a call failing each of its calls in turn and checks the error comes back. That's how the `if err != nil` branches a healthy database never takes get covered.
+`-coverpkg=./...` counts code a test reaches in another package, so the API tests count toward `database`. `internal/` is left out of the total: `internal/gen` is generated, and `internal/faultdb` is test-only tooling. It wraps the Postgres driver so a test can fail, or corrupt the rows of, the Nth database call; `faultdb.Sweep` reruns a call failing each of its calls in turn and checks the error comes back. That's how the `if err != nil` branches a healthy database never takes get covered.
 
 The entrypoints (`cmd/server`, `cmd/cron`, `cmd/migrate`, `api`) keep `main` to one line and put the work in a `run` function that returns an exit code. Package-level vars (`exit`, `ensure`, ...) let tests stub out exiting and startup.
 

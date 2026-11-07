@@ -2,9 +2,12 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 type ProfileWorkExperienceBullet struct {
@@ -43,179 +46,149 @@ type UpdateWorkExperienceBulletRequest struct {
 }
 
 func listWorkExperience(ctx context.Context, profileID int64) ([]ProfileWorkExperience, error) {
-	// Bullets ride along as JSON so the profile loads in one query, not one per entry.
-	rows, err := db().QueryContext(ctx, `SELECT w.id, w.company, w.job_title, w.job_type, w.location, w.start_date, w.end_date,
-		(SELECT json_agg(json_build_object('id', b.id, 'bullet', b.bullet, 'position', b.position) ORDER BY b.position, b.id)
-			FROM profiles_work_experience_bullets b WHERE b.work_experience_id = w.id)
-		FROM profiles_work_experience w WHERE w.profile_id = $1 ORDER BY w.start_date DESC NULLS LAST, w.id`, profileID)
+	var rows []struct {
+		model.ProfilesWorkExperience
+		Bullets []model.ProfilesWorkExperienceBullets
+	}
 
-	if err != nil {
+	// Bullets ride along in a join, so the profile loads in one query, not one per entry.
+	experience, bullets := table.ProfilesWorkExperience, table.ProfilesWorkExperienceBullets
+	stmt := pg.SELECT(experience.AllColumns, bullets.AllColumns).
+		FROM(experience.LEFT_JOIN(bullets, bullets.WorkExperienceID.EQ(experience.ID))).
+		WHERE(experience.ProfileID.EQ(pg.Int(profileID))).
+		ORDER_BY(experience.StartDate.DESC().NULLS_LAST(), experience.ID, bullets.Position, bullets.ID)
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
-
 	var entries []ProfileWorkExperience
 
-	for rows.Next() {
-		var entry ProfileWorkExperience
-		var location sql.NullString
-		var startDate, endDate sql.NullTime
-		var bullets []byte
-
-		if err := rows.Scan(&entry.ID, &entry.Company, &entry.JobTitle, &entry.JobType, &location, &startDate, &endDate, &bullets); err != nil {
-			return nil, err
+	for _, row := range rows {
+		entry := ProfileWorkExperience{
+			ID:        int64(row.ID),
+			Company:   row.Company,
+			JobTitle:  row.JobTitle,
+			JobType:   JobType(row.JobType),
+			Location:  row.Location,
+			StartDate: formatDate(row.StartDate),
+			EndDate:   formatDate(row.EndDate),
 		}
 
-		// json_agg is NULL with no bullets, leaving Bullets nil as before.
-		if bullets != nil {
-			if err := json.Unmarshal(bullets, &entry.Bullets); err != nil {
-				return nil, fmt.Errorf("decode bullets: %w", err)
-			}
-		}
-
-		if location.Valid {
-			entry.Location = &location.String
-		}
-
-		if startDate.Valid {
-			formatted := startDate.Time.Format(dateLayout)
-			entry.StartDate = &formatted
-		}
-
-		if endDate.Valid {
-			formatted := endDate.Time.Format(dateLayout)
-			entry.EndDate = &formatted
+		// No bullets leaves Bullets nil.
+		for _, bullet := range row.Bullets {
+			entry.Bullets = append(entry.Bullets, ProfileWorkExperienceBullet{
+				ID:       int64(bullet.ID),
+				Bullet:   bullet.Bullet,
+				Position: int(bullet.Position),
+			})
 		}
 
 		entries = append(entries, entry)
 	}
 
-	return entries, rows.Err()
+	return entries, nil
 }
 
-func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperienceRequest) (int64, error) {
+// workExperienceRow validates req into the row AddWorkExperience and UpdateWorkExperience write.
+func workExperienceRow(profileID int64, req *AddWorkExperienceRequest) (model.ProfilesWorkExperience, error) {
 	if req.Company == "" || req.JobTitle == "" {
-		return 0, invalidInput("company and job_title are required")
+		return model.ProfilesWorkExperience{}, invalidInput("company and job_title are required")
 	}
 
 	jobType, ok := ParseJobType(req.JobType)
 
 	if !ok {
-		return 0, invalidInput("invalid job_type: %s", req.JobType)
+		return model.ProfilesWorkExperience{}, invalidInput("invalid job_type: %s", req.JobType)
 	}
 
 	startDate, err := parseOptionalDate(req.StartDate)
 
 	if err != nil {
-		return 0, invalidInput("invalid start_date: %s", err)
+		return model.ProfilesWorkExperience{}, invalidInput("invalid start_date: %s", err)
 	}
 
 	endDate, err := parseOptionalDate(req.EndDate)
 
 	if err != nil {
-		return 0, invalidInput("invalid end_date: %s", err)
+		return model.ProfilesWorkExperience{}, invalidInput("invalid end_date: %s", err)
 	}
 
-	var location *string
+	row := model.ProfilesWorkExperience{
+		ProfileID: new(int32(profileID)),
+		Company:   req.Company,
+		JobTitle:  req.JobTitle,
+		JobType:   int32(jobType),
+		StartDate: startDate,
+		EndDate:   endDate,
+	}
 
 	if req.Location != "" {
-		location = &req.Location
+		row.Location = &req.Location
 	}
 
-	var workExperienceID int64
+	return row, nil
+}
 
-	err = db().QueryRowContext(ctx, `INSERT INTO profiles_work_experience (profile_id, company, job_title, job_type, location, start_date, end_date)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (profile_id, company, job_title, start_date) DO UPDATE SET
-			job_type = excluded.job_type,
-			location = excluded.location,
-			end_date = excluded.end_date
-		RETURNING id`,
-		profileID, req.Company, req.JobTitle, int(jobType), location, startDate, endDate).Scan(&workExperienceID)
+func AddWorkExperience(ctx context.Context, profileID int64, req *AddWorkExperienceRequest) (int64, error) {
+	row, err := workExperienceRow(profileID, req)
 
 	if err != nil {
 		return 0, err
 	}
 
-	return workExperienceID, nil
+	experience := table.ProfilesWorkExperience
+	key := pg.ColumnList{experience.ProfileID, experience.Company, experience.JobTitle, experience.StartDate}
+	stmt := experience.INSERT(experience.MutableColumns).MODEL(row).
+		ON_CONFLICT(key...).DO_UPDATE(pg.SET(setExcluded(experience.MutableColumns, experience.EXCLUDED.AllColumns, key...))).
+		RETURNING(experience.ID)
+
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
+		return 0, err
+	}
+
+	return int64(row.ID), nil
 }
 
 func UpdateWorkExperience(ctx context.Context, profileID, workExperienceID int64, req *AddWorkExperienceRequest) error {
-	if req.Company == "" || req.JobTitle == "" {
-		return invalidInput("company and job_title are required")
-	}
-
-	jobType, ok := ParseJobType(req.JobType)
-
-	if !ok {
-		return invalidInput("invalid job_type: %s", req.JobType)
-	}
-
-	startDate, err := parseOptionalDate(req.StartDate)
-
-	if err != nil {
-		return invalidInput("invalid start_date: %s", err)
-	}
-
-	endDate, err := parseOptionalDate(req.EndDate)
-
-	if err != nil {
-		return invalidInput("invalid end_date: %s", err)
-	}
-
-	var location *string
-
-	if req.Location != "" {
-		location = &req.Location
-	}
-
-	result, err := db().ExecContext(ctx, `UPDATE profiles_work_experience
-		SET company = $1, job_title = $2, job_type = $3, location = $4, start_date = $5, end_date = $6
-		WHERE id = $7 AND profile_id = $8`,
-		req.Company, req.JobTitle, int(jobType), location, startDate, endDate, workExperienceID, profileID)
+	row, err := workExperienceRow(profileID, req)
 
 	if err != nil {
 		return err
 	}
 
-	rows, err := result.RowsAffected()
+	experience := table.ProfilesWorkExperience
 
-	if err != nil {
-		return err
-	}
+	return execOne(ctx, experience.UPDATE(experience.MutableColumns.Except(experience.ProfileID)).MODEL(row).
+		WHERE(ownedWorkExperience(workExperienceID, profileID)))
+}
 
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
+// ownedWorkExperience matches the entry only when profileID owns it.
+func ownedWorkExperience(workExperienceID, profileID int64) pg.BoolExpression {
+	experience := table.ProfilesWorkExperience
 
-	return nil
+	return experience.ID.EQ(pg.Int(workExperienceID)).AND(experience.ProfileID.EQ(pg.Int(profileID)))
+}
+
+// ownedBullet matches the bullet only under workExperienceID, and only when profileID owns that entry.
+func ownedBullet(bulletID, workExperienceID, profileID int64) pg.BoolExpression {
+	experience, bullets := table.ProfilesWorkExperience, table.ProfilesWorkExperienceBullets
+
+	return bullets.ID.EQ(pg.Int(bulletID)).
+		AND(bullets.WorkExperienceID.EQ(pg.Int(workExperienceID))).
+		AND(bullets.WorkExperienceID.IN(pg.SELECT(experience.ID).FROM(experience).WHERE(experience.ProfileID.EQ(pg.Int(profileID)))))
 }
 
 func DeleteWorkExperience(ctx context.Context, profileID, workExperienceID int64) error {
+	experience, bullets := table.ProfilesWorkExperience, table.ProfilesWorkExperienceBullets
+
 	// Scoped to the owner, so a wrong profile can't wipe someone else's bullets.
-	if _, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets WHERE work_experience_id IN
-		(SELECT id FROM profiles_work_experience WHERE id = $1 AND profile_id = $2)`, workExperienceID, profileID); err != nil {
+	if _, err := exec(ctx, db(), bullets.DELETE().WHERE(bullets.WorkExperienceID.IN(
+		pg.SELECT(experience.ID).FROM(experience).WHERE(ownedWorkExperience(workExperienceID, profileID))))); err != nil {
 		return err
 	}
 
-	result, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience WHERE id = $1 AND profile_id = $2`, workExperienceID, profileID)
-
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, experience.DELETE().WHERE(ownedWorkExperience(workExperienceID, profileID)))
 }
 
 func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID int64, req *AddWorkExperienceBulletRequest) (int64, error) {
@@ -223,31 +196,27 @@ func AddWorkExperienceBullet(ctx context.Context, profileID, workExperienceID in
 		return 0, invalidInput("bullet is required")
 	}
 
-	var owned bool
+	var owned model.ProfilesWorkExperience
 
-	if err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profiles_work_experience WHERE id = $1 AND profile_id = $2)`,
-		workExperienceID, profileID).Scan(&owned); err != nil {
+	experience, bullets := table.ProfilesWorkExperience, table.ProfilesWorkExperienceBullets
+
+	// sql.ErrNoRows when the entry is missing or someone else's.
+	if err := queryOne(ctx, db(), pg.SELECT(experience.ID).FROM(experience).
+		WHERE(ownedWorkExperience(workExperienceID, profileID)), &owned); err != nil {
 		return 0, err
 	}
 
-	if !owned {
-		return 0, sql.ErrNoRows
-	}
+	row := model.ProfilesWorkExperienceBullets{WorkExperienceID: &owned.ID, Bullet: req.Bullet, Position: int32(req.Position)}
+	key := pg.ColumnList{bullets.WorkExperienceID, bullets.Bullet}
+	stmt := bullets.INSERT(bullets.MutableColumns).MODEL(row).
+		ON_CONFLICT(key...).DO_UPDATE(pg.SET(setExcluded(bullets.MutableColumns, bullets.EXCLUDED.AllColumns, key...))).
+		RETURNING(bullets.ID)
 
-	var bulletID int64
-
-	err := db().QueryRowContext(ctx, `INSERT INTO profiles_work_experience_bullets (work_experience_id, bullet, position)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (work_experience_id, bullet) DO UPDATE SET
-			position = excluded.position
-		RETURNING id`,
-		workExperienceID, req.Bullet, req.Position).Scan(&bulletID)
-
-	if err != nil {
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return 0, err
 	}
 
-	return bulletID, nil
+	return int64(row.ID), nil
 }
 
 func UpdateWorkExperienceBullet(ctx context.Context, profileID, workExperienceID, bulletID int64, req *UpdateWorkExperienceBulletRequest) error {
@@ -255,49 +224,16 @@ func UpdateWorkExperienceBullet(ctx context.Context, profileID, workExperienceID
 		return invalidInput("bullet is required")
 	}
 
-	result, err := db().ExecContext(ctx, `UPDATE profiles_work_experience_bullets SET bullet = $1
-		WHERE id = $2 AND work_experience_id = $3
-		AND work_experience_id IN (SELECT id FROM profiles_work_experience WHERE profile_id = $4)`,
-		req.Bullet, bulletID, workExperienceID, profileID)
+	bullets := table.ProfilesWorkExperienceBullets
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, bullets.UPDATE().SET(bullets.Bullet.SET(pg.String(req.Bullet))).
+		WHERE(ownedBullet(bulletID, workExperienceID, profileID)))
 }
 
 func DeleteWorkExperienceBullet(ctx context.Context, profileID, workExperienceID, bulletID int64) error {
-	result, err := db().ExecContext(ctx, `DELETE FROM profiles_work_experience_bullets
-		WHERE id = $1 AND work_experience_id = $2
-		AND work_experience_id IN (SELECT id FROM profiles_work_experience WHERE profile_id = $3)`,
-		bulletID, workExperienceID, profileID)
+	bullets := table.ProfilesWorkExperienceBullets
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, bullets.DELETE().WHERE(ownedBullet(bulletID, workExperienceID, profileID)))
 }
 
 type JobType int

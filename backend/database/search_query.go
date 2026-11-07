@@ -1,11 +1,14 @@
 package database
 
 import (
-	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
+	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
+
+	"main/internal/gen/table"
 )
 
 // searchTerm is one typed word plus the words and phrases that count as a match for it.
@@ -159,14 +162,13 @@ func (t searchTerm) tsqueryText(weights string) string {
 	return strings.Join(alternatives, " | ")
 }
 
-// textSearch is a typed query's SQL. Its filter's args go in the WHERE args; score's are
-// appended only when ranking uses it, since Postgres rejects params it never sees.
+// textSearch is a typed query's SQL: a filter, and a score for ranking by it.
 type textSearch struct {
 	terms          []searchTerm
 	configs        []string
-	inTitle, inAny []string
-	anyArgs        []int
-	embeddingArg   int
+	inTitle, inAny []pg.BoolExpression
+	anyQueries     []string
+	embedding      *pgvector.Vector
 }
 
 func termConfig(term searchTerm) (config, titleWeights, anyWeights string) {
@@ -177,29 +179,36 @@ func termConfig(term searchTerm) (config, titleWeights, anyWeights string) {
 	return "english", "B", "BD"
 }
 
-func tsMatch(config string, arg int) string {
-	return fmt.Sprintf("j.search_vector @@ (SELECT to_tsquery('%s', $%d))", config, arg)
+// toTSQuery is to_tsquery in config; wrapped in SELECT so Postgres parses it once, not per row.
+func toTSQuery(config, query string) pg.Expression {
+	return pg.Raw("(SELECT to_tsquery('"+config+"', #query))", pg.RawArgs{"#query": query})
 }
 
-// newTextSearch appends the filter's tsquery args; embedding, when set, adds nearest jobs by meaning.
-func newTextSearch(args *[]any, terms []searchTerm, embedding *pgvector.Vector) *textSearch {
-	ts := &textSearch{terms: terms}
+func tsMatch(config, query string) pg.BoolExpression {
+	return pg.BoolExp(pg.CustomExpression(table.Jobs.SearchVector, pg.Token("@@"), toTSQuery(config, query)))
+}
+
+// cosineDistance is pgvector's <=> between col and v.
+func cosineDistance(col pg.Expression, v pgvector.Vector) pg.FloatExpression {
+	return pg.FloatExp(pg.CustomExpression(col, pg.Token("<=>"), arg(v, "vector")))
+}
+
+// num inlines a constant, as Postgres can't infer a type for a bare param in CASE or a projection.
+func num(v float64) pg.FloatExpression {
+	return pg.RawFloat(strconv.FormatFloat(v, 'g', -1, 64))
+}
+
+// newTextSearch builds the filter's tsqueries; embedding, when set, adds nearest jobs by meaning.
+func newTextSearch(terms []searchTerm, embedding *pgvector.Vector) *textSearch {
+	ts := &textSearch{terms: terms, embedding: embedding}
 
 	for _, term := range terms {
 		config, titleWeights, anyWeights := termConfig(term)
 
-		*args = append(*args, term.tsqueryText(titleWeights))
-		ts.inTitle = append(ts.inTitle, tsMatch(config, len(*args)))
-
-		*args = append(*args, term.tsqueryText(anyWeights))
-		ts.inAny = append(ts.inAny, tsMatch(config, len(*args)))
-		ts.anyArgs = append(ts.anyArgs, len(*args))
+		ts.inTitle = append(ts.inTitle, tsMatch(config, term.tsqueryText(titleWeights)))
+		ts.inAny = append(ts.inAny, tsMatch(config, term.tsqueryText(anyWeights)))
+		ts.anyQueries = append(ts.anyQueries, term.tsqueryText(anyWeights))
 		ts.configs = append(ts.configs, config)
-	}
-
-	if embedding != nil {
-		*args = append(*args, *embedding)
-		ts.embeddingArg = len(*args)
 	}
 
 	return ts
@@ -207,49 +216,80 @@ func newTextSearch(args *[]any, terms []searchTerm, embedding *pgvector.Vector) 
 
 // match passes jobs where half the terms hit the title or every term appears somewhere,
 // plus the nearest jobs by embedding.
-func (ts *textSearch) match() string {
-	titleHits := make([]string, len(ts.terms))
+func (ts *textSearch) match() pg.BoolExpression {
+	titleHits := make([]pg.Expression, len(ts.inTitle))
 
 	for i, inTitle := range ts.inTitle {
-		titleHits[i] = fmt.Sprintf("CASE WHEN %s THEN 1 ELSE 0 END", inTitle)
+		titleHits[i] = pg.CASE().WHEN(inTitle).THEN(num(1)).ELSE(num(0))
 	}
 
-	match := fmt.Sprintf("((%s) * 2 >= %d OR (%s))",
-		strings.Join(titleHits, " + "), len(ts.terms), strings.Join(ts.inAny, " AND "))
+	titleHitCount := pg.FloatExp(pg.CustomExpression(joinExpressions(titleHits, "+")...))
+	match := titleHitCount.MUL(num(2)).GT_EQ(num(float64(len(ts.terms)))).OR(pg.AND(ts.inAny...))
 
-	if ts.embeddingArg == 0 {
+	if ts.embedding == nil {
 		return match
 	}
 
-	return fmt.Sprintf(`(%s OR j.id IN (SELECT id FROM jobs WHERE embedding IS NOT NULL
-		ORDER BY embedding <=> $%d LIMIT %d))`, match, ts.embeddingArg, semanticCandidates)
+	jobs := table.Jobs
+	nearest := pg.SELECT(jobs.ID).FROM(jobs).
+		WHERE(jobs.Embedding.IS_NOT_NULL()).
+		ORDER_BY(cosineDistance(jobs.Embedding, *ts.embedding).ASC()).
+		LIMIT(semanticCandidates)
+
+	return match.OR(jobs.ID.IN(nearest))
 }
 
 // score is 0..1 keyword relevance with terms weighted by rarity (IDF), so "intern" outweighs
 // "engineer", plus semanticWeight times query-to-job similarity when there's an embedding.
-func (ts *textSearch) score(args *[]any) string {
-	scores := make([]string, len(ts.terms))
-	weights := make([]string, len(ts.terms))
+func (ts *textSearch) score() pg.FloatExpression {
+	jobs := table.Jobs
+	scores := make([]pg.Expression, len(ts.terms))
+	weights := make([]pg.Expression, len(ts.terms))
+	totalJobs := pg.CAST(scalar(pg.SELECT(pg.COUNT(pg.STAR)).FROM(jobs))).AS_DOUBLE()
 
 	for i, term := range ts.terms {
 		inExactTitle := ts.inTitle[i]
 
 		if !term.exact {
-			*args = append(*args, term.tsqueryText("A"))
-			inExactTitle = tsMatch("simple", len(*args))
+			inExactTitle = tsMatch("simple", term.tsqueryText("A"))
 		}
 
-		weights[i] = fmt.Sprintf(`(SELECT ln(1 + (SELECT count(*) FROM jobs)::float / (1 + count(*)))
-			FROM jobs WHERE search_vector @@ to_tsquery('%s', $%d))`, ts.configs[i], ts.anyArgs[i])
-		scores[i] = fmt.Sprintf("%s * CASE WHEN %s THEN %g WHEN %s THEN %g WHEN %s THEN %g ELSE 0 END",
-			weights[i], inExactTitle, exactTitleHitScore, ts.inTitle[i], titleHitScore, ts.inAny[i], descriptionHitScore)
+		matching := pg.BoolExp(pg.CustomExpression(jobs.SearchVector, pg.Token("@@"),
+			pg.Func("to_tsquery", pg.Raw("'"+ts.configs[i]+"'::regconfig"), pg.String(ts.anyQueries[i]))))
+		weight := pg.FloatExp(scalar(pg.SELECT(pg.LN(num(1).ADD(totalJobs.DIV(pg.FloatExp(pg.RawInt("1").ADD(pg.COUNT(pg.STAR))))))).
+			FROM(jobs).WHERE(matching)))
+
+		weights[i] = weight
+		scores[i] = weight.MUL(pg.FloatExp(pg.CASE().
+			WHEN(inExactTitle).THEN(num(exactTitleHitScore)).
+			WHEN(ts.inTitle[i]).THEN(num(titleHitScore)).
+			WHEN(ts.inAny[i]).THEN(num(descriptionHitScore)).
+			ELSE(num(0))))
 	}
 
-	score := fmt.Sprintf("((%s) / (%s))", strings.Join(scores, " + "), strings.Join(weights, " + "))
+	score := pg.FloatExp(pg.CustomExpression(joinExpressions(scores, "+")...)).
+		DIV(pg.FloatExp(pg.CustomExpression(joinExpressions(weights, "+")...)))
 
-	if ts.embeddingArg == 0 {
+	if ts.embedding == nil {
 		return score
 	}
 
-	return fmt.Sprintf("(%s + %g * coalesce(1 - (j.embedding <=> $%d), 0))", score, semanticWeight, ts.embeddingArg)
+	similarity := pg.FloatExp(pg.COALESCE(num(1).SUB(cosineDistance(jobs.Embedding, *ts.embedding)), num(0)))
+
+	return score.ADD(num(semanticWeight).MUL(similarity))
+}
+
+// joinExpressions interleaves exprs with op, for a CustomExpression like "a + b + c", parenthesized.
+func joinExpressions(exprs []pg.Expression, op string) []pg.Serializer {
+	parts := []pg.Serializer{pg.Token("(")}
+
+	for i, expr := range exprs {
+		if i > 0 {
+			parts = append(parts, pg.Token(op))
+		}
+
+		parts = append(parts, expr)
+	}
+
+	return append(parts, pg.Token(")"))
 }

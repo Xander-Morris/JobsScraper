@@ -3,6 +3,11 @@ package database
 import (
 	"context"
 	"time"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 const PasswordResetTokenLifetime = time.Hour
@@ -17,13 +22,18 @@ func CreatePasswordResetToken(ctx context.Context, profileID int64) (string, err
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM profile_password_reset_tokens
-		WHERE profile_id = $1 OR expires_at <= NOW()`, profileID); err != nil {
+	resets := table.ProfilePasswordResetTokens
+
+	if _, err := exec(ctx, tx, resets.DELETE().
+		WHERE(resets.ProfileID.EQ(pg.Int(profileID)).OR(resets.ExpiresAt.LT_EQ(pg.NOW())))); err != nil {
 		return "", err
 	}
 
-	if _, err := tx.ExecContext(ctx, `INSERT INTO profile_password_reset_tokens (token_hash, profile_id, expires_at)
-		VALUES ($1, $2, $3)`, refreshTokenHash(token), profileID, time.Now().Add(PasswordResetTokenLifetime)); err != nil {
+	if _, err := exec(ctx, tx, resets.INSERT(resets.TokenHash, resets.ProfileID, resets.ExpiresAt).MODEL(model.ProfilePasswordResetTokens{
+		TokenHash: refreshTokenHash(token),
+		ProfileID: int32(profileID),
+		ExpiresAt: time.Now().Add(PasswordResetTokenLifetime),
+	})); err != nil {
 		return "", err
 	}
 
@@ -50,18 +60,23 @@ func ResetPassword(ctx context.Context, token, password string) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	var profileID int64
-	if err := tx.QueryRowContext(ctx, `DELETE FROM profile_password_reset_tokens
-		WHERE token_hash = $1 AND expires_at > NOW()
-		RETURNING profile_id`, refreshTokenHash(token)).Scan(&profileID); err != nil {
+	var consumed model.ProfilePasswordResetTokens
+
+	resets, profiles, sessions := table.ProfilePasswordResetTokens, table.Profiles, table.ProfileRefreshTokens
+
+	if err := queryOne(ctx, tx, resets.DELETE().
+		WHERE(resets.TokenHash.EQ(pg.String(refreshTokenHash(token))).AND(resets.ExpiresAt.GT(pg.NOW()))).
+		RETURNING(resets.ProfileID), &consumed); err != nil {
 		return 0, err
 	}
 
-	if _, err := tx.ExecContext(ctx, "UPDATE profiles SET password = $1 WHERE id = $2", hash, profileID); err != nil {
+	profileID := pg.Int(int64(consumed.ProfileID))
+
+	if _, err := exec(ctx, tx, profiles.UPDATE().SET(profiles.Password.SET(pg.String(hash))).WHERE(profiles.ID.EQ(profileID))); err != nil {
 		return 0, err
 	}
 
-	if _, err := tx.ExecContext(ctx, "DELETE FROM profile_refresh_tokens WHERE profile_id = $1", profileID); err != nil {
+	if _, err := exec(ctx, tx, sessions.DELETE().WHERE(sessions.ProfileID.EQ(profileID))); err != nil {
 		return 0, err
 	}
 
@@ -69,5 +84,5 @@ func ResetPassword(ctx context.Context, token, password string) (int64, error) {
 		return 0, err
 	}
 
-	return profileID, nil
+	return int64(consumed.ProfileID), nil
 }

@@ -2,7 +2,11 @@ package database
 
 import (
 	"context"
-	"database/sql"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 type ProfileSkill struct {
@@ -15,27 +19,24 @@ type AddSkillRequest struct {
 }
 
 func listSkills(ctx context.Context, profileID int64) ([]ProfileSkill, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, skill FROM profiles_skills WHERE profile_id = $1 ORDER BY skill`, profileID)
+	var rows []model.ProfilesSkills
 
-	if err != nil {
+	skills := table.ProfilesSkills
+	stmt := pg.SELECT(skills.AllColumns).FROM(skills).
+		WHERE(skills.ProfileID.EQ(pg.Int(profileID))).
+		ORDER_BY(skills.Skill)
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	var list []ProfileSkill
 
-	var skills []ProfileSkill
-
-	for rows.Next() {
-		var skill ProfileSkill
-
-		if err := rows.Scan(&skill.ID, &skill.Skill); err != nil {
-			return nil, err
-		}
-
-		skills = append(skills, skill)
+	for _, row := range rows {
+		list = append(list, ProfileSkill{ID: int64(row.ID), Skill: row.Skill})
 	}
 
-	return skills, rows.Err()
+	return list, nil
 }
 
 func AddSkill(ctx context.Context, profileID int64, req *AddSkillRequest) (int64, error) {
@@ -43,33 +44,25 @@ func AddSkill(ctx context.Context, profileID int64, req *AddSkillRequest) (int64
 		return 0, invalidInput("skill is required")
 	}
 
-	var skillID int64
+	var row model.ProfilesSkills
 
-	err := db().QueryRowContext(ctx, `INSERT INTO profiles_skills (profile_id, skill) VALUES ($1, $2) ON CONFLICT (profile_id, skill) DO UPDATE SET skill = excluded.skill RETURNING id`, profileID, req.Skill).Scan(&skillID)
+	skills := table.ProfilesSkills
+	key := pg.ColumnList{skills.ProfileID, skills.Skill}
+	stmt := skills.INSERT(skills.MutableColumns).
+		MODEL(model.ProfilesSkills{ProfileID: new(int32(profileID)), Skill: req.Skill}).
+		ON_CONFLICT(key...).DO_UPDATE(pg.SET(setExcluded(pg.ColumnList{skills.Skill}, skills.EXCLUDED.AllColumns))).
+		RETURNING(skills.ID)
 
-	if err != nil {
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return 0, err
 	}
 
-	return skillID, nil
+	return int64(row.ID), nil
 }
 
 func DeleteSkill(ctx context.Context, profileID, skillID int64) error {
-	result, err := db().ExecContext(ctx, `DELETE FROM profiles_skills WHERE id = $1 AND profile_id = $2`, skillID, profileID)
+	skills := table.ProfilesSkills
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, skills.DELETE().
+		WHERE(skills.ID.EQ(pg.Int(skillID)).AND(skills.ProfileID.EQ(pg.Int(profileID)))))
 }

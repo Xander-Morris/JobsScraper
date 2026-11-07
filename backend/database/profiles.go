@@ -8,7 +8,11 @@ import (
 	"time"
 
 	emailverifier "github.com/AfterShip/email-verifier"
+	pg "github.com/go-jet/jet/v2/postgres"
 	"golang.org/x/crypto/bcrypt"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 const dateLayout = "2006-01-02"
@@ -120,14 +124,16 @@ func verifyEmail(email string) (*emailverifier.Result, error) {
 }
 
 func GetProfileByEmail(ctx context.Context, email string) (int64, string, error) {
-	var id int64
-	var password string
+	var profile model.Profiles
 
-	if err := db().QueryRowContext(ctx, "SELECT id, password FROM profiles WHERE email=$1", email).Scan(&id, &password); err != nil {
+	profiles := table.Profiles
+	stmt := pg.SELECT(profiles.ID, profiles.Password).FROM(profiles).WHERE(profiles.Email.EQ(pg.String(email)))
+
+	if err := queryOne(ctx, db(), stmt, &profile); err != nil {
 		return 0, "", err
 	}
 
-	return id, password, nil
+	return int64(profile.ID), profile.Password, nil
 }
 
 func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
@@ -152,10 +158,15 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 	// validatePassword kept it within bcrypt's limit, so hashing can't fail.
 	hashedPassword, _ := HashPassword(req.Password)
 
-	var profileID int64
+	var created model.Profiles
 
-	if err := db().QueryRowContext(ctx, `INSERT INTO profiles (email, password) VALUES ($1, $2)
-		ON CONFLICT (email) DO NOTHING RETURNING id`, req.Email, hashedPassword).Scan(&profileID); err != nil {
+	profiles := table.Profiles
+	stmt := profiles.INSERT(profiles.Email, profiles.Password).
+		MODEL(model.Profiles{Email: req.Email, Password: hashedPassword}).
+		ON_CONFLICT(profiles.Email).DO_NOTHING().
+		RETURNING(profiles.ID)
+
+	if err := queryOne(ctx, db(), stmt, &created); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, invalidInput("email already registered")
 		}
@@ -163,19 +174,28 @@ func CreateProfile(ctx context.Context, req *ProfileRequest) (int64, error) {
 		return 0, err
 	}
 
-	return profileID, nil
+	return int64(created.ID), nil
 }
 
 func GetProfile(ctx context.Context, id int64) (*Profile, error) {
-	profile := &Profile{ID: id}
+	var row model.Profiles
 
-	row := db().QueryRowContext(ctx, `SELECT email, COALESCE(name, ''), COALESCE(address, ''),
-		COALESCE(linked_in, ''), COALESCE(github, ''), COALESCE(portfolio, ''), email_notifications_enabled
-		FROM profiles WHERE id = $1`, id)
+	profiles := table.Profiles
+	stmt := pg.SELECT(profiles.AllColumns.Except(profiles.Password)).FROM(profiles).WHERE(profiles.ID.EQ(pg.Int(id)))
 
-	if err := row.Scan(&profile.Email, &profile.Name, &profile.Address, &profile.LinkedIn, &profile.GitHub,
-		&profile.Portfolio, &profile.EmailNotifications); err != nil {
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return nil, err
+	}
+
+	profile := &Profile{
+		ID:                 id,
+		Email:              row.Email,
+		Name:               deref(row.Name),
+		Address:            deref(row.Address),
+		LinkedIn:           deref(row.LinkedIn),
+		GitHub:             deref(row.Github),
+		Portfolio:          deref(row.Portfolio),
+		EmailNotifications: row.EmailNotificationsEnabled,
 	}
 
 	education, err := listEducation(ctx, id)
@@ -214,25 +234,18 @@ func GetProfile(ctx context.Context, id int64) (*Profile, error) {
 }
 
 func UpdateProfile(ctx context.Context, id int64, req *UpdateProfileRequest) error {
-	result, err := db().ExecContext(ctx, `UPDATE profiles SET name = $1, address = $2, linked_in = $3, github = $4,
-		portfolio = $5, email_notifications_enabled = $6 WHERE id = $7`,
-		req.Name, req.Address, req.LinkedIn, req.GitHub, req.Portfolio, req.EmailNotifications, id)
+	profiles := table.Profiles
+	editable := pg.ColumnList{profiles.Name, profiles.Address, profiles.LinkedIn, profiles.Github, profiles.Portfolio,
+		profiles.EmailNotificationsEnabled}
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, profiles.UPDATE(editable).MODEL(model.Profiles{
+		Name:                      &req.Name,
+		Address:                   &req.Address,
+		LinkedIn:                  &req.LinkedIn,
+		Github:                    &req.GitHub,
+		Portfolio:                 &req.Portfolio,
+		EmailNotificationsEnabled: req.EmailNotifications,
+	}).WHERE(profiles.ID.EQ(pg.Int(id))))
 }
 
 func parseOptionalDate(raw string) (*time.Time, error) {

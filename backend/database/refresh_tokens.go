@@ -6,6 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"time"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 const (
@@ -40,33 +45,54 @@ func refreshTokenHash(token string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+// refreshTokenColumns are what a new token row is written with; created_at takes its default.
+func refreshTokenColumns() pg.ColumnList {
+	tokens := table.ProfileRefreshTokens
+
+	return pg.ColumnList{tokens.TokenHash, tokens.ProfileID, tokens.ExpiresAt, tokens.Persistent}
+}
+
 func StoreRefreshToken(ctx context.Context, profileID int64, token string, expiresAt time.Time, persistent bool) error {
-	_, err := db().ExecContext(ctx, `INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at, persistent)
-		VALUES ($1, $2, $3, $4)`, refreshTokenHash(token), profileID, expiresAt, persistent)
+	_, err := exec(ctx, db(), table.ProfileRefreshTokens.INSERT(refreshTokenColumns()).MODEL(model.ProfileRefreshTokens{
+		TokenHash:  refreshTokenHash(token),
+		ProfileID:  int32(profileID),
+		ExpiresAt:  expiresAt,
+		Persistent: persistent,
+	}))
 	return err
 }
 
 // RotateRefreshToken consumes a valid token and replaces it with a new one of the same persistence,
 // in one atomic statement. sql.ErrNoRows means the token was unknown, expired, used, or its profile deleted.
 func RotateRefreshToken(ctx context.Context, oldToken, newToken string) (RefreshSession, error) {
-	var session RefreshSession
+	var row model.ProfileRefreshTokens
 
-	err := db().QueryRowContext(ctx, `WITH old AS (
-			DELETE FROM profile_refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()
-			RETURNING profile_id, persistent)
-		INSERT INTO profile_refresh_tokens (token_hash, profile_id, expires_at, persistent)
-		SELECT $2, profile_id, CASE WHEN persistent THEN $3::timestamptz ELSE $4::timestamptz END, persistent FROM old
-		RETURNING profile_id, persistent, expires_at`,
-		refreshTokenHash(oldToken), refreshTokenHash(newToken), RefreshTokenExpiry(true), RefreshTokenExpiry(false),
-	).Scan(&session.ProfileID, &session.Persistent, &session.ExpiresAt)
-	if err != nil {
+	tokens := table.ProfileRefreshTokens
+	old := pg.CTE("old")
+	oldPersistent := tokens.Persistent.From(old)
+
+	stmt := pg.WITH(old.AS(tokens.DELETE().
+		WHERE(tokens.TokenHash.EQ(pg.String(refreshTokenHash(oldToken))).AND(tokens.ExpiresAt.GT(pg.NOW()))).
+		RETURNING(tokens.ProfileID, tokens.Persistent)))(
+		tokens.INSERT(refreshTokenColumns()).
+			QUERY(pg.SELECT(
+				pg.String(refreshTokenHash(newToken)),
+				tokens.ProfileID.From(old),
+				pg.CASE().WHEN(oldPersistent).THEN(pg.TimestampzT(RefreshTokenExpiry(true))).ELSE(pg.TimestampzT(RefreshTokenExpiry(false))),
+				oldPersistent,
+			).FROM(old)).
+			RETURNING(tokens.ProfileID, tokens.Persistent, tokens.ExpiresAt),
+	)
+
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return RefreshSession{}, err
 	}
 
-	return session, nil
+	return RefreshSession{ProfileID: int64(row.ProfileID), Persistent: row.Persistent, ExpiresAt: row.ExpiresAt}, nil
 }
 
 func DeleteRefreshToken(ctx context.Context, token string) error {
-	_, err := db().ExecContext(ctx, "DELETE FROM profile_refresh_tokens WHERE token_hash = $1", refreshTokenHash(token))
+	tokens := table.ProfileRefreshTokens
+	_, err := exec(ctx, db(), tokens.DELETE().WHERE(tokens.TokenHash.EQ(pg.String(refreshTokenHash(token)))))
 	return err
 }

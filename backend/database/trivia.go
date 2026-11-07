@@ -2,11 +2,12 @@ package database
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"fmt"
 	"time"
 
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 	"main/llm"
 )
 
@@ -36,65 +37,99 @@ type TriviaQuizSummary struct {
 	CreatedAt     time.Time  `json:"created_at"`
 }
 
+// ownedQuiz matches the quiz only when profileID owns it.
+func ownedQuiz(id, profileID int64) pg.BoolExpression {
+	quizzes := table.TriviaQuizzes
+
+	return quizzes.ID.EQ(pg.Int(id)).AND(quizzes.ProfileID.EQ(pg.Int(profileID)))
+}
+
+// triviaQuizFresh are the columns a new attempt starts from; answers, score and timestamps take their defaults.
+func triviaQuizFresh() pg.ColumnList {
+	quizzes := table.TriviaQuizzes
+
+	return pg.ColumnList{quizzes.ProfileID, quizzes.Source, quizzes.Topic, quizzes.Difficulty, quizzes.Questions}
+}
+
 func CreateTriviaQuiz(ctx context.Context, profileID int64, source, topic, difficulty string, questions []llm.TriviaQuestion) (int64, error) {
-	// Marshal can't fail on these plain types.
-	encoded, _ := json.Marshal(questions)
+	row := model.TriviaQuizzes{
+		ProfileID:  int32(profileID),
+		Source:     source,
+		Topic:      topic,
+		Difficulty: difficulty,
+		Questions:  encodeJSON(questions),
+	}
 
-	var id int64
-	err := db().QueryRowContext(ctx, `INSERT INTO trivia_quizzes (profile_id, source, topic, difficulty, questions)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		profileID, source, topic, difficulty, string(encoded)).Scan(&id)
+	err := queryOne(ctx, db(), table.TriviaQuizzes.INSERT(triviaQuizFresh()).MODEL(row).RETURNING(table.TriviaQuizzes.ID), &row)
 
-	return id, err
+	return int64(row.ID), err
 }
 
 func ListTriviaQuizzes(ctx context.Context, profileID int64) ([]TriviaQuizSummary, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, source, topic, difficulty,
-			jsonb_array_length(questions), jsonb_array_length(answers), score, completed_at, created_at
-		FROM trivia_quizzes WHERE profile_id = $1
-		ORDER BY created_at DESC, id DESC LIMIT $2`, profileID, triviaHistoryLimit)
+	var rows []struct {
+		model.TriviaQuizzes
+		QuestionCount int
+		AnsweredCount int
+	}
 
-	if err != nil {
+	quizzes := table.TriviaQuizzes
+	stmt := pg.SELECT(
+		quizzes.AllColumns.Except(quizzes.Questions, quizzes.Answers),
+		pg.Func("jsonb_array_length", quizzes.Questions).AS("question_count"),
+		pg.Func("jsonb_array_length", quizzes.Answers).AS("answered_count"),
+	).FROM(quizzes).
+		WHERE(quizzes.ProfileID.EQ(pg.Int(profileID))).
+		ORDER_BY(quizzes.CreatedAt.DESC(), quizzes.ID.DESC()).
+		LIMIT(triviaHistoryLimit)
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	summaries := []TriviaQuizSummary{}
 
-	quizzes := []TriviaQuizSummary{}
-
-	for rows.Next() {
-		var q TriviaQuizSummary
-
-		if err := rows.Scan(&q.ID, &q.Source, &q.Topic, &q.Difficulty, &q.QuestionCount, &q.AnsweredCount,
-			&q.Score, &q.CompletedAt, &q.CreatedAt); err != nil {
-			return nil, err
-		}
-
-		quizzes = append(quizzes, q)
+	for _, row := range rows {
+		summaries = append(summaries, TriviaQuizSummary{
+			ID:            int64(row.ID),
+			Source:        row.Source,
+			Topic:         row.Topic,
+			Difficulty:    row.Difficulty,
+			QuestionCount: row.QuestionCount,
+			AnsweredCount: row.AnsweredCount,
+			Score:         int(row.Score),
+			CompletedAt:   row.CompletedAt,
+			CreatedAt:     row.CreatedAt,
+		})
 	}
 
-	return quizzes, rows.Err()
+	return summaries, nil
 }
 
 func GetTriviaQuiz(ctx context.Context, profileID, id int64) (TriviaQuiz, error) {
-	var quiz TriviaQuiz
-	var questions, answers string
+	var row model.TriviaQuizzes
 
-	err := db().QueryRowContext(ctx, `SELECT id, source, topic, difficulty, questions, answers, score, completed_at, created_at
-		FROM trivia_quizzes WHERE id = $1 AND profile_id = $2`, id, profileID).Scan(
-		&quiz.ID, &quiz.Source, &quiz.Topic, &quiz.Difficulty, &questions, &answers, &quiz.Score, &quiz.CompletedAt, &quiz.CreatedAt,
-	)
+	quizzes := table.TriviaQuizzes
 
-	if err != nil {
+	if err := queryOne(ctx, db(), pg.SELECT(quizzes.AllColumns).FROM(quizzes).WHERE(ownedQuiz(id, profileID)), &row); err != nil {
 		return TriviaQuiz{}, err
 	}
 
-	if err := json.Unmarshal([]byte(questions), &quiz.Questions); err != nil {
-		return TriviaQuiz{}, fmt.Errorf("decode trivia questions: %w", err)
+	quiz := TriviaQuiz{
+		ID:          int64(row.ID),
+		Source:      row.Source,
+		Topic:       row.Topic,
+		Difficulty:  row.Difficulty,
+		Score:       int(row.Score),
+		CompletedAt: row.CompletedAt,
+		CreatedAt:   row.CreatedAt,
 	}
 
-	if err := json.Unmarshal([]byte(answers), &quiz.Answers); err != nil {
-		return TriviaQuiz{}, fmt.Errorf("decode trivia answers: %w", err)
+	if err := decodeJSON(&row.Questions, &quiz.Questions, "trivia questions"); err != nil {
+		return TriviaQuiz{}, err
+	}
+
+	if err := decodeJSON(&row.Answers, &quiz.Answers, "trivia answers"); err != nil {
+		return TriviaQuiz{}, err
 	}
 
 	return quiz, nil
@@ -131,39 +166,29 @@ func SaveTriviaAnswers(ctx context.Context, profileID, id int64, answers []int) 
 		completedAt = &now
 	}
 
-	encoded, _ := json.Marshal(answers)
-
-	_, err = db().ExecContext(ctx, `UPDATE trivia_quizzes SET answers = $1, score = $2, completed_at = $3
-		WHERE id = $4 AND profile_id = $5`, string(encoded), score, completedAt, id, profileID)
+	quizzes := table.TriviaQuizzes
+	_, err = exec(ctx, db(), quizzes.UPDATE(quizzes.Answers, quizzes.Score, quizzes.CompletedAt).
+		MODEL(model.TriviaQuizzes{Answers: encodeJSON(answers), Score: int32(score), CompletedAt: completedAt}).
+		WHERE(ownedQuiz(id, profileID)))
 
 	return err
 }
 
 // RetakeTriviaQuiz copies a quiz's questions into a fresh attempt, keeping the old score in history.
 func RetakeTriviaQuiz(ctx context.Context, profileID, id int64) (int64, error) {
-	var newID int64
+	var row model.TriviaQuizzes
 
-	err := db().QueryRowContext(ctx, `INSERT INTO trivia_quizzes (profile_id, source, topic, difficulty, questions)
-		SELECT profile_id, source, topic, difficulty, questions FROM trivia_quizzes WHERE id = $1 AND profile_id = $2
-		RETURNING id`, id, profileID).Scan(&newID)
+	quizzes := table.TriviaQuizzes
+	fresh := triviaQuizFresh()
+	stmt := quizzes.INSERT(fresh).
+		QUERY(pg.SELECT(fresh).FROM(quizzes).WHERE(ownedQuiz(id, profileID))).
+		RETURNING(quizzes.ID)
 
-	return newID, err
+	err := queryOne(ctx, db(), stmt, &row)
+
+	return int64(row.ID), err
 }
 
 func DeleteTriviaQuiz(ctx context.Context, profileID, id int64) error {
-	result, err := db().ExecContext(ctx, `DELETE FROM trivia_quizzes WHERE id = $1 AND profile_id = $2`, id, profileID)
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, table.TriviaQuizzes.DELETE().WHERE(ownedQuiz(id, profileID)))
 }

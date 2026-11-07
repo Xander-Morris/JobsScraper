@@ -3,12 +3,14 @@ package database
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
+	"errors"
 	"time"
 
+	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
 
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 	"main/llm"
 )
 
@@ -32,173 +34,168 @@ type ResumeExtraction struct {
 	Embedding *pgvector.Vector `json:"-"`
 }
 
-func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, file_name, content_type, file_size, is_active, created_at, updated_at
-		FROM profile_resumes WHERE profile_id = $1 ORDER BY updated_at DESC, id DESC`, profileID)
+func toProfileResume(row model.ProfileResumes) ProfileResume {
+	return ProfileResume{
+		ID:          int64(row.ID),
+		FileName:    row.FileName,
+		ContentType: row.ContentType,
+		FileSize:    int64(row.FileSize),
+		IsActive:    row.IsActive,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+	}
+}
 
-	if err != nil {
+// ownedResume matches the resume only when profileID owns it.
+func ownedResume(resumeID, profileID int64) pg.BoolExpression {
+	resumes := table.ProfileResumes
+
+	return resumes.ID.EQ(pg.Int(resumeID)).AND(resumes.ProfileID.EQ(pg.Int(profileID)))
+}
+
+func ListResumes(ctx context.Context, profileID int64) ([]ProfileResume, error) {
+	var rows []model.ProfileResumes
+
+	resumes := table.ProfileResumes
+	stmt := pg.SELECT(resumes.AllColumns.Except(resumes.Content)).FROM(resumes).
+		WHERE(resumes.ProfileID.EQ(pg.Int(profileID))).
+		ORDER_BY(resumes.UpdatedAt.DESC(), resumes.ID.DESC())
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	var list []ProfileResume
 
-	var resumes []ProfileResume
-
-	for rows.Next() {
-		var resume ProfileResume
-
-		if err := rows.Scan(&resume.ID, &resume.FileName, &resume.ContentType, &resume.FileSize, &resume.IsActive, &resume.CreatedAt, &resume.UpdatedAt); err != nil {
-			return nil, err
-		}
-
-		resumes = append(resumes, resume)
+	for _, row := range rows {
+		list = append(list, toProfileResume(row))
 	}
 
-	return resumes, rows.Err()
+	return list, nil
 }
 
 // AddResume marks the new resume active if it's the profile's first, so
 // relevance sorting has something to work with right away.
 func AddResume(ctx context.Context, profileID int64, fileName, contentType string, content []byte) (int64, error) {
-	var id int64
-	err := db().QueryRowContext(ctx, `INSERT INTO profile_resumes (profile_id, file_name, content_type, file_size, content, is_active)
-		VALUES ($1, $2, $3, $4, $5, NOT EXISTS (SELECT 1 FROM profile_resumes WHERE profile_id = $1))
-		RETURNING id`, profileID, fileName, contentType, len(content), content).Scan(&id)
+	var row model.ProfileResumes
 
-	return id, err
+	resumes := table.ProfileResumes
+	isFirst := pg.NOT(pg.EXISTS(pg.SELECT(resumes.ID).FROM(resumes).WHERE(resumes.ProfileID.EQ(pg.Int(profileID)))))
+	stmt := resumes.INSERT(resumes.ProfileID, resumes.FileName, resumes.ContentType, resumes.FileSize, resumes.Content, resumes.IsActive).
+		VALUES(pg.Int(profileID), pg.String(fileName), pg.String(contentType), pg.Int(int64(len(content))), pg.Bytea(content), isFirst).
+		RETURNING(resumes.ID)
+
+	err := queryOne(ctx, db(), stmt, &row)
+
+	return int64(row.ID), err
 }
 
 // SetActiveResume makes resumeID the profile's one active resume (the relevance
 // signal for job search) and unmarks whichever one was active before.
 func SetActiveResume(ctx context.Context, profileID, resumeID int64) error {
-	var exists bool
-	err := db().QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM profile_resumes WHERE id = $1 AND profile_id = $2)`,
-		resumeID, profileID).Scan(&exists)
+	var owned model.ProfileResumes
 
-	if err != nil {
+	resumes := table.ProfileResumes
+
+	if err := queryOne(ctx, db(), pg.SELECT(resumes.ID).FROM(resumes).WHERE(ownedResume(resumeID, profileID)), &owned); err != nil {
 		return err
 	}
 
-	if !exists {
-		return sql.ErrNoRows
-	}
-
-	_, err = db().ExecContext(ctx, `UPDATE profile_resumes SET is_active = (id = $2) WHERE profile_id = $1`, profileID, resumeID)
+	_, err := exec(ctx, db(), resumes.UPDATE().
+		SET(resumes.IsActive.SET(resumes.ID.EQ(pg.Int(resumeID)))).
+		WHERE(resumes.ProfileID.EQ(pg.Int(profileID))))
 
 	return err
 }
 
 func ReplaceResume(ctx context.Context, profileID, resumeID int64, fileName, contentType string, content []byte) error {
-	result, err := db().ExecContext(ctx, `UPDATE profile_resumes
-		SET file_name = $1, content_type = $2, file_size = $3, content = $4, updated_at = NOW()
-		WHERE id = $5 AND profile_id = $6`, fileName, contentType, len(content), content, resumeID, profileID)
+	resumes := table.ProfileResumes
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, resumes.UPDATE().SET(
+		resumes.FileName.SET(pg.String(fileName)),
+		resumes.ContentType.SET(pg.String(contentType)),
+		resumes.FileSize.SET(pg.Int(int64(len(content)))),
+		resumes.Content.SET(pg.Bytea(content)),
+		resumes.UpdatedAt.SET(pg.NOW()),
+	).WHERE(ownedResume(resumeID, profileID)))
 }
 
 func RenameResume(ctx context.Context, profileID, resumeID int64, fileName string) error {
-	result, err := db().ExecContext(ctx, `UPDATE profile_resumes SET file_name = $1, updated_at = NOW()
-		WHERE id = $2 AND profile_id = $3`, fileName, resumeID, profileID)
+	resumes := table.ProfileResumes
 
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, resumes.UPDATE().
+		SET(resumes.FileName.SET(pg.String(fileName)), resumes.UpdatedAt.SET(pg.NOW())).
+		WHERE(ownedResume(resumeID, profileID)))
 }
 
 func GetResume(ctx context.Context, profileID, resumeID int64) (ProfileResume, []byte, error) {
-	var resume ProfileResume
-	var content []byte
-	err := db().QueryRowContext(ctx, `SELECT id, file_name, content_type, file_size, content, created_at, updated_at
-		FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID).Scan(
-		&resume.ID, &resume.FileName, &resume.ContentType, &resume.FileSize, &content, &resume.CreatedAt, &resume.UpdatedAt,
-	)
+	var row model.ProfileResumes
 
-	return resume, content, err
+	resumes := table.ProfileResumes
+	stmt := pg.SELECT(resumes.AllColumns.Except(resumes.IsActive)).FROM(resumes).WHERE(ownedResume(resumeID, profileID))
+
+	err := queryOne(ctx, db(), stmt, &row)
+
+	return toProfileResume(row), row.Content, err
 }
 
 func DeleteResume(ctx context.Context, profileID, resumeID int64) error {
-	result, err := db().ExecContext(ctx, `DELETE FROM profile_resumes WHERE id = $1 AND profile_id = $2`, resumeID, profileID)
-
-	if err != nil {
-		return err
-	}
-
-	rows, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return sql.ErrNoRows
-	}
-
-	return nil
+	return execOne(ctx, table.ProfileResumes.DELETE().WHERE(ownedResume(resumeID, profileID)))
 }
 
 func UpsertResumeExtractionPending(ctx context.Context, resumeID int64) error {
-	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status)
-		VALUES ($1, 'pending')
-		ON CONFLICT (resume_id) DO UPDATE SET status = 'pending', error = NULL, updated_at = NOW()`, resumeID)
+	extractions := table.ProfileResumeExtractions
+	_, err := exec(ctx, db(), extractions.INSERT(extractions.ResumeID, extractions.Status).
+		VALUES(pg.Int(resumeID), pg.String("pending")).
+		ON_CONFLICT(extractions.ResumeID).DO_UPDATE(pg.SET(
+		extractions.Status.SET(pg.String("pending")),
+		extractions.Error.SET(pg.StringExp(pg.NULL)),
+		extractions.UpdatedAt.SET(pg.NOW()),
+	)))
+
+	return err
+}
+
+// saveResumeExtraction upserts the cols of row, bumping updated_at on conflict.
+func saveResumeExtraction(ctx context.Context, cols pg.ColumnList, row model.ProfileResumeExtractions) error {
+	extractions := table.ProfileResumeExtractions
+	_, err := exec(ctx, db(), extractions.INSERT(cols).MODEL(row).
+		ON_CONFLICT(extractions.ResumeID).DO_UPDATE(pg.SET(
+		setExcluded(cols, extractions.EXCLUDED.AllColumns, extractions.ResumeID),
+		extractions.UpdatedAt.SET(pg.NOW()),
+	)))
 
 	return err
 }
 
 func SaveResumeExtractionResult(ctx context.Context, resumeID int64, extracted *llm.ExtractedResume) error {
-	// Marshal can't fail on these plain types.
-	skills, _ := json.Marshal(extracted.Skills)
-	education, _ := json.Marshal(extracted.Education)
-	workExperience, _ := json.Marshal(extracted.WorkExperience)
-	projects, _ := json.Marshal(extracted.Projects)
+	extractions := table.ProfileResumeExtractions
 
-	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions
-			(resume_id, status, full_name, email, phone, linked_in, github, portfolio, summary, skills, education, work_experience, projects, error)
-		VALUES ($1, 'completed', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL)
-		ON CONFLICT (resume_id) DO UPDATE SET
-			status = 'completed', full_name = excluded.full_name, email = excluded.email,
-			phone = excluded.phone, linked_in = excluded.linked_in, github = excluded.github,
-			portfolio = excluded.portfolio, summary = excluded.summary, skills = excluded.skills,
-			education = excluded.education, work_experience = excluded.work_experience,
-			projects = excluded.projects, error = NULL, updated_at = NOW()`,
-		resumeID, extracted.FullName, extracted.Email, extracted.Phone, extracted.LinkedIn, extracted.GitHub, extracted.Portfolio,
-		extracted.Summary, string(skills), string(education), string(workExperience), string(projects))
+	// Every extracted field, with error cleared; timestamps and the embedding are kept.
+	cols := extractions.MutableColumns.Except(extractions.CreatedAt, extractions.UpdatedAt, extractions.Embedding)
 
-	return err
+	return saveResumeExtraction(ctx, cols, model.ProfileResumeExtractions{
+		ResumeID:       int32(resumeID),
+		Status:         "completed",
+		FullName:       &extracted.FullName,
+		Email:          &extracted.Email,
+		Phone:          &extracted.Phone,
+		LinkedIn:       &extracted.LinkedIn,
+		Github:         &extracted.GitHub,
+		Portfolio:      &extracted.Portfolio,
+		Summary:        &extracted.Summary,
+		Skills:         new(encodeJSON(extracted.Skills)),
+		Education:      new(encodeJSON(extracted.Education)),
+		WorkExperience: new(encodeJSON(extracted.WorkExperience)),
+		Projects:       new(encodeJSON(extracted.Projects)),
+	})
 }
 
 func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, errMsg string) error {
-	_, err := db().ExecContext(ctx, `INSERT INTO profile_resume_extractions (resume_id, status, error)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (resume_id) DO UPDATE SET status = excluded.status, error = excluded.error, updated_at = NOW()`,
-		resumeID, status, errMsg)
+	extractions := table.ProfileResumeExtractions
 
-	return err
+	return saveResumeExtraction(ctx, pg.ColumnList{extractions.ResumeID, extractions.Status, extractions.Error},
+		model.ProfileResumeExtractions{ResumeID: int32(resumeID), Status: status, Error: &errMsg})
 }
 
 // SaveResumeEmbedding stores the semantic vector for an already-completed
@@ -206,73 +203,67 @@ func SaveResumeExtractionFailure(ctx context.Context, resumeID int64, status, er
 // than treat them as extraction failures, since search/digest just fall back
 // to keyword matching without an embedding.
 func SaveResumeEmbedding(ctx context.Context, resumeID int64, embedding []float32) error {
-	_, err := db().ExecContext(ctx, `UPDATE profile_resume_extractions SET embedding = $1 WHERE resume_id = $2`,
-		pgvector.NewVector(embedding), resumeID)
+	extractions := table.ProfileResumeExtractions
+	_, err := exec(ctx, db(), extractions.UPDATE().
+		SET(extractions.Embedding.SET(pg.StringExp(arg(pgvector.NewVector(embedding), "vector")))).
+		WHERE(extractions.ResumeID.EQ(pg.Int(resumeID))))
 
 	return err
 }
 
-const resumeExtractionSelect = `SELECT e.resume_id, e.status, e.full_name, e.email, e.phone,
-		e.linked_in, e.github, e.portfolio, e.summary,
-		e.skills, e.education, e.work_experience, e.projects, e.error, e.updated_at, e.embedding
-	FROM profile_resume_extractions e
-	JOIN profile_resumes r ON r.id = e.resume_id`
+// getResumeExtraction loads the one extraction matching where, joined to its resume.
+func getResumeExtraction(ctx context.Context, where pg.BoolExpression) (ResumeExtraction, error) {
+	var row struct {
+		model.ProfileResumeExtractions
+		Vector *pgvector.Vector
+	}
 
-func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
-	return scanResumeExtraction(db().QueryRowContext(ctx, resumeExtractionSelect+`
-		WHERE e.resume_id = $1 AND r.profile_id = $2`, resumeID, profileID))
-}
+	extractions, resumes := table.ProfileResumeExtractions, table.ProfileResumes
+	stmt := pg.SELECT(extractions.AllColumns.Except(extractions.Embedding), extractions.Embedding.AS("vector")).
+		FROM(extractions.INNER_JOIN(resumes, resumes.ID.EQ(extractions.ResumeID))).
+		WHERE(where)
 
-func scanResumeExtraction(row rowScanner) (ResumeExtraction, error) {
-	var extraction ResumeExtraction
-	var fullName, email, phone, linkedIn, github, portfolio, summary, errMsg sql.NullString
-	var skills, education, workExperience, projects sql.NullString
-	var embedding sql.Null[pgvector.Vector]
-
-	err := row.Scan(
-		&extraction.ResumeID, &extraction.Status, &fullName, &email, &phone,
-		&linkedIn, &github, &portfolio, &summary,
-		&skills, &education, &workExperience, &projects, &errMsg, &extraction.UpdatedAt, &embedding,
-	)
-
-	if err != nil {
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
 		return ResumeExtraction{}, err
 	}
 
-	extraction.FullName = fullName.String
-	extraction.Email = email.String
-	extraction.Phone = phone.String
-	extraction.LinkedIn = linkedIn.String
-	extraction.GitHub = github.String
-	extraction.Portfolio = portfolio.String
-	extraction.Summary = summary.String
-	extraction.Error = errMsg.String
+	extraction := ResumeExtraction{
+		ResumeID:  int64(row.ResumeID),
+		Status:    row.Status,
+		Error:     deref(row.Error),
+		UpdatedAt: row.UpdatedAt,
+		Embedding: row.Vector,
+	}
+	extraction.FullName = deref(row.FullName)
+	extraction.Email = deref(row.Email)
+	extraction.Phone = deref(row.Phone)
+	extraction.LinkedIn = deref(row.LinkedIn)
+	extraction.GitHub = deref(row.Github)
+	extraction.Portfolio = deref(row.Portfolio)
+	extraction.Summary = deref(row.Summary)
 
-	if skills.Valid {
-		if err := json.Unmarshal([]byte(skills.String), &extraction.Skills); err != nil {
-			return ResumeExtraction{}, fmt.Errorf("decode skills: %w", err)
+	for _, field := range []struct {
+		raw  *string
+		dest any
+		what string
+	}{
+		{row.Skills, &extraction.Skills, "skills"},
+		{row.Education, &extraction.Education, "education"},
+		{row.WorkExperience, &extraction.WorkExperience, "work experience"},
+		{row.Projects, &extraction.Projects, "projects"},
+	} {
+		if err := decodeJSON(field.raw, field.dest, field.what); err != nil {
+			return ResumeExtraction{}, err
 		}
-	}
-	if education.Valid {
-		if err := json.Unmarshal([]byte(education.String), &extraction.Education); err != nil {
-			return ResumeExtraction{}, fmt.Errorf("decode education: %w", err)
-		}
-	}
-	if workExperience.Valid {
-		if err := json.Unmarshal([]byte(workExperience.String), &extraction.WorkExperience); err != nil {
-			return ResumeExtraction{}, fmt.Errorf("decode work experience: %w", err)
-		}
-	}
-	if projects.Valid {
-		if err := json.Unmarshal([]byte(projects.String), &extraction.Projects); err != nil {
-			return ResumeExtraction{}, fmt.Errorf("decode projects: %w", err)
-		}
-	}
-	if embedding.Valid {
-		extraction.Embedding = &embedding.V
 	}
 
 	return extraction, nil
+}
+
+func GetResumeExtraction(ctx context.Context, profileID, resumeID int64) (ResumeExtraction, error) {
+	extractions, resumes := table.ProfileResumeExtractions, table.ProfileResumes
+
+	return getResumeExtraction(ctx, extractions.ResumeID.EQ(pg.Int(resumeID)).AND(resumes.ProfileID.EQ(pg.Int(profileID))))
 }
 
 // GetActiveResumeExtraction returns the completed extraction for the profile's
@@ -280,11 +271,14 @@ func scanResumeExtraction(row rowScanner) (ResumeExtraction, error) {
 // active resume, or its extraction isn't completed yet. Both are normal,
 // expected states, not failures.
 func GetActiveResumeExtraction(ctx context.Context, profileID int64) (extraction ResumeExtraction, found bool, err error) {
-	// One round trip, since this runs ahead of every signed-in job search.
-	extraction, err = scanResumeExtraction(db().QueryRowContext(ctx, resumeExtractionSelect+`
-		WHERE r.profile_id = $1 AND r.is_active AND e.status = 'completed'`, profileID))
+	extractions, resumes := table.ProfileResumeExtractions, table.ProfileResumes
 
-	if err == sql.ErrNoRows {
+	// One round trip, since this runs ahead of every signed-in job search.
+	extraction, err = getResumeExtraction(ctx, resumes.ProfileID.EQ(pg.Int(profileID)).
+		AND(resumes.IsActive).
+		AND(extractions.Status.EQ(pg.String("completed"))))
+
+	if errors.Is(err, sql.ErrNoRows) {
 		return ResumeExtraction{}, false, nil
 	}
 	if err != nil {

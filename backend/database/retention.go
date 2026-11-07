@@ -5,6 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/table"
 )
 
 // JobMaxAge is how long a posting stays listed before it's deleted.
@@ -13,12 +17,18 @@ const JobMaxAge = 30 * 24 * time.Hour
 // MaxJobs caps how many unprotected jobs are stored; the oldest past it are deleted.
 const MaxJobs = 5000
 
-// jobAgeColumn falls back to first_seen_at for sources that don't give a post date.
-const jobAgeColumn = "COALESCE(j.posted_at, j.first_seen_at)"
+// jobAge falls back to first_seen_at for sources that don't give a post date.
+func jobAge() pg.TimestampzExpression {
+	return pg.TimestampzExp(pg.COALESCE(table.Jobs.PostedAt, table.Jobs.FirstSeenAt))
+}
 
 // unprotectedJob excludes jobs a user marked applied or tailored a resume for.
-const unprotectedJob = `NOT EXISTS (SELECT 1 FROM profile_job_applications a WHERE a.job_id = j.id)
-	AND NOT EXISTS (SELECT 1 FROM profile_tailored_resumes r WHERE r.job_id = j.id)`
+func unprotectedJob() pg.BoolExpression {
+	applications, tailored := table.ProfileJobApplications, table.ProfileTailoredResumes
+
+	return pg.NOT(pg.EXISTS(pg.SELECT(applications.ID).FROM(applications).WHERE(applications.JobID.EQ(table.Jobs.ID)))).
+		AND(pg.NOT(pg.EXISTS(pg.SELECT(tailored.ID).FROM(tailored).WHERE(tailored.JobID.EQ(table.Jobs.ID)))))
+}
 
 // DeleteExpiredJobs deletes unprotected jobs older than JobMaxAge or beyond the newest MaxJobs,
 // then drops tags no job uses anymore. Returns how many jobs were deleted.
@@ -34,16 +44,19 @@ func DeleteExpiredJobs(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("set read write: %w", err)
 	}
 
-	expired, err := tx.ExecContext(ctx, `DELETE FROM jobs j WHERE `+jobAgeColumn+` < $1 AND `+unprotectedJob,
-		time.Now().Add(-JobMaxAge))
+	jobs, jobTags, tags := table.Jobs, table.JobTags, table.Tags
+
+	expired, err := exec(ctx, tx, jobs.DELETE().
+		WHERE(jobAge().LT(pg.TimestampzT(time.Now().Add(-JobMaxAge))).AND(unprotectedJob())))
 	if err != nil {
 		return 0, fmt.Errorf("delete expired jobs: %w", err)
 	}
 
-	overCap, err := tx.ExecContext(ctx, `DELETE FROM jobs WHERE id IN (
-		SELECT j.id FROM jobs j WHERE `+unprotectedJob+`
-		ORDER BY `+jobAgeColumn+` DESC NULLS LAST, j.id DESC
-		OFFSET $1)`, MaxJobs)
+	overCap, err := exec(ctx, tx, jobs.DELETE().WHERE(jobs.ID.IN(
+		pg.SELECT(jobs.ID).FROM(jobs).
+			WHERE(unprotectedJob()).
+			ORDER_BY(jobAge().DESC().NULLS_LAST(), jobs.ID.DESC()).
+			OFFSET(MaxJobs))))
 	if err != nil {
 		return 0, fmt.Errorf("delete jobs over cap: %w", err)
 	}
@@ -57,8 +70,8 @@ func DeleteExpiredJobs(ctx context.Context) (int64, error) {
 		deleted += n
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tags t
-		WHERE NOT EXISTS (SELECT 1 FROM job_tags jt WHERE jt.tag_id = t.id)`); err != nil {
+	if _, err := exec(ctx, tx, tags.DELETE().WHERE(pg.NOT(pg.EXISTS(
+		pg.SELECT(jobTags.TagID).FROM(jobTags).WHERE(jobTags.TagID.EQ(tags.ID)))))); err != nil {
 		return 0, fmt.Errorf("delete unused tags: %w", err)
 	}
 

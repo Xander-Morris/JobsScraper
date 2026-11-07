@@ -2,12 +2,17 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"time"
 
+	pg "github.com/go-jet/jet/v2/postgres"
+	"github.com/go-jet/jet/v2/qrm"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 	"main/jobs"
 )
 
@@ -34,34 +39,17 @@ func CreateTables() error {
 	return nil
 }
 
-// writeJobsChunkSize bounds how many jobs go into each bulk statement.
+// writeJobsChunkSize bounds how many jobs go into each bulk statement, keeping params under Postgres's 65535.
 const writeJobsChunkSize = 500
 
-// Keeps a known post date when a later scrape of the same URL has none.
-const upsertJobsSQL = `INSERT INTO jobs (title, company, location, workplace_type, salary_min, salary_max, posted_at, url, description,
-		is_intern, is_part_time, is_full_time)
-	SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::int[], $6::int[], $7::timestamptz[], $8::text[], $9::text[],
-		$10::bool[], $11::bool[], $12::bool[])
-	ON CONFLICT (url) DO UPDATE SET
-		title = excluded.title,
-		company = excluded.company,
-		location = excluded.location,
-		workplace_type = excluded.workplace_type,
-		salary_min = excluded.salary_min,
-		salary_max = excluded.salary_max,
-		posted_at = COALESCE(excluded.posted_at, jobs.posted_at),
-		description = excluded.description,
-		is_intern = excluded.is_intern,
-		is_part_time = excluded.is_part_time,
-		is_full_time = excluded.is_full_time
-	RETURNING id, url`
+// writeTagsChunkSize bounds the tag and job-tag rows per bulk statement.
+const writeTagsChunkSize = 2000
 
-func writeJobs(ctx context.Context, tx *sql.Tx, batch []jobs.Job) error {
-	batch = dedupeJobsByURL(batch)
+// jobWriteColumns are the scraped columns; the rest are generated or filled in later.
+var jobWriteColumns = table.Jobs.MutableColumns.Except(table.Jobs.Embedding, table.Jobs.FirstSeenAt, table.Jobs.SearchVector)
 
-	for start := 0; start < len(batch); start += writeJobsChunkSize {
-		chunk := batch[start:min(start+writeJobsChunkSize, len(batch))]
-
+func writeJobs(ctx context.Context, tx qrm.DB, batch []jobs.Job) error {
+	for chunk := range slices.Chunk(dedupeJobsByURL(batch), writeJobsChunkSize) {
 		jobIDs, err := upsertJobs(ctx, tx, chunk)
 		if err != nil {
 			return err
@@ -93,72 +81,78 @@ func dedupeJobsByURL(batch []jobs.Job) []jobs.Job {
 	return deduped
 }
 
-func upsertJobs(ctx context.Context, tx *sql.Tx, chunk []jobs.Job) (map[string]int64, error) {
-	n := len(chunk)
-	titles, companies, locations := make([]string, n), make([]string, n), make([]string, n)
-	urls, descriptions := make([]string, n), make([]string, n)
-	workplaceTypes := make([]int32, n)
-	salaryMins, salaryMaxes := make([]*int32, n), make([]*int32, n)
-	postedAts := make([]*time.Time, n)
-	interns, partTimes, fullTimes := make([]bool, n), make([]bool, n), make([]bool, n)
-
-	for i, job := range chunk {
-		titles[i], companies[i], locations[i] = job.Title, job.Company, job.Location
-		urls[i], descriptions[i] = job.URL, job.Description
-		workplaceTypes[i] = int32(job.WorkplaceType)
-		salaryMins[i], salaryMaxes[i] = salaryPtr(job.SalaryMin), salaryPtr(job.SalaryMax)
-
-		flags := jobTypeFlagsFor(job)
-		interns[i], partTimes[i], fullTimes[i] = flags.intern, flags.partTime, flags.fullTime
-
-		// A post date in the future is bad source data, so it's stored as unknown.
-		if !job.PostedAt.IsZero() && job.PostedAt.Before(time.Now().Add(maxPostedAtSkew)) {
-			postedAt := job.PostedAt.UTC()
-			postedAts[i] = &postedAt
-		}
+func jobRow(job jobs.Job) model.Jobs {
+	flags := jobTypeFlagsFor(job)
+	row := model.Jobs{
+		Title:         job.Title,
+		Company:       job.Company,
+		Location:      &job.Location,
+		WorkplaceType: int32(job.WorkplaceType),
+		SalaryMin:     salaryPtr(job.SalaryMin),
+		SalaryMax:     salaryPtr(job.SalaryMax),
+		URL:           job.URL,
+		Description:   &job.Description,
+		IsIntern:      flags.intern,
+		IsPartTime:    flags.partTime,
+		IsFullTime:    flags.fullTime,
 	}
 
-	rows, err := tx.QueryContext(ctx, upsertJobsSQL, titles, companies, locations, workplaceTypes, salaryMins, salaryMaxes, postedAts, urls, descriptions,
-		interns, partTimes, fullTimes)
-	if err != nil {
-		return nil, fmt.Errorf("upsert jobs: %w", err)
-	}
-	defer rows.Close()
-
-	ids := make(map[string]int64, n)
-
-	for rows.Next() {
-		var id int64
-		var url string
-
-		if err := rows.Scan(&id, &url); err != nil {
-			return nil, fmt.Errorf("scan upserted job: %w", err)
-		}
-
-		ids[url] = id
+	// A post date in the future is bad source data, so it's stored as unknown.
+	if !job.PostedAt.IsZero() && job.PostedAt.Before(time.Now().Add(maxPostedAtSkew)) {
+		postedAt := job.PostedAt.UTC()
+		row.PostedAt = &postedAt
 	}
 
-	return ids, rows.Err()
+	return row
 }
 
-func replaceJobTags(ctx context.Context, tx *sql.Tx, chunk []jobs.Job, jobIDs map[string]int64) error {
+func upsertJobs(ctx context.Context, tx qrm.DB, chunk []jobs.Job) (map[string]int64, error) {
+	rows := make([]model.Jobs, len(chunk))
+	for i, job := range chunk {
+		rows[i] = jobRow(job)
+	}
+
+	jobs := table.Jobs
+	stmt := jobs.INSERT(jobWriteColumns).MODELS(rows).
+		ON_CONFLICT(jobs.URL).DO_UPDATE(pg.SET(
+		setExcluded(jobWriteColumns, jobs.EXCLUDED.AllColumns, jobs.URL, jobs.PostedAt),
+		// Keeps a known post date when a later scrape of the same URL has none.
+		jobs.PostedAt.SET(pg.TimestampzExp(pg.COALESCE(jobs.EXCLUDED.PostedAt, jobs.PostedAt))),
+	)).
+		RETURNING(jobs.ID, jobs.URL)
+
+	var upserted []model.Jobs
+	if err := stmt.QueryContext(ctx, tx, &upserted); err != nil {
+		return nil, fmt.Errorf("upsert jobs: %w", err)
+	}
+
+	ids := make(map[string]int64, len(upserted))
+	for _, row := range upserted {
+		ids[row.URL] = int64(row.ID)
+	}
+
+	return ids, nil
+}
+
+func replaceJobTags(ctx context.Context, tx qrm.DB, chunk []jobs.Job, jobIDs map[string]int64) error {
 	ids := make([]int64, 0, len(jobIDs))
 	for _, id := range jobIDs {
 		ids = append(ids, id)
 	}
 
-	if _, err := tx.ExecContext(ctx, "DELETE FROM job_tags WHERE job_id = ANY($1::int[])", ids); err != nil {
+	jobTags := table.JobTags
+	if _, err := exec(ctx, tx, jobTags.DELETE().WHERE(eqAny(jobTags.JobID, ids, "int[]"))); err != nil {
 		return fmt.Errorf("clear job tags: %w", err)
 	}
 
-	var uniqueTags []string
+	var uniqueTags []model.Tags
 	seen := make(map[string]bool)
 
 	for _, job := range chunk {
 		for _, tag := range job.Tags {
 			if !seen[tag] {
 				seen[tag] = true
-				uniqueTags = append(uniqueTags, tag)
+				uniqueTags = append(uniqueTags, model.Tags{Tag: tag})
 			}
 		}
 	}
@@ -172,46 +166,45 @@ func replaceJobTags(ctx context.Context, tx *sql.Tx, chunk []jobs.Job, jobIDs ma
 		return err
 	}
 
-	var pairJobIDs, pairTagIDs []int64
+	var pairs []model.JobTags
 
 	for _, job := range chunk {
+		jobID := int32(jobIDs[job.URL])
 		for _, tag := range job.Tags {
-			pairJobIDs = append(pairJobIDs, jobIDs[job.URL])
-			pairTagIDs = append(pairTagIDs, tagIDs[tag])
+			pairs = append(pairs, model.JobTags{JobID: &jobID, TagID: new(tagIDs[tag])})
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `INSERT INTO job_tags (job_id, tag_id) SELECT * FROM unnest($1::int[], $2::int[])
-		ON CONFLICT (job_id, tag_id) DO NOTHING`, pairJobIDs, pairTagIDs); err != nil {
-		return fmt.Errorf("insert job tags: %w", err)
+	for batch := range slices.Chunk(pairs, writeTagsChunkSize) {
+		stmt := jobTags.INSERT(jobTags.AllColumns).MODELS(batch).ON_CONFLICT(jobTags.JobID, jobTags.TagID).DO_NOTHING()
+		if _, err := exec(ctx, tx, stmt); err != nil {
+			return fmt.Errorf("insert job tags: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func upsertTags(ctx context.Context, tx *sql.Tx, tags []string) (map[string]int64, error) {
-	rows, err := tx.QueryContext(ctx, `INSERT INTO tags (tag) SELECT unnest($1::text[])
-		ON CONFLICT (tag) DO UPDATE SET tag = excluded.tag
-		RETURNING id, tag`, tags)
-	if err != nil {
-		return nil, fmt.Errorf("upsert tags: %w", err)
-	}
-	defer rows.Close()
+func upsertTags(ctx context.Context, tx qrm.DB, tags []model.Tags) (map[string]int32, error) {
+	ids := make(map[string]int32, len(tags))
 
-	ids := make(map[string]int64, len(tags))
+	for batch := range slices.Chunk(tags, writeTagsChunkSize) {
+		var upserted []model.Tags
 
-	for rows.Next() {
-		var id int64
-		var tag string
+		stmt := table.Tags.INSERT(table.Tags.Tag).MODELS(batch).
+			ON_CONFLICT(table.Tags.Tag).DO_UPDATE(pg.SET(setExcluded(pg.ColumnList{table.Tags.Tag}, table.Tags.EXCLUDED.AllColumns))).
+			RETURNING(table.Tags.AllColumns)
 
-		if err := rows.Scan(&id, &tag); err != nil {
-			return nil, fmt.Errorf("scan upserted tag: %w", err)
+		if err := stmt.QueryContext(ctx, tx, &upserted); err != nil {
+			return nil, fmt.Errorf("upsert tags: %w", err)
 		}
 
-		ids[tag] = id
+		for _, row := range upserted {
+			ids[row.Tag] = row.ID
+		}
 	}
 
-	return ids, rows.Err()
+	return ids, nil
 }
 
 // maxPostedAtSkew allows for source clocks and time zones running a little ahead.
@@ -230,25 +223,19 @@ func salaryPtr(v *int) *int32 {
 
 // KnownJobURLs reports which of urls are already stored, so the crawler can skip refetching them.
 func KnownJobURLs(ctx context.Context, urls []string) (map[string]bool, error) {
-	rows, err := db().QueryContext(ctx, "SELECT url FROM jobs WHERE url = ANY($1::text[])", urls)
-	if err != nil {
+	var rows []model.Jobs
+
+	stmt := pg.SELECT(table.Jobs.URL).FROM(table.Jobs).WHERE(eqAny(table.Jobs.URL, urls, "text[]"))
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, fmt.Errorf("query known job urls: %w", err)
 	}
-	defer rows.Close()
 
-	known := make(map[string]bool)
-
-	for rows.Next() {
-		var url string
-
-		if err := rows.Scan(&url); err != nil {
-			return nil, fmt.Errorf("scan known job url: %w", err)
-		}
-
-		known[url] = true
+	known := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		known[row.URL] = true
 	}
 
-	return known, rows.Err()
+	return known, nil
 }
 
 func WriteJobsToDatabase(ctx context.Context, jobs []jobs.Job) error {

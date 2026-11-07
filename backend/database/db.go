@@ -3,12 +3,14 @@ package database
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"log/slog"
 	"main/utils"
 	"sync"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 var cachedDb *sql.DB = nil
@@ -55,16 +57,39 @@ func db() *sql.DB {
 	return cachedDb
 }
 
+// openPool backs a *sql.DB with a pgxpool, so jet, migrate and faultdb keep working.
 func openPool() *sql.DB {
-	// sql.Open only fails for an unregistered driver, and pgx registers on import;
-	// a bad connection string surfaces on first use instead.
-	pool, _ := sql.Open("pgx", utils.Getenv("DATABASE_CONNECTION"))
+	dsn := utils.Getenv("DATABASE_CONNECTION")
+	cfg, err := pgxpool.ParseConfig(dsn)
 
-	pool.SetMaxOpenConns(5)
-	pool.SetMaxIdleConns(5)
-	pool.SetConnMaxLifetime(5 * time.Minute)
+	if err != nil {
+		// Lazy, so the parse error surfaces from the first query.
+		fallback, _ := sql.Open("pgx", dsn)
+		return fallback
+	}
 
-	return pool
+	cfg.MaxConns = 5
+	cfg.MaxConnLifetime = 5 * time.Minute
+
+	// Doesn't connect yet; only fails for a config ParseConfig didn't build.
+	pool, _ := pgxpool.NewWithConfig(context.Background(), cfg)
+
+	// pgxpool manages idle conns, as stdlib.OpenDBFromPool does.
+	db := sql.OpenDB(poolConnector{stdlib.GetPoolConnector(pool), pool})
+	db.SetMaxIdleConns(0)
+
+	return db
+}
+
+// poolConnector closes the pgxpool when the *sql.DB closes.
+type poolConnector struct {
+	driver.Connector
+	pool *pgxpool.Pool
+}
+
+func (c poolConnector) Close() error {
+	c.pool.Close()
+	return nil
 }
 
 // DB exposes the shared pool for tests in other packages that set up rows

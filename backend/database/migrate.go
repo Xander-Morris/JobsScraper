@@ -11,6 +11,9 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
+// Regenerates internal/gen from the migrations; needs a Postgres, see scripts/gen-db.sh.
+//go:generate bash ../scripts/gen-db.sh
+
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 

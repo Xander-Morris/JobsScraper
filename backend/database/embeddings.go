@@ -2,11 +2,13 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
+	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
 
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 	"main/llm"
 )
 
@@ -32,22 +34,24 @@ func EmbedPendingJobs(ctx context.Context) error {
 }
 
 func embedNextJobBatch(ctx context.Context) (int, error) {
-	rows, err := db().QueryContext(ctx,
-		`SELECT id, title, description FROM jobs WHERE embedding IS NULL AND coalesce(description, '') <> '' LIMIT $1`,
-		embedJobsBatchSize)
+	var pending []model.Jobs
 
-	if err != nil {
+	jobs := table.Jobs
+	stmt := pg.SELECT(jobs.ID, jobs.Title, jobs.Description).FROM(jobs).
+		WHERE(jobs.Embedding.IS_NULL().AND(pg.StringExp(pg.COALESCE(jobs.Description, pg.String(""))).NOT_EQ(pg.String("")))).
+		LIMIT(embedJobsBatchSize)
+
+	if err := stmt.QueryContext(ctx, db(), &pending); err != nil {
 		return 0, fmt.Errorf("query jobs pending embedding: %w", err)
 	}
 
-	ids, texts, err := scanPendingJobs(rows)
-
-	if err != nil {
-		return 0, err
+	if len(pending) == 0 {
+		return 0, nil
 	}
 
-	if len(ids) == 0 {
-		return 0, nil
+	texts := make([]string, len(pending))
+	for i, job := range pending {
+		texts[i] = jobEmbeddingText(job.Title, deref(job.Description))
 	}
 
 	embeddings, err := llm.EmbedTexts(ctx, texts)
@@ -56,14 +60,15 @@ func embedNextJobBatch(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("embed jobs: %w", err)
 	}
 
-	for i, id := range ids {
-		if _, err := db().ExecContext(ctx, `UPDATE jobs SET embedding = $1 WHERE id = $2`,
-			pgvector.NewVector(embeddings[i]), id); err != nil {
+	for i, job := range pending {
+		if _, err := exec(ctx, db(), jobs.UPDATE().
+			SET(jobs.Embedding.SET(pg.StringExp(arg(pgvector.NewVector(embeddings[i]), "vector")))).
+			WHERE(jobs.ID.EQ(pg.Int32(job.ID)))); err != nil {
 			return 0, fmt.Errorf("save job embedding: %w", err)
 		}
 	}
 
-	return len(ids), nil
+	return len(pending), nil
 }
 
 // jobEmbeddingText is the title plus the opening of the description, where role, stack, and requirements usually are.
@@ -75,26 +80,4 @@ func jobEmbeddingText(title, description string) string {
 	}
 
 	return string(text)
-}
-
-func scanPendingJobs(rows *sql.Rows) (ids []int64, texts []string, err error) {
-	defer rows.Close()
-
-	for rows.Next() {
-		var id int64
-		var title, description string
-
-		if err := rows.Scan(&id, &title, &description); err != nil {
-			return nil, nil, fmt.Errorf("scan pending job: %w", err)
-		}
-
-		ids = append(ids, id)
-		texts = append(texts, jobEmbeddingText(title, description))
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("iterate pending jobs: %w", err)
-	}
-
-	return ids, texts, nil
 }

@@ -3,6 +3,11 @@ package database
 import (
 	"context"
 	"time"
+
+	pg "github.com/go-jet/jet/v2/postgres"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 // DigestProfile is a profile opted into the job-match email digest.
@@ -13,33 +18,35 @@ type DigestProfile struct {
 }
 
 func ListProfilesForDigest(ctx context.Context) ([]DigestProfile, error) {
-	rows, err := db().QueryContext(ctx, `SELECT id, email, last_digest_sent_at FROM profiles WHERE email_notifications_enabled`)
+	var rows []model.Profiles
 
-	if err != nil {
+	profiles := table.Profiles
+	stmt := pg.SELECT(profiles.ID, profiles.Email, profiles.LastDigestSentAt).
+		FROM(profiles).
+		WHERE(profiles.EmailNotificationsEnabled)
+
+	if err := stmt.QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	var digestProfiles []DigestProfile
 
-	var profiles []DigestProfile
-
-	for rows.Next() {
-		var p DigestProfile
-		var lastSent *time.Time
-
-		if err := rows.Scan(&p.ProfileID, &p.Email, &lastSent); err != nil {
-			return nil, err
-		}
-
-		p.LastDigestSentAt = lastSent
-		profiles = append(profiles, p)
+	for _, row := range rows {
+		digestProfiles = append(digestProfiles, DigestProfile{
+			ProfileID:        int64(row.ID),
+			Email:            row.Email,
+			LastDigestSentAt: row.LastDigestSentAt,
+		})
 	}
 
-	return profiles, rows.Err()
+	return digestProfiles, nil
 }
 
 func MarkDigestSent(ctx context.Context, profileID int64, sentAt time.Time) error {
-	_, err := db().ExecContext(ctx, `UPDATE profiles SET last_digest_sent_at = $1 WHERE id = $2`, sentAt, profileID)
+	profiles := table.Profiles
+	_, err := exec(ctx, db(), profiles.UPDATE().
+		SET(profiles.LastDigestSentAt.SET(pg.TimestampzT(sentAt))).
+		WHERE(profiles.ID.EQ(pg.Int(profileID))))
 
 	return err
 }
@@ -47,7 +54,10 @@ func MarkDigestSent(ctx context.Context, profileID int64, sentAt time.Time) erro
 // DisableEmailDigest turns off the job-match digest for a profile. Used by the
 // one-click unsubscribe link in digest emails.
 func DisableEmailDigest(ctx context.Context, profileID int64) error {
-	_, err := db().ExecContext(ctx, `UPDATE profiles SET email_notifications_enabled = FALSE WHERE id = $1`, profileID)
+	profiles := table.Profiles
+	_, err := exec(ctx, db(), profiles.UPDATE().
+		SET(profiles.EmailNotificationsEnabled.SET(pg.Bool(false))).
+		WHERE(profiles.ID.EQ(pg.Int(profileID))))
 
 	return err
 }

@@ -1,18 +1,18 @@
 package database
 
 import (
-	"cmp"
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"main/jobs"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 
+	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
+
+	"main/internal/gen/model"
+	"main/internal/gen/table"
 )
 
 type SortOrder string
@@ -38,10 +38,10 @@ var jobTypePatterns = map[JobTypeFilter]*regexp.Regexp{
 	JobTypeFilterFullTime: regexp.MustCompile(`(?i)\bfull[-_ ]?time\b`),
 }
 
-var jobTypeColumns = map[JobTypeFilter]string{
-	JobTypeFilterIntern:   "j.is_intern",
-	JobTypeFilterPartTime: "j.is_part_time",
-	JobTypeFilterFullTime: "j.is_full_time",
+var jobTypeColumns = map[JobTypeFilter]pg.ColumnBool{
+	JobTypeFilterIntern:   table.Jobs.IsIntern,
+	JobTypeFilterPartTime: table.Jobs.IsPartTime,
+	JobTypeFilterFullTime: table.Jobs.IsFullTime,
 }
 
 // jobTypeFlags are stored on each job at write time, so search filters on a column instead of a regex per row.
@@ -104,52 +104,193 @@ type SearchResult struct {
 	Total int
 }
 
-// Display columns shared by search results and job detail; detail adds description.
-const jobColumns = `j.id, j.title, j.company, COALESCE(j.location, ''), j.workplace_type,
-	j.salary_min, j.salary_max, j.posted_at, j.url`
+// jobDisplayColumns are shared by search results and job detail; detail adds description.
+var jobDisplayColumns = pg.ColumnList{table.Jobs.ID, table.Jobs.Title, table.Jobs.Company, table.Jobs.Location,
+	table.Jobs.WorkplaceType, table.Jobs.SalaryMin, table.Jobs.SalaryMax, table.Jobs.PostedAt, table.Jobs.URL}
 
-const jobTagsColumn = `COALESCE((SELECT json_agg(t.tag ORDER BY jt.tag_id) FROM job_tags jt
-	JOIN tags t ON t.id = jt.tag_id WHERE jt.job_id = j.id), '[]')`
+// Typed NULLs, since a bare NULL projection has no type to scan by.
+var (
+	nullReal = pg.RawFloat("NULL::real")
+	nullInt  = pg.RawInt("NULL::int")
+)
+
+// jobResult is one row of job search or detail.
+type jobResult = struct {
+	model.Jobs
+	MatchScore   *float64
+	MatchPercent *int32
+	TagList      string
+	Applied      bool
+	Total        int
+}
+
+func toJob(r jobResult) (jobs.Job, error) {
+	job := jobs.Job{
+		ID:            int64(r.ID),
+		Title:         r.Title,
+		Company:       r.Company,
+		Location:      deref(r.Location),
+		WorkplaceType: jobs.WorkplaceType(r.WorkplaceType),
+		SalaryMin:     intPtr(r.SalaryMin),
+		SalaryMax:     intPtr(r.SalaryMax),
+		PostedAt:      deref(r.PostedAt),
+		URL:           r.URL,
+		Description:   deref(r.Description),
+		MatchScore:    r.MatchScore,
+		MatchPercent:  intPtr(r.MatchPercent),
+		Applied:       r.Applied,
+	}
+
+	if err := decodeJSON(&r.TagList, &job.Tags, "tags"); err != nil {
+		return jobs.Job{}, err
+	}
+
+	return job, nil
+}
+
+func intPtr(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+
+	return new(int(*v))
+}
+
+// jobTags is the job's tags as JSON array text, in tag id order.
+func jobTags() pg.Expression {
+	jobTags, tags := table.JobTags, table.Tags
+	agg := pg.CustomExpression(pg.Token("json_agg("), tags.Tag, pg.Token("ORDER BY"), jobTags.TagID, pg.Token(")"))
+
+	return pg.CAST(pg.COALESCE(
+		scalar(pg.SELECT(agg).FROM(jobTags.INNER_JOIN(tags, tags.ID.EQ(jobTags.TagID))).WHERE(jobTags.JobID.EQ(table.Jobs.ID))),
+		pg.Raw("'[]'"),
+	)).AS_TEXT()
+}
+
+// applied is whether profileID marked the job applied; always false for anonymous callers.
+func applied(profileID int64) pg.BoolExpression {
+	if profileID == 0 {
+		return pg.RawBool("false")
+	}
+
+	applications := table.ProfileJobApplications
+
+	return pg.EXISTS(pg.SELECT(applications.ID).FROM(applications).
+		WHERE(applications.ProfileID.EQ(pg.Int(profileID)).AND(applications.JobID.EQ(table.Jobs.ID))))
+}
+
+// resumeScore scores the job against the caller's resume; nil when there's no resume to score against.
+func resumeScore(embedding *pgvector.Vector, query string) pg.FloatExpression {
+	j := table.Jobs
+
+	switch {
+	case embedding != nil:
+		return pg.FloatExp(pg.CASE().WHEN(j.Embedding.IS_NOT_NULL()).THEN(num(1).SUB(cosineDistance(j.Embedding, *embedding))))
+	case query != "":
+		return pg.FloatExp(pg.Func("ts_rank", j.SearchVector,
+			pg.Raw("(SELECT websearch_to_tsquery('english', #query))", pg.RawArgs{"#query": query}), num(1)))
+	default:
+		return nil
+	}
+}
+
+// resumeRank scores every listable job once (scored) and ranks those scores (ranked),
+// so match_percent reads the same on any page, filter, or sort.
+type resumeRank struct {
+	scored, ranked     pg.CommonTableExpression
+	scoredID, rankedID pg.ColumnInteger
+	score, pct         pg.ColumnFloat
+}
+
+func newResumeRank() *resumeRank {
+	j := table.Jobs
+	r := &resumeRank{scored: pg.CTE("scored"), ranked: pg.CTE("ranked")}
+	r.scoredID, r.score = j.ID.From(r.scored), pg.FloatColumn("score").From(r.scored)
+	r.rankedID, r.pct = j.ID.From(r.ranked), pg.FloatColumn("pct").From(r.ranked)
+
+	return r
+}
+
+// with defines both CTEs, scoring only jobs at least as new as cutoff, the jobs search can list.
+func (r *resumeRank) with(score pg.FloatExpression, cutoff time.Time, stmt pg.Statement) pg.Statement {
+	j := table.Jobs
+
+	return pg.WITH(
+		r.scored.AS_MATERIALIZED(pg.SELECT(j.ID, score.AS("score")).FROM(j).WHERE(jobAge().GT_EQ(pg.TimestampzT(cutoff)))),
+		r.ranked.AS(pg.SELECT(r.scoredID, pg.PERCENT_RANK().OVER(pg.ORDER_BY(r.score)).AS("pct")).
+			FROM(r.scored).WHERE(r.score.IS_NOT_NULL())),
+	)(stmt)
+}
+
+func (r *resumeRank) percent() pg.IntegerExpression {
+	return pg.CAST(pg.FLOOR(r.pct.MUL(num(100)))).AS_INTEGER()
+}
 
 func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult, error) {
-	where, whereArgs, text := buildJobSearchWhere(params)
-	query, args := buildJobSearchSelect(params, where, whereArgs, text)
+	// Jobs kept past JobMaxAge only because a user acted on them stay out of search.
+	cutoff := time.Now().Add(-JobMaxAge)
+	where, text := buildJobSearchWhere(params, cutoff)
 
-	results, total, err := queryJobPage(ctx, query, args)
-	if err != nil {
+	var rows []jobResult
+	if err := buildJobSearchSelect(params, cutoff, where, text).QueryContext(ctx, db(), &rows); err != nil {
 		return nil, fmt.Errorf("search jobs: %w", err)
+	}
+
+	var results []jobs.Job
+	total := 0
+
+	for _, row := range rows {
+		job, err := toJob(row)
+		if err != nil {
+			return nil, fmt.Errorf("search jobs: %w", err)
+		}
+
+		results = append(results, job)
+		total = row.Total
 	}
 
 	// Past the last page no row carries the total, so count it separately.
 	if len(results) == 0 && params.Offset > 0 {
-		if total, err = countJobSearchResults(ctx, where, whereArgs); err != nil {
+		var count struct{ Total int }
+
+		stmt := pg.SELECT(pg.COUNT(pg.STAR).AS("total")).FROM(table.Jobs).WHERE(where)
+		if err := queryOne(ctx, db(), stmt, &count); err != nil {
 			return nil, fmt.Errorf("count jobs: %w", err)
 		}
+
+		total = count.Total
 	}
 
 	return &SearchResult{Jobs: results, Total: total}, nil
 }
 
 func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Job, error) {
-	args := []any{id}
-	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
-	matchScoreColumn := cmp.Or(resumeScore, "NULL::real")
-	percentColumn := "NULL::int"
-	with := ""
+	j := table.Jobs
+	score := resumeScore(params.ResumeEmbedding, params.ResumeQuery)
+	matchScore, percent := pg.FloatExpression(nullReal), pg.IntegerExpression(nullInt)
 
-	if resumeScore != "" {
-		args = append(args, time.Now().Add(-JobMaxAge))
-		with = scoredCTEs(resumeScore, len(args))
-		percentColumn = "(SELECT floor(r.pct * 100)::int FROM ranked r WHERE r.id = j.id)"
+	var rank *resumeRank
+	if score != nil {
+		rank = newResumeRank()
+		matchScore = score
+		percent = pg.IntExp(scalar(pg.SELECT(rank.percent()).FROM(rank.ranked).WHERE(rank.rankedID.EQ(j.ID))))
 	}
 
-	appliedColumn := appliedExpr(&args, params.ProfileID)
+	var stmt pg.Statement = pg.SELECT(jobDisplayColumns, j.Description, matchScore.AS("match_score"), percent.AS("match_percent"),
+		jobTags().AS("tag_list"), applied(params.ProfileID).AS("applied")).
+		FROM(j).
+		WHERE(j.ID.EQ(pg.Int(id)))
 
-	query := fmt.Sprintf(`%sSELECT %s, %s AS match_score, %s, %s, %s, COALESCE(j.description, '')
-		FROM jobs j WHERE j.id = $1`, with, jobColumns, matchScoreColumn, percentColumn, jobTagsColumn, appliedColumn)
+	if rank != nil {
+		stmt = rank.with(score, time.Now().Add(-JobMaxAge), stmt)
+	}
 
-	job, err := scanJob(db().QueryRowContext(ctx, query, args...), true)
+	var row jobResult
+	if err := queryOne(ctx, db(), stmt, &row); err != nil {
+		return nil, err
+	}
 
+	job, err := toJob(row)
 	if err != nil {
 		return nil, err
 	}
@@ -157,148 +298,99 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 	return &job, nil
 }
 
-// queryJobPage scans a search page whose rows each end with the pre-LIMIT total.
-func queryJobPage(ctx context.Context, query string, args []any) ([]jobs.Job, int, error) {
-	rows, err := db().QueryContext(ctx, query, args...)
-
-	if err != nil {
-		return nil, 0, err
-	}
-
-	defer rows.Close()
-
-	var results []jobs.Job
-	var total int
-
-	for rows.Next() {
-		job, err := scanJob(rows, false, &total)
-
-		if err != nil {
-			return nil, 0, fmt.Errorf("scan job row: %w", err)
-		}
-
-		results = append(results, job)
-	}
-
-	return results, total, rows.Err()
-}
-
-func countJobSearchResults(ctx context.Context, where string, args []any) (int, error) {
-	var total int
-
-	err := db().QueryRowContext(ctx, "SELECT COUNT(*) FROM jobs j"+where, args...).Scan(&total)
-
-	return total, err
-}
-
-// buildJobSearchWhere returns " WHERE ..." with the age cutoff always first, as $1, plus the
-// typed query, nil without one.
-func buildJobSearchWhere(params *JobSearchParams) (string, []any, *textSearch) {
-	var conditions []string
-	var args []any
-
-	// Jobs kept past JobMaxAge only because a user acted on them stay out of search.
-	args = append(args, time.Now().Add(-JobMaxAge))
-	conditions = append(conditions, fmt.Sprintf("%s >= $%d", jobAgeColumn, len(args)))
+// buildJobSearchWhere is the search filter, the age cutoff always first, plus the typed query, nil without one.
+func buildJobSearchWhere(params *JobSearchParams, cutoff time.Time) (pg.BoolExpression, *textSearch) {
+	j := table.Jobs
+	conditions := []pg.BoolExpression{jobAge().GT_EQ(pg.TimestampzT(cutoff))}
 
 	var text *textSearch
 
 	if terms := parseSearchQuery(params.SearchQuery); len(terms) > 0 {
-		text = newTextSearch(&args, terms, params.SearchEmbedding)
+		text = newTextSearch(terms, params.SearchEmbedding)
 		conditions = append(conditions, text.match())
 	}
 
 	if params.WorkplaceType != jobs.Unknown {
-		args = append(args, params.WorkplaceType)
-		conditions = append(conditions, fmt.Sprintf("j.workplace_type = $%d", len(args)))
+		conditions = append(conditions, j.WorkplaceType.EQ(pg.Int(int64(params.WorkplaceType))))
 	}
 
 	if column, ok := jobTypeColumns[params.JobType]; ok {
-		condition := column
+		condition := pg.BoolExpression(column)
 
 		// Intern takes precedence, so part/full-time exclude anything that also reads as an internship.
 		if params.JobType != JobTypeFilterIntern {
-			condition += " AND NOT " + jobTypeColumns[JobTypeFilterIntern]
+			condition = condition.AND(pg.NOT(jobTypeColumns[JobTypeFilterIntern]))
 		}
 
 		conditions = append(conditions, condition)
 	}
 
 	if params.MinSalary > 0 {
-		args = append(args, params.MinSalary)
-		conditions = append(conditions, fmt.Sprintf("j.salary_max >= $%d", len(args)))
+		conditions = append(conditions, j.SalaryMax.GT_EQ(pg.Int(int64(params.MinSalary))))
 	}
 
 	if params.MaxSalary > 0 {
-		args = append(args, params.MaxSalary)
-		conditions = append(conditions, fmt.Sprintf("j.salary_min <= $%d", len(args)))
+		conditions = append(conditions, j.SalaryMin.LT_EQ(pg.Int(int64(params.MaxSalary))))
 	}
 
 	if params.PostedAfter != nil {
-		args = append(args, *params.PostedAfter)
-		conditions = append(conditions, fmt.Sprintf("j.posted_at > $%d", len(args)))
+		conditions = append(conditions, j.PostedAt.GT(pg.TimestampzT(*params.PostedAfter)))
 	}
 
 	if params.FirstSeenAfter != nil {
-		args = append(args, *params.FirstSeenAfter)
-		conditions = append(conditions, fmt.Sprintf("j.first_seen_at > $%d", len(args)))
+		conditions = append(conditions, j.FirstSeenAt.GT(pg.TimestampzT(*params.FirstSeenAfter)))
 	}
 
 	if len(params.Tags) > 0 {
-		placeholders := make([]string, len(params.Tags))
+		jobTags, tags := table.JobTags, table.Tags
+		wanted := make([]pg.Expression, len(params.Tags))
 
 		for i, tag := range params.Tags {
-			args = append(args, tag)
-			placeholders[i] = fmt.Sprintf("$%d", len(args))
+			wanted[i] = pg.String(tag)
 		}
 
-		conditions = append(conditions, fmt.Sprintf(
-			`j.id IN (SELECT jt.job_id FROM job_tags jt JOIN tags t ON t.id = jt.tag_id
-				WHERE t.tag IN (%s) GROUP BY jt.job_id HAVING COUNT(DISTINCT t.tag) = %d)`,
-			strings.Join(placeholders, ", "), len(params.Tags),
-		))
+		conditions = append(conditions, j.ID.IN(pg.SELECT(jobTags.JobID).
+			FROM(jobTags.INNER_JOIN(tags, tags.ID.EQ(jobTags.TagID))).
+			WHERE(tags.Tag.IN(wanted...)).
+			GROUP_BY(jobTags.JobID).
+			HAVING(pg.COUNT(pg.DISTINCT(tags.Tag)).EQ(pg.Int(int64(len(params.Tags)))))))
 	}
 
-	return " WHERE " + strings.Join(conditions, " AND "), args, text
+	return pg.AND(conditions...), text
 }
 
 // buildJobSearchSelect sorts and pages over (id, sort_key, score) only, then fetches display
 // columns, percent, tags and applied for just the rows on the page.
-func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any, text *textSearch) (string, []any) {
-	args := slices.Clone(whereArgs)
-
+func buildJobSearchSelect(params *JobSearchParams, cutoff time.Time, where pg.BoolExpression, text *textSearch) pg.Statement {
+	j := table.Jobs
 	rankable := params.Sort != SortDate
-	hasSearchQuery := text != nil
 
 	// match_score shows as a fit signal even when sorting by date.
-	resumeScore := resumeScoreExpr(&args, params.ResumeEmbedding, params.ResumeQuery)
-	hasResumeScore := resumeScore != ""
+	score := resumeScore(params.ResumeEmbedding, params.ResumeQuery)
+	pageScore := pg.FloatExpression(nullReal)
+	from := pg.ReadableTable(j)
 
-	with, scoredJoin, score, percentJoin, percentColumn := "", "", "NULL::real", "", "NULL::int"
-
-	if hasResumeScore {
-		// $1 is the age cutoff, so scored covers exactly the jobs search can list.
-		with = scoredCTEs(resumeScore, 1)
-		scoredJoin = " JOIN scored s ON s.id = j.id"
-		score = "s.score"
-		percentJoin = " LEFT JOIN ranked r ON r.id = page.id"
-		percentColumn = "floor(r.pct * 100)::int"
+	var rank *resumeRank
+	if score != nil {
+		rank = newResumeRank()
+		from = j.INNER_JOIN(rank.scored, rank.scoredID.EQ(j.ID))
+		pageScore = rank.score
 	}
 
-	var sortKey string
+	var sortKey pg.Expression
 
 	switch {
-	case rankable && hasSearchQuery && hasResumeScore:
+	case rankable && text != nil && rank != nil:
 		// Typed search stays primary; resume score just nudges ties toward a
 		// good skill match, doesn't override an explicit query.
-		sortKey = fmt.Sprintf("%s + %g * coalesce(s.score, 0)", text.score(&args), resumeNudgeWeight)
-	case rankable && hasSearchQuery:
-		sortKey = text.score(&args)
-	case rankable && hasResumeScore:
+		sortKey = text.score().ADD(num(resumeNudgeWeight).MUL(pg.FloatExp(pg.COALESCE(rank.score, num(0)))))
+	case rankable && text != nil:
+		sortKey = text.score()
+	case rankable && rank != nil:
 		// NULLS LAST below puts jobs not embedded yet after scored ones.
-		sortKey = "s.score"
+		sortKey = rank.score
 	default:
-		sortKey = jobAgeColumn
+		sortKey = jobAge()
 	}
 
 	limit := params.Limit
@@ -306,131 +398,50 @@ func buildJobSearchSelect(params *JobSearchParams, where string, whereArgs []any
 		limit = DefaultSearchLimit
 	}
 
-	args = append(args, limit, max(params.Offset, 0))
-	page := fmt.Sprintf(`SELECT j.id, %s AS sort_key, %s AS score, count(*) OVER () AS total FROM jobs j%s%s
-		ORDER BY sort_key DESC NULLS LAST, j.id DESC LIMIT $%d OFFSET $%d`,
-		sortKey, score, scoredJoin, where, len(args)-1, len(args))
+	page := pg.SELECT(j.ID, sortKey.AS("sort_key"), pageScore.AS("score"), pg.COUNT(pg.STAR).OVER().AS("total")).
+		FROM(from).
+		WHERE(where).
+		ORDER_BY(pg.FloatColumn("sort_key").DESC().NULLS_LAST(), j.ID.DESC()).
+		LIMIT(int64(limit)).
+		OFFSET(int64(max(params.Offset, 0))).
+		AsTable("page")
 
-	appliedColumn := appliedExpr(&args, params.ProfileID)
+	pageID, pageSortKey := j.ID.From(page), pg.FloatColumn("sort_key").From(page)
+	source := page.INNER_JOIN(j, j.ID.EQ(pageID))
+	percent := pg.IntegerExpression(nullInt)
 
-	query := fmt.Sprintf(`%sSELECT %s, page.score AS match_score, %s, %s, %s, page.total
-		FROM (%s) page JOIN jobs j ON j.id = page.id%s
-		ORDER BY page.sort_key DESC NULLS LAST, page.id DESC`,
-		with, jobColumns, percentColumn, jobTagsColumn, appliedColumn, page, percentJoin)
-
-	return query, args
-}
-
-// scoredCTEs scores every listable job once (scored) and ranks those scores (ranked),
-// so match_percent reads the same on any page, filter, or sort. ageArg is the cutoff's $n.
-func scoredCTEs(score string, ageArg int) string {
-	return fmt.Sprintf(`WITH scored AS MATERIALIZED (
-			SELECT j.id, %s AS score FROM jobs j WHERE %s >= $%d),
-		ranked AS (SELECT id, percent_rank() OVER (ORDER BY score) AS pct FROM scored WHERE score IS NOT NULL)
-		`, score, jobAgeColumn, ageArg)
-}
-
-// resumeScoreExpr scores j against the caller's resume, appending its arg to args.
-// Empty when there's no resume to score against.
-func resumeScoreExpr(args *[]any, embedding *pgvector.Vector, query string) string {
-	switch {
-	case embedding != nil:
-		*args = append(*args, *embedding)
-		return fmt.Sprintf("CASE WHEN j.embedding IS NOT NULL THEN 1 - (j.embedding <=> $%d) ELSE NULL END", len(*args))
-	case query != "":
-		*args = append(*args, query)
-		return fmt.Sprintf("ts_rank(j.search_vector, (SELECT websearch_to_tsquery('english', $%d)), 1)", len(*args))
-	default:
-		return ""
-	}
-}
-
-// appliedExpr is whether profileID marked j applied; always false for anonymous callers.
-func appliedExpr(args *[]any, profileID int64) string {
-	if profileID == 0 {
-		return "false"
+	if rank != nil {
+		source = source.LEFT_JOIN(rank.ranked, rank.rankedID.EQ(pageID))
+		percent = rank.percent()
 	}
 
-	*args = append(*args, profileID)
+	var stmt pg.Statement = pg.SELECT(jobDisplayColumns,
+		pg.FloatColumn("score").From(page).AS("match_score"),
+		percent.AS("match_percent"),
+		jobTags().AS("tag_list"),
+		applied(params.ProfileID).AS("applied"),
+		pg.IntegerColumn("total").From(page).AS("total"),
+	).FROM(source).ORDER_BY(pageSortKey.DESC().NULLS_LAST(), pageID.DESC())
 
-	return fmt.Sprintf("EXISTS (SELECT 1 FROM profile_job_applications a WHERE a.profile_id = $%d AND a.job_id = j.id)", len(*args))
-}
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-// scanJob reads jobColumns, match_score, match_percent, tags and applied, plus description
-// when withDescription, then any extra trailing columns into extra.
-func scanJob(row rowScanner, withDescription bool, extra ...any) (jobs.Job, error) {
-	var job jobs.Job
-	var salaryMin, salaryMax, matchPercent sql.NullInt64
-	var postedAt sql.NullTime
-	var matchScore sql.NullFloat64
-	var tags []byte
-
-	dest := []any{&job.ID, &job.Title, &job.Company, &job.Location, &job.WorkplaceType,
-		&salaryMin, &salaryMax, &postedAt, &job.URL, &matchScore, &matchPercent, &tags, &job.Applied}
-
-	if withDescription {
-		dest = append(dest, &job.Description)
+	if rank != nil {
+		stmt = rank.with(score, cutoff, stmt)
 	}
 
-	if err := row.Scan(append(dest, extra...)...); err != nil {
-		return jobs.Job{}, err
-	}
-
-	if err := json.Unmarshal(tags, &job.Tags); err != nil {
-		return jobs.Job{}, fmt.Errorf("decode tags: %w", err)
-	}
-
-	if salaryMin.Valid {
-		min := int(salaryMin.Int64)
-		job.SalaryMin = &min
-	}
-
-	if salaryMax.Valid {
-		max := int(salaryMax.Int64)
-		job.SalaryMax = &max
-	}
-
-	if matchScore.Valid {
-		score := matchScore.Float64
-		job.MatchScore = &score
-	}
-
-	if matchPercent.Valid {
-		percent := int(matchPercent.Int64)
-		job.MatchPercent = &percent
-	}
-
-	if postedAt.Valid {
-		job.PostedAt = postedAt.Time
-	}
-
-	return job, nil
+	return stmt
 }
 
 func FetchAllUniqueTags(ctx context.Context) ([]string, error) {
-	rows, err := db().QueryContext(ctx, "SELECT tag FROM tags ORDER BY tag")
+	var rows []model.Tags
 
-	if err != nil {
+	if err := pg.SELECT(table.Tags.Tag).FROM(table.Tags).ORDER_BY(table.Tags.Tag).QueryContext(ctx, db(), &rows); err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
+	var tags []string
 
-	var res []string
-
-	for rows.Next() {
-		var tag string
-
-		if err := rows.Scan(&tag); err != nil {
-			return nil, err
-		}
-
-		res = append(res, tag)
+	for _, row := range rows {
+		tags = append(tags, row.Tag)
 	}
 
-	return res, rows.Err()
+	return tags, nil
 }
