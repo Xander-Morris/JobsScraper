@@ -42,7 +42,7 @@ type greenhouseResponse struct {
 
 type greenhouseJob struct {
 	ID             int64                  `json:"id"`
-	Title         string                 `json:"title"`
+	Title          string                 `json:"title"`
 	AbsoluteURL    string                 `json:"absolute_url"`
 	FirstPublished string                 `json:"first_published"`
 	Content        string                 `json:"content"`
