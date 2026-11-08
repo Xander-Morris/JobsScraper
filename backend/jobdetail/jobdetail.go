@@ -71,11 +71,7 @@ func get(ctx context.Context, rawURL, accept string) (*http.Response, *url.URL, 
 		return nil, nil, ErrUnavailable
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
+	req := (&http.Request{Method: http.MethodGet, URL: parsed, Host: parsed.Host, Header: http.Header{}}).WithContext(ctx)
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", accept)
 

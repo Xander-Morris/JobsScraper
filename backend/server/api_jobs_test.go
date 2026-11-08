@@ -237,6 +237,10 @@ func TestAPIGenerateApplicationContent(t *testing.T) {
 		t.Errorf("prompt missing live description: %q", prompt)
 	}
 
+	// A posting that can't be fetched still leaves title, company and tags to write from.
+	stubDescription(t, func(string, string) (string, error) { return "", errors.New("timeout") })
+	a.must(http.StatusOK, "POST", path, nil, &got)
+
 	fakeLLM(t, static(""))
 	a.must(http.StatusBadGateway, "POST", path, nil, nil)
 }
@@ -434,5 +438,39 @@ func TestJobDescriptionRedisCache(t *testing.T) {
 
 	if ttl := mr.TTL(descriptionKey(42)); ttl != missingDescriptionTTL {
 		t.Errorf("ttl = %v, want %v", ttl, missingDescriptionTTL)
+	}
+}
+
+func TestJobDescriptionCacheLimits(t *testing.T) {
+	stubDescription(t, func(string, string) (string, error) { return "text", nil })
+
+	localDescriptions.Lock()
+	for i := range maxLocalDescriptions {
+		localDescriptions.entries[int64(-i)] = cachedDescription{}
+	}
+	localDescriptions.Unlock()
+
+	if _, err := jobDescription(t.Context(), &jobs.Job{ID: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	localDescriptions.Lock()
+	n := len(localDescriptions.entries)
+	localDescriptions.Unlock()
+
+	if n != 1 {
+		t.Errorf("local entries = %d, want 1 after a full cache is cleared", n)
+	}
+
+	// A Redis outage just means no caching.
+	mr := miniredis.RunT(t)
+	mr.SetError("down")
+	prevClient := redisClient
+	redisOnce, redisClient = sync.Once{}, redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	redisOnce.Do(func() {})
+	t.Cleanup(func() { redisOnce, redisClient = sync.Once{}, prevClient })
+
+	if text, err := jobDescription(t.Context(), &jobs.Job{ID: 2}); err != nil || text != "text" {
+		t.Errorf("jobDescription with Redis down = %q, %v", text, err)
 	}
 }

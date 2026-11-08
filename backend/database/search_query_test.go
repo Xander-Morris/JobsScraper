@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"main/jobs"
 	"math"
 	"slices"
@@ -190,5 +191,30 @@ func TestTermWeightsCachedUntilJobsChange(t *testing.T) {
 
 	if cached != 0 {
 		t.Errorf("cached weights after write = %d, want 0", cached)
+	}
+}
+
+func TestTermWeightsCacheLimitAndEmptyTable(t *testing.T) {
+	newTestDB(t)
+	forgetTermWeights()
+
+	termWeights.Lock()
+	for i := range maxCachedTermWeights {
+		termWeights.entries[fmt.Sprint(i)] = cachedWeight{}
+	}
+	termWeights.Unlock()
+
+	// No jobs: every weight is 0, and scoring still builds a valid query.
+	result, err := SearchForJobs(t.Context(), &JobSearchParams{SearchQuery: "go"})
+	if err != nil || result.Total != 0 {
+		t.Fatalf("SearchForJobs = %+v, %v", result, err)
+	}
+
+	termWeights.Lock()
+	cached := len(termWeights.entries)
+	termWeights.Unlock()
+
+	if cached != 1 {
+		t.Errorf("cached weights = %d, want 1 after a full cache is cleared", cached)
 	}
 }

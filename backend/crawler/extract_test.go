@@ -1,10 +1,12 @@
 package crawler
 
 import (
+	"errors"
 	"net/url"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"main/jobs"
@@ -232,5 +234,12 @@ func assertJobEqual(t *testing.T, got, want jobs.Job) {
 
 	if !equalIntPtr(got.SalaryMin, want.SalaryMin) || !equalIntPtr(got.SalaryMax, want.SalaryMax) {
 		t.Errorf("salary = %v-%v, want %v-%v", deref(got.SalaryMin), deref(got.SalaryMax), deref(want.SalaryMin), deref(want.SalaryMax))
+	}
+}
+
+func TestPostingDescriptionReadError(t *testing.T) {
+	base, _ := url.Parse("https://example.com/job")
+	if _, ok := PostingDescription(iotest.ErrReader(errors.New("reset")), base); ok {
+		t.Error("PostingDescription succeeded on a failed read")
 	}
 }

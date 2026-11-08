@@ -58,6 +58,8 @@ func TestFetchFromDetailAPI(t *testing.T) {
 			w.Write([]byte(`{"id":1,"content":"&lt;ul&gt;&lt;li&gt;Write Go&lt;/li&gt;&lt;/ul&gt;"}`))
 		case "/boards/acme/jobs/2":
 			w.Write([]byte(`{"id":2,"content":""}`))
+		case "/boards/acme/jobs/3":
+			w.Write([]byte(`<html>not json</html>`))
 		default:
 			http.Error(w, "boom", http.StatusInternalServerError)
 		}
@@ -70,6 +72,10 @@ func TestFetchFromDetailAPI(t *testing.T) {
 
 	if _, err := Fetch(t.Context(), "", base+"/boards/acme/jobs/2"); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("empty content: err = %v, want ErrUnavailable", err)
+	}
+
+	if _, err := Fetch(t.Context(), "", base+"/boards/acme/jobs/3"); err == nil || errors.Is(err, ErrUnavailable) {
+		t.Errorf("bad JSON: err = %v, want decode error", err)
 	}
 
 	// A server error is transient, not "unavailable", so it isn't cached as missing.
@@ -89,7 +95,7 @@ func TestFetchRejectsBadURLs(t *testing.T) {
 func TestPublicOnly(t *testing.T) {
 	for address, wantOK := range map[string]bool{
 		"93.184.216.34:443": true, "127.0.0.1:80": false, "10.0.0.5:443": false, "192.168.1.1:80": false,
-		"169.254.169.254:80": false, "[::1]:443": false, "0.0.0.0:80": false, "[fd00::1]:443": false,
+		"169.254.169.254:80": false, "[::1]:443": false, "0.0.0.0:80": false, "[fd00::1]:443": false, "no-port": false,
 	} {
 		if err := publicOnly("tcp", address, nil); (err == nil) != wantOK {
 			t.Errorf("%s: err = %v, want ok %v", address, err, wantOK)
