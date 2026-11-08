@@ -229,7 +229,8 @@ func TestFaultsJobs(t *testing.T) {
 			{Title: "Old", Company: "Acme", URL: fmt.Sprintf("https://example.com/old%d", i), Tags: []string{"old"}, PostedAt: time.Now().Add(-JobMaxAge - time.Hour), Description: "Legacy"},
 		}
 	}
-	seedJobs(t, batch()...)
+	seeded := batch()
+	seedJobs(t, seeded...)
 	jobID := jobIDByURL(t, "https://example.com/f1")
 	emb := pgvector.NewVector(unitVector(0))
 	posted := time.Now().Add(-time.Hour * 24 * 365)
@@ -257,7 +258,7 @@ func TestFaultsJobs(t *testing.T) {
 	faultdb.Sweep(t, inj, func() {
 		_, err := DB().ExecContext(ctx, "UPDATE jobs SET embedding = NULL")
 		mustDo(t, err)
-	}, func() error { return EmbedPendingJobs(ctx) })
+	}, func() error { return EmbedPendingJobs(ctx, seeded) })
 }
 
 func TestFaultsTailoredAndTrivia(t *testing.T) {

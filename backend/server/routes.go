@@ -6,6 +6,7 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/jobs", withOptionalAuth(handleSearchJobs))
 	mux.HandleFunc("GET /api/jobs/{id}", withOptionalAuth(handleGetJob))
+	mux.HandleFunc("GET /api/jobs/{id}/description", handleGetJobDescription)
 	mux.HandleFunc("POST /api/jobs/{id}/generate", limitLLM(withAuth(handleGenerateApplicationContent)))
 	mux.HandleFunc("GET /api/jobs/{id}/tailored-resume", withAuth(handleGetTailoredResume))
 	mux.HandleFunc("POST /api/jobs/{id}/tailored-resume", limitLLM(withAuth(handleGenerateTailoredResume)))

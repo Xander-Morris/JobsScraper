@@ -1,12 +1,14 @@
 import { ApiError, apiFetch } from './client'
 import {
   generatedContentSchema,
+  jobDescriptionSchema,
   jobSchema,
   jobSearchResponseSchema,
   statusResponseSchema,
   tailoredResumeSchema,
   type GeneratedContent,
   type Job,
+  type JobDescription,
   type JobSearchResponse,
   type TailoredResume,
   type TailoredResumeContent
@@ -49,6 +51,10 @@ export function fetchJobs(params: JobSearchParams = {}): Promise<JobSearchRespon
 
 export function fetchJob(id: number): Promise<Job> {
   return apiFetch(`/api/jobs/${id}`, jobSchema)
+}
+
+export function fetchJobDescription(id: number): Promise<JobDescription> {
+  return apiFetch(`/api/jobs/${id}/description`, jobDescriptionSchema)
 }
 
 export function markJobApplied(id: number) {

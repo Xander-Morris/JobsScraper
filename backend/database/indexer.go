@@ -104,7 +104,7 @@ type SearchResult struct {
 	Total int
 }
 
-// jobDisplayColumns are shared by search results and job detail; detail adds description.
+// jobDisplayColumns are shared by search results and job detail.
 var jobDisplayColumns = pg.ColumnList{table.Jobs.ID, table.Jobs.Title, table.Jobs.Company, table.Jobs.Location,
 	table.Jobs.WorkplaceType, table.Jobs.SalaryMin, table.Jobs.SalaryMax, table.Jobs.PostedAt, table.Jobs.URL}
 
@@ -135,7 +135,7 @@ func toJob(r jobResult) (jobs.Job, error) {
 		SalaryMax:     intPtr(r.SalaryMax),
 		PostedAt:      deref(r.PostedAt),
 		URL:           r.URL,
-		Description:   deref(r.Description),
+		DetailURL:     deref(r.DetailURL),
 		MatchScore:    r.MatchScore,
 		MatchPercent:  intPtr(r.MatchPercent),
 		Applied:       r.Applied,
@@ -231,6 +231,12 @@ func SearchForJobs(ctx context.Context, params *JobSearchParams) (*SearchResult,
 	cutoff := time.Now().Add(-JobMaxAge)
 	where, text := buildJobSearchWhere(params, cutoff)
 
+	if text != nil {
+		if err := text.loadWeights(ctx); err != nil {
+			return nil, fmt.Errorf("search jobs: %w", err)
+		}
+	}
+
 	var rows []jobResult
 	if err := buildJobSearchSelect(params, cutoff, where, text).QueryContext(ctx, db(), &rows); err != nil {
 		return nil, fmt.Errorf("search jobs: %w", err)
@@ -276,7 +282,7 @@ func GetJobByID(ctx context.Context, id int64, params JobDetailParams) (*jobs.Jo
 		percent = pg.IntExp(scalar(pg.SELECT(rank.percent()).FROM(rank.ranked).WHERE(rank.rankedID.EQ(j.ID))))
 	}
 
-	var stmt pg.Statement = pg.SELECT(jobDisplayColumns, j.Description, matchScore.AS("match_score"), percent.AS("match_percent"),
+	var stmt pg.Statement = pg.SELECT(jobDisplayColumns, j.DetailURL, matchScore.AS("match_score"), percent.AS("match_percent"),
 		jobTags().AS("tag_list"), applied(params.ProfileID).AS("applied")).
 		FROM(j).
 		WHERE(j.ID.EQ(pg.Int(id)))

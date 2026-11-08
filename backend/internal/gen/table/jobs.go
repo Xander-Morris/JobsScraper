@@ -26,13 +26,13 @@ type jobsTable struct {
 	SalaryMax     postgres.ColumnInteger
 	PostedAt      postgres.ColumnTimestampz
 	URL           postgres.ColumnString
-	Description   postgres.ColumnString
 	Embedding     postgres.ColumnString
 	FirstSeenAt   postgres.ColumnTimestampz
 	IsIntern      postgres.ColumnBool
 	IsPartTime    postgres.ColumnBool
 	IsFullTime    postgres.ColumnBool
 	SearchVector  postgres.ColumnString
+	DetailURL     postgres.ColumnString
 
 	AllColumns     postgres.ColumnList
 	MutableColumns postgres.ColumnList
@@ -83,16 +83,16 @@ func newJobsTableImpl(schemaName, tableName, alias string) jobsTable {
 		SalaryMaxColumn     = postgres.IntegerColumn("salary_max")
 		PostedAtColumn      = postgres.TimestampzColumn("posted_at")
 		URLColumn           = postgres.StringColumn("url")
-		DescriptionColumn   = postgres.StringColumn("description")
 		EmbeddingColumn     = postgres.StringColumn("embedding")
 		FirstSeenAtColumn   = postgres.TimestampzColumn("first_seen_at")
 		IsInternColumn      = postgres.BoolColumn("is_intern")
 		IsPartTimeColumn    = postgres.BoolColumn("is_part_time")
 		IsFullTimeColumn    = postgres.BoolColumn("is_full_time")
 		SearchVectorColumn  = postgres.StringColumn("search_vector")
-		allColumns          = postgres.ColumnList{IDColumn, TitleColumn, CompanyColumn, LocationColumn, WorkplaceTypeColumn, SalaryMinColumn, SalaryMaxColumn, PostedAtColumn, URLColumn, DescriptionColumn, EmbeddingColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn, SearchVectorColumn}
-		mutableColumns      = postgres.ColumnList{TitleColumn, CompanyColumn, LocationColumn, WorkplaceTypeColumn, SalaryMinColumn, SalaryMaxColumn, PostedAtColumn, URLColumn, DescriptionColumn, EmbeddingColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn}
-		defaultColumns      = postgres.ColumnList{WorkplaceTypeColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn, SearchVectorColumn}
+		DetailURLColumn     = postgres.StringColumn("detail_url")
+		allColumns          = postgres.ColumnList{IDColumn, TitleColumn, CompanyColumn, LocationColumn, WorkplaceTypeColumn, SalaryMinColumn, SalaryMaxColumn, PostedAtColumn, URLColumn, EmbeddingColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn, SearchVectorColumn, DetailURLColumn}
+		mutableColumns      = postgres.ColumnList{TitleColumn, CompanyColumn, LocationColumn, WorkplaceTypeColumn, SalaryMinColumn, SalaryMaxColumn, PostedAtColumn, URLColumn, EmbeddingColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn, SearchVectorColumn, DetailURLColumn}
+		defaultColumns      = postgres.ColumnList{WorkplaceTypeColumn, FirstSeenAtColumn, IsInternColumn, IsPartTimeColumn, IsFullTimeColumn}
 	)
 
 	return jobsTable{
@@ -108,13 +108,13 @@ func newJobsTableImpl(schemaName, tableName, alias string) jobsTable {
 		SalaryMax:     SalaryMaxColumn,
 		PostedAt:      PostedAtColumn,
 		URL:           URLColumn,
-		Description:   DescriptionColumn,
 		Embedding:     EmbeddingColumn,
 		FirstSeenAt:   FirstSeenAtColumn,
 		IsIntern:      IsInternColumn,
 		IsPartTime:    IsPartTimeColumn,
 		IsFullTime:    IsFullTimeColumn,
 		SearchVector:  SearchVectorColumn,
+		DetailURL:     DetailURLColumn,
 
 		AllColumns:     allColumns,
 		MutableColumns: mutableColumns,

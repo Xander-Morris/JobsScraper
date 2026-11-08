@@ -82,6 +82,22 @@ func resolveLink(base *url.URL, href string) string {
 	return resolved.String()
 }
 
+// PostingDescription is the first JobPosting description on the HTML page at base, as plain text.
+func PostingDescription(r io.Reader, base *url.URL) (string, bool) {
+	parsed, err := parsePage(r, base)
+	if err != nil {
+		return "", false
+	}
+
+	for _, posting := range parsed.postings {
+		if description := truncateRunes(utils.StripHTML(text(posting.Description)), maxDescriptionRunes); description != "" {
+			return description, true
+		}
+	}
+
+	return "", false
+}
+
 // jobPosting is a schema.org JobPosting. Most fields come in several shapes, so they stay raw.
 type jobPosting struct {
 	Title                         json.RawMessage `json:"title"`
@@ -162,7 +178,7 @@ func toPosting(v map[string]any) (jobPosting, bool) {
 
 var titleWorkplace = regexp.MustCompile(`(?i)\b(hybrid|on-?site|in[- ]office)\b`)
 
-// maxDescriptionRunes keeps one huge posting from eating the free-tier database.
+// maxDescriptionRunes keeps one huge posting from bloating the search index and LLM prompts.
 const maxDescriptionRunes = 20000
 
 // toJob maps a posting found at pageURL; company overrides hiringOrganization when set.

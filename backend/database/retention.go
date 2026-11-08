@@ -79,5 +79,7 @@ func DeleteExpiredJobs(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("commit delete expired jobs: %w", err)
 	}
 
+	forgetTermWeights()
+
 	return deleted, nil
 }

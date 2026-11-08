@@ -137,8 +137,8 @@ func TestGetJobByID(t *testing.T) {
 		t.Errorf("Tags = %v, want %v", gotTags, wantTags)
 	}
 
-	if got.Description != seed.Description {
-		t.Errorf("Description = %q, want %q", got.Description, seed.Description)
+	if got.Description != "" {
+		t.Errorf("Description = %q, want empty since it isn't stored", got.Description)
 	}
 }
 

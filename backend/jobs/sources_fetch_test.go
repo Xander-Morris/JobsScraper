@@ -89,7 +89,7 @@ func TestAshbyFetchJobs(t *testing.T) {
 func TestGreenhouseFetchJobs(t *testing.T) {
 	srv, paths := feedServer(t, http.StatusOK, func(*http.Request) string {
 		return `{"jobs":[
-			{"title":"Engineer","absolute_url":"https://boards.greenhouse.io/a/1"},
+			{"id":1,"title":"Engineer","absolute_url":"https://boards.greenhouse.io/a/1"},
 			{"title":"No URL"},
 			{"absolute_url":"https://boards.greenhouse.io/a/3"}
 		]}`
@@ -105,7 +105,11 @@ func TestGreenhouseFetchJobs(t *testing.T) {
 	}
 
 	if len(got) != 1 || got[0].Company != "Acme" {
-		t.Errorf("jobs = %+v", got)
+		t.Fatalf("jobs = %+v", got)
+	}
+
+	if want := srv.URL + "/acme/jobs/1"; got[0].DetailURL != want {
+		t.Errorf("DetailURL = %q, want %q", got[0].DetailURL, want)
 	}
 
 	if p := paths(); !slices.Equal(p, []string{"/acme/jobs?content=true"}) {

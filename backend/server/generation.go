@@ -86,6 +86,8 @@ func handleGenerateApplicationContent(w http.ResponseWriter, r *http.Request, pr
 	ctx, cancel := llmContext(w, r, "generate application content")
 	defer cancel()
 
+	withDescription(ctx, job)
+
 	generated, err := llm.GenerateApplicationContent(ctx, extraction.Profile(), jobPosting(job))
 	if err != nil {
 		slog.Error("generate application content", "profile_id", profileID, "job_id", jobID, "error", err)

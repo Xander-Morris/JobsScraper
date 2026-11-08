@@ -18,16 +18,18 @@ export const jobSchema = z.object({
   // Left out when the source gave no post date.
   posted_at: z.iso.datetime({ offset: true }).optional(),
   url: z.string().trim(),
-  description: htmlDecodedString,
   match_score: z.number().nullable().optional(),
   match_percent: z.number().int().min(0).max(100).nullable().optional(),
   applied: z.boolean().default(false)
 })
 export type Job = z.infer<typeof jobSchema>
 
-// Search results skip description; only the detail endpoint sends it.
-export const jobListItemSchema = jobSchema.omit({ description: true })
-export type JobListItem = z.infer<typeof jobListItemSchema>
+export const jobListItemSchema = jobSchema
+export type JobListItem = Job
+
+// Fetched live from the posting; null when the posting doesn't expose one.
+export const jobDescriptionSchema = z.object({ description: htmlDecodedString.nullable() })
+export type JobDescription = z.infer<typeof jobDescriptionSchema>
 
 export const jobSearchResponseSchema = z.object({
   jobs: z.array(jobListItemSchema),

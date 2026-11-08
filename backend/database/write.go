@@ -53,8 +53,10 @@ const writeJobsChunkSize = 500
 // writeTagsChunkSize bounds the tag and job-tag rows per bulk statement.
 const writeTagsChunkSize = 2000
 
-// jobWriteColumns are the scraped columns; the rest are generated or filled in later.
-var jobWriteColumns = table.Jobs.MutableColumns.Except(table.Jobs.Embedding, table.Jobs.FirstSeenAt, table.Jobs.SearchVector)
+// jobWriteColumns are the scraped columns, in jobValues order; search_vector is built from the unstored description.
+var jobWriteColumns = pg.ColumnList{table.Jobs.Title, table.Jobs.Company, table.Jobs.Location, table.Jobs.WorkplaceType,
+	table.Jobs.SalaryMin, table.Jobs.SalaryMax, table.Jobs.PostedAt, table.Jobs.URL, table.Jobs.DetailURL,
+	table.Jobs.IsIntern, table.Jobs.IsPartTime, table.Jobs.IsFullTime, table.Jobs.SearchVector}
 
 func writeJobs(ctx context.Context, tx qrm.DB, batch []jobs.Job) error {
 	for chunk := range slices.Chunk(dedupeJobsByURL(batch), writeJobsChunkSize) {
@@ -99,10 +101,13 @@ func jobRow(job jobs.Job) model.Jobs {
 		SalaryMin:     salaryPtr(job.SalaryMin),
 		SalaryMax:     salaryPtr(job.SalaryMax),
 		URL:           job.URL,
-		Description:   &job.Description,
 		IsIntern:      flags.intern,
 		IsPartTime:    flags.partTime,
 		IsFullTime:    flags.fullTime,
+	}
+
+	if job.DetailURL != "" {
+		row.DetailURL = &job.DetailURL
 	}
 
 	// A post date in the future is bad source data, so it's stored as unknown.
@@ -114,24 +119,75 @@ func jobRow(job jobs.Job) model.Jobs {
 	return row
 }
 
-func upsertJobs(ctx context.Context, tx qrm.DB, chunk []jobs.Job) (map[string]int64, error) {
-	rows := make([]model.Jobs, len(chunk))
-	for i, job := range chunk {
-		rows[i] = jobRow(job)
+// searchVector weights title over description, unstemmed over stemmed: A..D as migration 000009 defined.
+func searchVector(title, description string) pg.Expression {
+	return pg.Raw(`setweight(to_tsvector('simple', #title::text), 'A') || setweight(to_tsvector('english', #title::text), 'B') ||
+		setweight(to_tsvector('simple', #desc::text), 'C') || setweight(to_tsvector('english', #desc::text), 'D')`,
+		pg.RawArgs{"#title": title, "#desc": description})
+}
+
+// jobValues is one row for jobWriteColumns.
+func jobValues(job jobs.Job) []any {
+	row := jobRow(job)
+
+	return []any{row.Title, row.Company, row.Location, row.WorkplaceType, row.SalaryMin, row.SalaryMax, row.PostedAt,
+		row.URL, row.DetailURL, row.IsIntern, row.IsPartTime, row.IsFullTime, searchVector(job.Title, job.Description)}
+}
+
+// expressions is cols as expressions, each swapped for its excluded.* twin when from is given.
+func expressions(cols pg.ColumnList, from pg.ColumnList) []pg.Expression {
+	byName := make(map[string]pg.Column, len(from))
+	for _, col := range from {
+		byName[col.Name()] = col
 	}
 
+	exprs := make([]pg.Expression, len(cols))
+	for i, col := range cols {
+		if twin, ok := byName[col.Name()]; ok {
+			col = twin
+		}
+
+		exprs[i] = col.(pg.Expression)
+	}
+
+	return exprs
+}
+
+func upsertJobs(ctx context.Context, tx qrm.DB, chunk []jobs.Job) (map[string]int64, error) {
 	jobs := table.Jobs
-	stmt := jobs.INSERT(jobWriteColumns).MODELS(rows).
-		ON_CONFLICT(jobs.URL).DO_UPDATE(pg.SET(
+	insert := jobs.INSERT(jobWriteColumns)
+
+	for _, job := range chunk {
+		values := jobValues(job)
+		insert = insert.VALUES(values[0], values[1:]...)
+	}
+
+	// Keeps a known post date when a later scrape of the same URL has none.
+	postedAt := pg.TimestampzExp(pg.COALESCE(jobs.EXCLUDED.PostedAt, jobs.PostedAt))
+	compared := jobWriteColumns.Except(jobs.URL, jobs.PostedAt)
+
+	// Unchanged rows are left alone, so re-scraping the same feed doesn't rewrite and bloat every row.
+	changed := pg.ROW(append(expressions(compared, nil), jobs.PostedAt)...).
+		IS_DISTINCT_FROM(pg.ROW(append(expressions(compared, jobs.EXCLUDED.AllColumns), postedAt)...))
+
+	stmt := insert.ON_CONFLICT(jobs.URL).DO_UPDATE(pg.SET(
 		setExcluded(jobWriteColumns, jobs.EXCLUDED.AllColumns, jobs.URL, jobs.PostedAt),
-		// Keeps a known post date when a later scrape of the same URL has none.
-		jobs.PostedAt.SET(pg.TimestampzExp(pg.COALESCE(jobs.EXCLUDED.PostedAt, jobs.PostedAt))),
-	)).
-		RETURNING(jobs.ID, jobs.URL)
+		jobs.PostedAt.SET(postedAt),
+	).WHERE(changed))
+
+	if _, err := exec(ctx, tx, stmt); err != nil {
+		return nil, fmt.Errorf("upsert jobs: %w", err)
+	}
+
+	// Skipped rows return nothing from RETURNING, so ids are looked up for the whole chunk.
+	urls := make([]string, len(chunk))
+	for i, job := range chunk {
+		urls[i] = job.URL
+	}
 
 	var upserted []model.Jobs
-	if err := stmt.QueryContext(ctx, tx, &upserted); err != nil {
-		return nil, fmt.Errorf("upsert jobs: %w", err)
+	if err := pg.SELECT(jobs.ID, jobs.URL).FROM(jobs).WHERE(eqAny(jobs.URL, urls, "text[]")).QueryContext(ctx, tx, &upserted); err != nil {
+		return nil, fmt.Errorf("look up job ids: %w", err)
 	}
 
 	ids := make(map[string]int64, len(upserted))
@@ -266,6 +322,8 @@ func WriteJobsToDatabase(ctx context.Context, jobs []jobs.Job) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	forgetTermWeights()
 
 	return nil
 }

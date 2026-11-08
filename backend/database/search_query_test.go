@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"main/jobs"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -152,5 +153,42 @@ func TestSearchForJobsQueryEmbedding(t *testing.T) {
 	titles = searchTitles(t, &JobSearchParams{SearchQuery: "developer", SearchEmbedding: &queryVec, ResumeEmbedding: &resumeVec})
 	if len(titles) == 0 || titles[0] != "Frontend Engineer" {
 		t.Errorf("hybrid search = %v, want Frontend Engineer first", titles)
+	}
+}
+
+func TestTermWeightsCachedUntilJobsChange(t *testing.T) {
+	newTestDB(t)
+	forgetTermWeights()
+
+	seedJobs(t, jobs.Job{Title: "Go Intern", Company: "Acme", URL: "https://example.com/w1"},
+		jobs.Job{Title: "Go Engineer", Company: "Acme", URL: "https://example.com/w2"})
+
+	text := newTextSearch(parseSearchQuery("intern go"), nil)
+	if err := text.loadWeights(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	// intern matches 1 of 2 jobs, go matches both, so intern is rarer.
+	want := []float64{math.Log(1 + 2.0/2), math.Log(1 + 2.0/3)}
+	if !slices.EqualFunc(text.weights, want, func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }) {
+		t.Errorf("weights = %v, want %v", text.weights, want)
+	}
+
+	termWeights.Lock()
+	cached := len(termWeights.entries)
+	termWeights.Unlock()
+
+	if cached != 2 {
+		t.Errorf("cached weights = %d, want 2", cached)
+	}
+
+	seedJobs(t, jobs.Job{Title: "Nurse", Company: "Acme", URL: "https://example.com/w3"})
+
+	termWeights.Lock()
+	cached = len(termWeights.entries)
+	termWeights.Unlock()
+
+	if cached != 0 {
+		t.Errorf("cached weights after write = %d, want 0", cached)
 	}
 }

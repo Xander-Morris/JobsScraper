@@ -1,4 +1,4 @@
-import { useGenerateApplicationContentMutation } from '@/src/hooks/use-jobs'
+import { useGenerateApplicationContentMutation, useJobDescriptionQuery } from '@/src/hooks/use-jobs'
 import { useDownloadResumeMutation, useProfileQuery, useResumeExtractionQuery } from '@/src/hooks/use-profile'
 import type { Job } from '@/src/schemas'
 import { matchSkills } from '@/src/lib/skills'
@@ -24,7 +24,8 @@ export default function JobApplyPanel({ job }: { job: Job }) {
   const downloadError = downloadResume.error instanceof Error ? downloadResume.error.message : null
   const generateError = generateContent.error instanceof Error ? generateContent.error.message : null
   const resumeReady = extraction?.status === 'completed'
-  const { matched, missing } = matchSkills(job.tags, job.description, extraction?.skills)
+  const { data: posting } = useJobDescriptionQuery(job.id)
+  const { matched, missing } = matchSkills(job.tags, posting?.description ?? '', extraction?.skills)
 
   if (profileLoading) return <Skeleton className="h-64 w-full rounded-xl" />
   if (!profile) return null

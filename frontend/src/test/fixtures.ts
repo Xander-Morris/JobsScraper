@@ -24,7 +24,6 @@ export function makeJob(overrides: Partial<Job> = {}): Job {
     salary_max: 150000,
     posted_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     url: 'https://acme.example/jobs/1',
-    description: 'Build Go services on Postgres.',
     match_score: null,
     match_percent: null,
     applied: false,
@@ -33,9 +32,7 @@ export function makeJob(overrides: Partial<Job> = {}): Job {
 }
 
 export function makeJobListItem(overrides: Partial<JobListItem> = {}): JobListItem {
-  const { description: _description, ...item } = makeJob(overrides as Partial<Job>)
-  void _description
-  return item
+  return makeJob(overrides)
 }
 
 export function makeResume(overrides: Partial<Resume> = {}): Resume {

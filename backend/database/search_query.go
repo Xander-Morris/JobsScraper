@@ -1,9 +1,14 @@
 package database
 
 import (
+	"context"
+	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
@@ -169,6 +174,8 @@ type textSearch struct {
 	inTitle, inAny []pg.BoolExpression
 	anyQueries     []string
 	embedding      *pgvector.Vector
+	// weights are each term's rarity (IDF), set by loadWeights.
+	weights []float64
 }
 
 func termConfig(term searchTerm) (config, titleWeights, anyWeights string) {
@@ -239,13 +246,88 @@ func (ts *textSearch) match() pg.BoolExpression {
 	return match.OR(jobs.ID.IN(nearest))
 }
 
-// score is 0..1 keyword relevance with terms weighted by rarity (IDF), so "intern" outweighs
-// "engineer", plus semanticWeight times query-to-job similarity when there's an embedding.
+// termWeightTTL bounds how stale cached rarity weights get when another process wrote jobs.
+const termWeightTTL = 15 * time.Minute
+
+const maxCachedTermWeights = 1000
+
+type cachedWeight struct {
+	weight  float64
+	expires time.Time
+}
+
+var termWeights = struct {
+	sync.Mutex
+	entries map[string]cachedWeight
+}{entries: map[string]cachedWeight{}}
+
+// forgetTermWeights drops cached rarity weights after jobs change.
+func forgetTermWeights() {
+	termWeights.Lock()
+	clear(termWeights.entries)
+	termWeights.Unlock()
+}
+
+// loadWeights sets each term's rarity, ln(1 + jobs / (1 + jobs matching)), so "intern" outweighs
+// "engineer". Uncached terms are counted in one scan.
+func (ts *textSearch) loadWeights(ctx context.Context) error {
+	ts.weights = make([]float64, len(ts.terms))
+	keys := make([]string, len(ts.terms))
+	var missing []int
+
+	termWeights.Lock()
+	for i := range ts.terms {
+		keys[i] = ts.configs[i] + "|" + ts.anyQueries[i]
+		if entry, ok := termWeights.entries[keys[i]]; ok && time.Now().Before(entry.expires) {
+			ts.weights[i] = entry.weight
+		} else {
+			missing = append(missing, i)
+		}
+	}
+	termWeights.Unlock()
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	counts := []pg.Projection{pg.COUNT(pg.STAR).AS("total")}
+	for n, i := range missing {
+		counts = append(counts, pg.IntExp(pg.CustomExpression(pg.Token("count(*) FILTER (WHERE"), ts.inAny[i], pg.Token(")"))).
+			AS(fmt.Sprintf("m%d", n)))
+	}
+
+	query, args := pg.SELECT(counts[0], counts[1:]...).FROM(table.Jobs).Sql()
+	values := make([]int64, len(counts))
+	dest := make([]any, len(values))
+	for i := range values {
+		dest[i] = &values[i]
+	}
+
+	if err := db().QueryRowContext(ctx, query, args...).Scan(dest...); err != nil {
+		return fmt.Errorf("count search terms: %w", err)
+	}
+
+	termWeights.Lock()
+	defer termWeights.Unlock()
+
+	if len(termWeights.entries) >= maxCachedTermWeights {
+		clear(termWeights.entries)
+	}
+
+	for n, i := range missing {
+		ts.weights[i] = math.Log(1 + float64(values[0])/float64(1+values[n+1]))
+		termWeights.entries[keys[i]] = cachedWeight{weight: ts.weights[i], expires: time.Now().Add(termWeightTTL)}
+	}
+
+	return nil
+}
+
+// score is 0..1 keyword relevance with terms weighted by loadWeights, plus semanticWeight times
+// query-to-job similarity when there's an embedding.
 func (ts *textSearch) score() pg.FloatExpression {
 	jobs := table.Jobs
 	scores := make([]pg.Expression, len(ts.terms))
-	weights := make([]pg.Expression, len(ts.terms))
-	totalJobs := pg.CAST(scalar(pg.SELECT(pg.COUNT(pg.STAR)).FROM(jobs))).AS_DOUBLE()
+	total := 0.0
 
 	for i, term := range ts.terms {
 		inExactTitle := ts.inTitle[i]
@@ -254,21 +336,20 @@ func (ts *textSearch) score() pg.FloatExpression {
 			inExactTitle = tsMatch("simple", term.tsqueryText("A"))
 		}
 
-		matching := pg.BoolExp(pg.CustomExpression(jobs.SearchVector, pg.Token("@@"),
-			pg.Func("to_tsquery", pg.Raw("'"+ts.configs[i]+"'::regconfig"), pg.String(ts.anyQueries[i]))))
-		weight := pg.FloatExp(scalar(pg.SELECT(pg.LN(num(1).ADD(totalJobs.DIV(pg.FloatExp(pg.RawInt("1").ADD(pg.COUNT(pg.STAR))))))).
-			FROM(jobs).WHERE(matching)))
-
-		weights[i] = weight
-		scores[i] = weight.MUL(pg.FloatExp(pg.CASE().
+		total += ts.weights[i]
+		scores[i] = num(ts.weights[i]).MUL(pg.FloatExp(pg.CASE().
 			WHEN(inExactTitle).THEN(num(exactTitleHitScore)).
 			WHEN(ts.inTitle[i]).THEN(num(titleHitScore)).
 			WHEN(ts.inAny[i]).THEN(num(descriptionHitScore)).
 			ELSE(num(0))))
 	}
 
-	score := pg.FloatExp(pg.CustomExpression(joinExpressions(scores, "+")...)).
-		DIV(pg.FloatExp(pg.CustomExpression(joinExpressions(weights, "+")...)))
+	// No jobs means every weight is 0; any divisor works since no row is scored.
+	if total == 0 {
+		total = 1
+	}
+
+	score := pg.FloatExp(pg.CustomExpression(joinExpressions(scores, "+")...)).DIV(num(total))
 
 	if ts.embedding == nil {
 		return score

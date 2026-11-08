@@ -83,8 +83,10 @@ type Job struct {
 	// PostedAt is left out of JSON when the source gave no post date.
 	PostedAt time.Time `json:"posted_at,omitzero"`
 	URL      string    `json:"url"`
-	// Description is empty in search results; only job detail loads it.
-	Description string `json:"description,omitempty"`
+	// Description is only held in memory while scraping and for LLM prompts; it isn't stored or served.
+	Description string `json:"-"`
+	// DetailURL is where the description can be fetched when it isn't on the posting page itself.
+	DetailURL string `json:"-"`
 	// MatchScore is a text-relevance score (roughly 0-1) against the caller's active
 	// resume, nil when there's no active resume to compare against.
 	MatchScore *float64 `json:"match_score,omitempty"`

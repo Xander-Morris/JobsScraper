@@ -7,6 +7,8 @@ export const queryKeys = {
   // Keyed on auth state, not the token: it rotates every reload. Logout clears the whole cache.
   jobSearch: (params: JobSearchParams, isAuthenticated: boolean) => ['jobs', params, isAuthenticated] as const,
   job: (id: number, isAuthenticated: boolean) => ['jobs', id, isAuthenticated] as const,
+  // Outside 'jobs' so applying, which invalidates 'jobs', doesn't refetch the posting.
+  jobDescription: (id: number) => ['job-description', id] as const,
   tailoredResume: (jobId: number) => ['jobs', jobId, 'tailored-resume'] as const,
   profile: ['profile'] as const,
   resumeExtraction: (resumeId: number) => ['profile', 'resume', resumeId, 'extraction'] as const,

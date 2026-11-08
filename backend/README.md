@@ -10,6 +10,7 @@ Go API server for CrawlerAndIndexer. Handles auth, job search, profile/resume ma
 - `scraper/`: runs the job source fetchers on a 10 minute ticker
 - `jobs/`: one file per job source: public feeds (RemoteOK, Remotive, Arbeitnow, Jobicy, Himalayas, WeWorkRemotely) and company boards on Greenhouse, Lever, and Ashby, whose company lists sit at the top of `greenhouse.go`, `lever.go`, and `ashby.go`
 - `crawler/`: a web crawler for career sites with no API (NVIDIA, Salesforce, Adobe, Intel, Mastercard, Cisco, Red Hat, Target, HP, all on Workday), seeded from `seeds.go`. See "Crawler" below
+- `jobdetail/`: fetches a job's description live from its posting when someone opens it (descriptions aren't stored)
 - `llm/`: resume text extraction, generation, and trivia quizzes via OpenRouter, embeddings via Jina AI
 - `notify/`: Resend email client for the digest
 - `utils/`: env loading and a couple of small helpers
@@ -100,6 +101,10 @@ Full list with comments is in `.env.example`. The short version:
 
 Routes are all registered in `server/routes.go`. Roughly: job search/detail is public, marking a job as applied and everything under `/api/profile` requires a bearer token, login/signup are rate limited separately from everything else.
 
+Job descriptions aren't stored. A job row keeps only what search and ranking need (title, company, location, salary, tags, URL, a `search_vector` built from the title and description at write time, and the embedding). `GET /api/jobs/{id}/description` fetches the description live: from the posting page's `JobPosting` JSON-LD, or from `detail_url` when the page has none (Greenhouse sets it to its per-job API). Results are cached in Redis for 12 hours (1 hour for "no description"), or in process without `REDIS_URL`. Outbound fetches refuse private and loopback addresses, since crawled URLs come from third-party pages. Cover letters and tailored resumes load the description the same way. When a posting has none (Himalayas blocks scrapers), the job page links to the original instead.
+
+Rarer search terms weigh more (IDF). Those weights come from one count over all jobs, cached in process for 15 minutes and cleared whenever this process writes or deletes jobs.
+
 Typed job search (`database/search_query.go`) is hybrid. Keyword side: the query is split into terms, common abbreviations expand (`dev` → developer/engineer, `swe`, `pm`, `ml`, ...), and each job scores by where each term hits: unstemmed title, stemmed title, then description, with rarer terms weighted higher (IDF). A job shows up when at least half the terms hit its title or every term appears somewhere. `intern` matches unstemmed only, so it skips "internal" and "international". Semantic side: when `JINA_API_KEY` works, the query is embedded and the 50 nearest jobs by pgvector cosine distance join the results, with similarity added to the score. Without embeddings it's keyword-only.
 
 Auth is a short-lived JWT access token plus a longer-lived refresh token in an httpOnly cookie. There's no session store, refresh tokens are just rows in Postgres that get invalidated on logout. Checking "Remember me" at login gives a 30-day persistent cookie; leaving it unchecked ends the session once the user leaves the site (the frontend revokes it on the next visit if no other tab is still open), with a browser-session cookie and a one-day idle expiry as backstops. Password reset emails a one-time link (stored hashed, expires in an hour); using it sets the new password and revokes every refresh token for that profile.
@@ -116,7 +121,8 @@ Both recover from panics per-run so one bad fetch or one bad email doesn't take 
 Each scrape cycle also:
 
 - **Expires old jobs**: postings first published more than 30 days ago are skipped, and stored jobs past that age are deleted (by `posted_at`, or `first_seen_at` for sources with no post date). Stored jobs are also capped at the newest 5,000 (`MaxJobs`); older ones past the cap are deleted, and each scrape writes at most that many. Jobs someone marked applied or tailored a resume for are kept, but drop out of search. Pruning runs before each write, so it still frees space if Supabase has put the database in read-only mode.
-- **Embeds new jobs**: the title plus the first 2,000 characters of the description go to Jina, which keeps token use down on the free tier. The full description is still stored and shown.
+- **Indexes without storing descriptions**: the scraped description builds `search_vector` and is then dropped. A rescraped job whose fields and search vector haven't changed isn't rewritten, which keeps Postgres from piling up dead rows.
+- **Embeds new jobs**: the title plus the first 2,000 characters of the in-memory description go to Jina, which keeps token use down on the free tier. Jobs Jina misses retry on the next scrape, since feeds resend every description (crawler jobs are only fetched once, so a missed one stays keyword-only).
 - **Normalizes salaries**: structured pay (Himalayas, Jobicy, Ashby compensation, Lever `salaryRange`, JSON-LD `baseSalary`) is converted to yearly USD; hourly, weekly, and monthly rates are annualized and other currencies are dropped. Jobs with no structured pay fall back to reading a range like "$150,000 – $200,000" that follows a word like "salary" or "pay" in the description (`jobs/salary.go`).
 - **Tolerates broken boards**: a Greenhouse, Lever, Ashby company, or crawler seed that fails (renamed board, outage) is logged and skipped without failing the rest.
 
@@ -139,7 +145,7 @@ To crawl another site, add a `Seed` to `crawler/seeds.go`. Any site whose job pa
 
 ### Adding a job source
 
-Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead, and for a career site with no API, add a crawler seed (see "Crawler" above).
+Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. Fill `Description` (it feeds search and embeddings, but isn't stored). If the source's posting pages carry no `JobPosting` JSON-LD, set `DetailURL` to a JSON endpoint whose `content` field holds the description, or job pages will only link out. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead, and for a career site with no API, add a crawler seed (see "Crawler" above).
 
 ## Docker
 

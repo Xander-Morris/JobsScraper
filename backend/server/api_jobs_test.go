@@ -6,15 +6,22 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
 	"main/database"
+	"main/jobdetail"
 	"main/jobs"
 	"main/llm"
 )
@@ -170,7 +177,7 @@ func TestAPISearchJobsWithResume(t *testing.T) {
 
 	var job jobs.Job
 	a.must(http.StatusOK, "GET", fmt.Sprintf("/api/jobs/%d", ids["Engineer"]), nil, &job)
-	if job.MatchScore == nil || job.Description == "" {
+	if job.MatchScore == nil {
 		t.Errorf("detail = %+v", job)
 	}
 }
@@ -222,6 +229,12 @@ func TestAPIGenerateApplicationContent(t *testing.T) {
 
 	if prompt := calls.prompt(); !strings.Contains(prompt, "Mnbvc Go Dev") || !strings.Contains(prompt, "Ada") {
 		t.Errorf("prompt missing job or resume: %q", prompt)
+	}
+
+	stubDescription(t, func(string, string) (string, error) { return "Ship Go services", nil })
+	a.must(http.StatusOK, "POST", path, nil, &got)
+	if prompt := calls.prompt(); !strings.Contains(prompt, "Ship Go services") {
+		t.Errorf("prompt missing live description: %q", prompt)
 	}
 
 	fakeLLM(t, static(""))
@@ -334,5 +347,92 @@ func TestAPIUnsubscribeDigest(t *testing.T) {
 
 	if a.profile().EmailNotifications {
 		t.Error("still subscribed")
+	}
+}
+
+// stubDescription swaps the live posting fetch and clears cached descriptions.
+func stubDescription(t *testing.T, fetch func(postingURL, detailURL string) (string, error)) *atomic.Int32 {
+	t.Helper()
+
+	var calls atomic.Int32
+	prev := fetchDescription
+	fetchDescription = func(_ context.Context, postingURL, detailURL string) (string, error) {
+		calls.Add(1)
+		return fetch(postingURL, detailURL)
+	}
+
+	reset := func() {
+		localDescriptions.Lock()
+		clear(localDescriptions.entries)
+		localDescriptions.Unlock()
+	}
+	reset()
+	t.Cleanup(func() { fetchDescription = prev; reset() })
+
+	return &calls
+}
+
+func TestAPIJobDescription(t *testing.T) {
+	a := newAPI(t)
+	ids := seedUniqueJobs(t, "Qwdesc", jobs.Job{Title: "Go Dev", Company: "Acme"}, jobs.Job{Title: "Gone", Company: "Acme"},
+		jobs.Job{Title: "Flaky", Company: "Acme"})
+
+	calls := stubDescription(t, func(postingURL, _ string) (string, error) {
+		switch {
+		case strings.Contains(postingURL, "/0"):
+			return "Write Go", nil
+		case strings.Contains(postingURL, "/1"):
+			return "", jobdetail.ErrUnavailable
+		default:
+			return "", errors.New("timeout")
+		}
+	})
+
+	var got struct{ Description *string }
+	path := fmt.Sprintf("/api/jobs/%d/description", ids["Go Dev"])
+
+	a.must(http.StatusOK, "GET", path, nil, &got)
+	if got.Description == nil || *got.Description != "Write Go" {
+		t.Fatalf("description = %v, want Write Go", got.Description)
+	}
+
+	// Cached, so the posting isn't fetched again.
+	a.must(http.StatusOK, "GET", path, nil, &got)
+	if n := calls.Load(); n != 1 {
+		t.Errorf("fetches = %d, want 1", n)
+	}
+
+	a.must(http.StatusOK, "GET", fmt.Sprintf("/api/jobs/%d/description", ids["Gone"]), nil, &got)
+	if got.Description != nil {
+		t.Errorf("unavailable description = %q, want null", *got.Description)
+	}
+
+	a.must(http.StatusBadGateway, "GET", fmt.Sprintf("/api/jobs/%d/description", ids["Flaky"]), nil, nil)
+	a.must(http.StatusNotFound, "GET", "/api/jobs/999999999/description", nil, nil)
+	a.must(http.StatusBadRequest, "GET", "/api/jobs/x/description", nil, nil)
+}
+
+func TestJobDescriptionRedisCache(t *testing.T) {
+	mr := miniredis.RunT(t)
+	prevClient := redisClient
+	redisOnce, redisClient = sync.Once{}, redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	redisOnce.Do(func() {})
+	t.Cleanup(func() { redisOnce, redisClient = sync.Once{}, prevClient })
+
+	calls := stubDescription(t, func(string, string) (string, error) { return "", jobdetail.ErrUnavailable })
+	job := &jobs.Job{ID: 42, URL: "https://example.com/gone"}
+
+	for range 2 {
+		if text, err := jobDescription(t.Context(), job); err != nil || text != "" {
+			t.Fatalf("jobDescription = %q, %v", text, err)
+		}
+	}
+
+	if n := calls.Load(); n != 1 {
+		t.Errorf("fetches = %d, want 1 (unavailable is cached)", n)
+	}
+
+	if ttl := mr.TTL(descriptionKey(42)); ttl != missingDescriptionTTL {
+		t.Errorf("ttl = %v, want %v", ttl, missingDescriptionTTL)
 	}
 }

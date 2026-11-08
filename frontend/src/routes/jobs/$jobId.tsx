@@ -1,7 +1,7 @@
 import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle'
 import { createFileRoute, Link, useLocation, useRouter } from '@tanstack/react-router'
 import { ArrowLeftIcon, MapPinIcon } from 'lucide-react'
-import { jobQueryOptions, useJobQuery } from '@/src/hooks/use-jobs'
+import { jobDescriptionQueryOptions, jobQueryOptions, useJobDescriptionQuery, useJobQuery } from '@/src/hooks/use-jobs'
 import { profileQueryOptions } from '@/src/hooks/use-profile'
 import JobApplyPanel from '../../components/jobs/job-apply-panel/job-apply-panel'
 import { Badge } from '../../components/ui/badge'
@@ -13,6 +13,8 @@ import { useAuth } from '@/src/stores/auth-store'
 
 export const Route = createFileRoute('/jobs/$jobId')({
   loader: ({ context: { auth, queryClient }, params }) => {
+    // The description needs no auth, so it starts loading before auth settles.
+    void queryClient.prefetchQuery(jobDescriptionQueryOptions(Number(params.jobId)))
     if (auth.isInitializing) return
     void queryClient.prefetchQuery(jobQueryOptions(Number(params.jobId), auth.isAuthenticated))
     if (auth.isAuthenticated) void queryClient.prefetchQuery(profileQueryOptions)
@@ -98,13 +100,46 @@ function JobDetailPage() {
             )}
 
             <section className="order-2 lg:order-1">
-              <p className="mt-3 max-w-[68ch] text-[15px] leading-7 whitespace-pre-wrap text-secondary-foreground">
-                {job.description}
-              </p>
+              <JobDescription jobId={job.id} url={job.url} />
             </section>
           </div>
         </article>
       )}
     </div>
+  )
+}
+
+function JobDescription({ jobId, url }: { jobId: number; url: string }) {
+  const { data, isPending, isError } = useJobDescriptionQuery(jobId)
+
+  if (isPending) {
+    return (
+      <div className="mt-3 max-w-[68ch] space-y-2.5" aria-label="Loading description">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-4/5" />
+        <Skeleton className="h-4 w-full" />
+      </div>
+    )
+  }
+
+  if (isError || !data.description) {
+    return (
+      <p className="mt-3 max-w-[68ch] text-[15px] leading-7 text-muted-foreground">
+        {isError
+          ? 'Couldn’t load the description from the posting right now.'
+          : 'This posting doesn’t share its description here.'}{' '}
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          Read it on the original posting
+        </a>
+        .
+      </p>
+    )
+  }
+
+  return (
+    <p className="mt-3 max-w-[68ch] text-[15px] leading-7 whitespace-pre-wrap text-secondary-foreground">
+      {data.description}
+    </p>
   )
 }

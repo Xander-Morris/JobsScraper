@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"main/utils"
 	"strings"
 	"time"
@@ -40,7 +41,8 @@ type greenhouseResponse struct {
 }
 
 type greenhouseJob struct {
-	Title          string                 `json:"title"`
+	ID             int64                  `json:"id"`
+	Title         string                 `json:"title"`
 	AbsoluteURL    string                 `json:"absolute_url"`
 	FirstPublished string                 `json:"first_published"`
 	Content        string                 `json:"content"`
@@ -71,7 +73,9 @@ func (g *Greenhouse) FetchJobs(ctx context.Context) ([]Job, error) {
 				continue
 			}
 
-			result = append(result, raw.toJob(board.Company))
+			job := raw.toJob(board.Company)
+			job.DetailURL = fmt.Sprintf("%s/%s/jobs/%d", g.Endpoint, board.Slug, raw.ID)
+			result = append(result, job)
 		}
 
 		return result, nil

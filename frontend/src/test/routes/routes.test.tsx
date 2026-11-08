@@ -275,17 +275,41 @@ describe('jobs pages', () => {
 
   it('shows a job to anonymous visitors without apply assist', async () => {
     server.use(
-      http.get(api('/api/jobs/7'), () => HttpResponse.json(makeJob({ id: 7, match_percent: 90, applied: true })))
+      http.get(api('/api/jobs/7'), () => HttpResponse.json(makeJob({ id: 7, match_percent: 90, applied: true }))),
+      http.get(api('/api/jobs/7/description'), () =>
+        HttpResponse.json({ description: 'Build Go services on Postgres.' })
+      )
     )
     await renderApp('/jobs/7')
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Backend Engineer' })).toBeInTheDocument()
     expect(screen.getByText('90% · Strong match')).toBeInTheDocument()
     expect(screen.getByText('Applied')).toBeInTheDocument()
-    expect(screen.getByText('Build Go services on Postgres.')).toBeInTheDocument()
+    expect(await screen.findByText('Build Go services on Postgres.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Apply assist' })).not.toBeInTheDocument()
     // Direct visits link back to the last search instead of history.
     expect(screen.getByRole('link', { name: 'Back to jobs' })).toHaveAttribute('href', '/jobs')
+  })
+
+  it.each([
+    ['unavailable', () => HttpResponse.json({ description: null }), 'This posting doesn’t share its description here.'],
+    [
+      'failing',
+      () => HttpResponse.json({ error: 'upstream' }, { status: 502 }),
+      'Couldn’t load the description from the posting right now.'
+    ]
+  ])('links to the original posting when the description is %s', async (_, respond, message) => {
+    server.use(
+      http.get(api('/api/jobs/8'), () => HttpResponse.json(makeJob({ id: 8 }))),
+      http.get(api('/api/jobs/8/description'), respond)
+    )
+    await renderApp('/jobs/8')
+
+    expect(await screen.findByText(message, { exact: false })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Read it on the original posting' })).toHaveAttribute(
+      'href',
+      'https://acme.example/jobs/1'
+    )
   })
 
   it('says result for a single job and links back on a direct visit', async () => {

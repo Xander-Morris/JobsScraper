@@ -15,7 +15,7 @@ import OpenAndToggle from '@/src/components/jobs/job-apply-panel/open-and-toggle
 
 vi.mock('@/src/stores/auth-store', () => import('@/src/test/auth-mock'))
 
-const job = makeJob({ id: 1, tags: ['go', 'kubernetes'], description: 'We use Go and Postgres.' })
+const job = makeJob({ id: 1, tags: ['go', 'kubernetes'] })
 
 function serve({
   profile = makeProfile({ name: 'Ada', github: 'https://github.com/ada', resumes: [makeResume({ id: 10 })] }),
@@ -24,7 +24,8 @@ function serve({
   server.use(
     http.get(api('/api/profile'), () => HttpResponse.json(profile)),
     http.get(api('/api/profile/resumes/10/extraction'), () => HttpResponse.json(extraction)),
-    http.get(api('/api/jobs/1/tailored-resume'), () => HttpResponse.json({ error: 'none' }, { status: 404 }))
+    http.get(api('/api/jobs/1/tailored-resume'), () => HttpResponse.json({ error: 'none' }, { status: 404 })),
+    http.get(api('/api/jobs/1/description'), () => HttpResponse.json({ description: 'We use Go and Postgres.' }))
   )
 }
 

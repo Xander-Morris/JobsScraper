@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"main/jobdetail"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,8 +38,12 @@ func offlineEmailCheck(email string) (*emailverifier.Result, error) {
 }
 
 func TestMain(m *testing.M) {
+	// Tests never touch the real Redis from .env; set-but-empty stops godotenv filling it.
+	os.Setenv("REDIS_URL", "")
+
 	database.SetEmailVerifier(offlineEmailCheck)
 	embedSearchQuery = func(context.Context, string) ([]float32, bool) { return nil, false }
+	fetchDescription = func(context.Context, string, string) (string, error) { return "", jobdetail.ErrUnavailable }
 
 	connString := testDBConnString()
 

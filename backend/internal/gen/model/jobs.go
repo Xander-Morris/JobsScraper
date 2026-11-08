@@ -21,11 +21,11 @@ type Jobs struct {
 	SalaryMax     *int32
 	PostedAt      *time.Time
 	URL           string
-	Description   *string
 	Embedding     *string
 	FirstSeenAt   time.Time
 	IsIntern      bool
 	IsPartTime    bool
 	IsFullTime    bool
 	SearchVector  *string
+	DetailURL     *string
 }

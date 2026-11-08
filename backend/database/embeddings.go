@@ -3,72 +3,78 @@ package database
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	pg "github.com/go-jet/jet/v2/postgres"
 	"github.com/pgvector/pgvector-go"
 
 	"main/internal/gen/model"
 	"main/internal/gen/table"
+	"main/jobs"
 	"main/llm"
 )
 
 const embedJobsBatchSize = 50
 
-// maxEmbeddingChars caps the text sent to Jina per job; the stored description stays whole.
+// maxEmbeddingChars caps the text sent to Jina per job.
 const maxEmbeddingChars = 2000
 
-// EmbedPendingJobs embeds every job with a NULL embedding, in batches, until
-// none are left.
-func EmbedPendingJobs(ctx context.Context) error {
-	for {
-		n, err := embedNextJobBatch(ctx)
+// EmbedPendingJobs embeds the scraped jobs that have no embedding yet, from their in-memory
+// descriptions since those aren't stored. Jobs missed here retry on the next scrape.
+func EmbedPendingJobs(ctx context.Context, scraped []jobs.Job) error {
+	byURL := make(map[string]jobs.Job, len(scraped))
+	urls := make([]string, 0, len(scraped))
 
-		if err != nil {
-			return err
-		}
-
-		if n < embedJobsBatchSize {
-			return nil
+	for _, job := range scraped {
+		if job.Description != "" {
+			byURL[job.URL] = job
+			urls = append(urls, job.URL)
 		}
 	}
+
+	for chunk := range slices.Chunk(urls, writeJobsChunkSize) {
+		var pending []model.Jobs
+
+		j := table.Jobs
+		stmt := pg.SELECT(j.ID, j.URL).FROM(j).WHERE(j.Embedding.IS_NULL().AND(eqAny(j.URL, chunk, "text[]")))
+
+		if err := stmt.QueryContext(ctx, db(), &pending); err != nil {
+			return fmt.Errorf("query jobs pending embedding: %w", err)
+		}
+
+		for batch := range slices.Chunk(pending, embedJobsBatchSize) {
+			if err := embedJobBatch(ctx, batch, byURL); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
-func embedNextJobBatch(ctx context.Context) (int, error) {
-	var pending []model.Jobs
-
-	jobs := table.Jobs
-	stmt := pg.SELECT(jobs.ID, jobs.Title, jobs.Description).FROM(jobs).
-		WHERE(jobs.Embedding.IS_NULL().AND(pg.StringExp(pg.COALESCE(jobs.Description, pg.String(""))).NOT_EQ(pg.String("")))).
-		LIMIT(embedJobsBatchSize)
-
-	if err := stmt.QueryContext(ctx, db(), &pending); err != nil {
-		return 0, fmt.Errorf("query jobs pending embedding: %w", err)
-	}
-
-	if len(pending) == 0 {
-		return 0, nil
-	}
-
-	texts := make([]string, len(pending))
-	for i, job := range pending {
-		texts[i] = jobEmbeddingText(job.Title, deref(job.Description))
+func embedJobBatch(ctx context.Context, batch []model.Jobs, byURL map[string]jobs.Job) error {
+	texts := make([]string, len(batch))
+	for i, row := range batch {
+		job := byURL[row.URL]
+		texts[i] = jobEmbeddingText(job.Title, job.Description)
 	}
 
 	embeddings, err := llm.EmbedTexts(ctx, texts)
-
 	if err != nil {
-		return 0, fmt.Errorf("embed jobs: %w", err)
+		return fmt.Errorf("embed jobs: %w", err)
 	}
 
-	for i, job := range pending {
-		if _, err := exec(ctx, db(), jobs.UPDATE().
-			SET(jobs.Embedding.SET(pg.StringExp(arg(pgvector.NewVector(embeddings[i]), "vector")))).
-			WHERE(jobs.ID.EQ(pg.Int32(job.ID)))); err != nil {
-			return 0, fmt.Errorf("save job embedding: %w", err)
+	j := table.Jobs
+
+	for i, row := range batch {
+		if _, err := exec(ctx, db(), j.UPDATE().
+			SET(j.Embedding.SET(pg.StringExp(arg(pgvector.NewVector(embeddings[i]), "vector")))).
+			WHERE(j.ID.EQ(pg.Int32(row.ID)))); err != nil {
+			return fmt.Errorf("save job embedding: %w", err)
 		}
 	}
 
-	return len(pending), nil
+	return nil
 }
 
 // jobEmbeddingText is the title plus the opening of the description, where role, stack, and requirements usually are.

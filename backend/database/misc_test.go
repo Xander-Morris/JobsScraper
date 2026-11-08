@@ -247,7 +247,7 @@ func TestEmbedPendingJobs(t *testing.T) {
 	batch = append(batch, jobs.Job{Title: "No description", Company: "X", URL: "https://example.com/nodesc"})
 	seedJobs(t, batch...)
 
-	if err := EmbedPendingJobs(t.Context()); err != nil {
+	if err := EmbedPendingJobs(t.Context(), batch); err != nil {
 		t.Fatalf("EmbedPendingJobs: %v", err)
 	}
 
@@ -257,8 +257,8 @@ func TestEmbedPendingJobs(t *testing.T) {
 
 	var pending, empty int
 	if err := cachedDb.QueryRow(`SELECT
-		count(*) FILTER (WHERE embedding IS NULL AND coalesce(description, '') <> ''),
-		count(*) FILTER (WHERE embedding IS NULL AND coalesce(description, '') = '')
+		count(*) FILTER (WHERE embedding IS NULL AND url <> 'https://example.com/nodesc'),
+		count(*) FILTER (WHERE embedding IS NULL AND url = 'https://example.com/nodesc')
 		FROM jobs`).Scan(&pending, &empty); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestEmbedPendingJobs(t *testing.T) {
 	}
 
 	// Nothing left, so no further calls.
-	if err := EmbedPendingJobs(t.Context()); err != nil {
+	if err := EmbedPendingJobs(t.Context(), batch); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,9 +287,62 @@ func TestEmbedPendingJobsJinaError(t *testing.T) {
 	t.Setenv("JINA_API_URL", srv.URL)
 	t.Setenv("JINA_API_KEY", "test-key")
 
-	seedJobs(t, jobs.Job{Title: "A", Company: "X", URL: "https://example.com/a", Description: "d"})
+	job := jobs.Job{Title: "A", Company: "X", URL: "https://example.com/a", Description: "d"}
+	seedJobs(t, job)
 
-	if err := EmbedPendingJobs(t.Context()); err == nil {
+	if err := EmbedPendingJobs(t.Context(), []jobs.Job{job}); err == nil {
 		t.Fatal("EmbedPendingJobs = nil, want error")
+	}
+}
+
+func TestWriteJobsSkipsUnchangedRows(t *testing.T) {
+	newTestDB(t)
+
+	posted := time.Now().Add(-time.Hour).Truncate(time.Second)
+	job := jobs.Job{Title: "Go Dev", Company: "X", URL: "https://example.com/same", PostedAt: posted,
+		Description: "Write Zxqv services", DetailURL: "https://api.example.com/1", Tags: []string{"go"}}
+
+	version := func() (xmin string, detailURL *string) {
+		t.Helper()
+		if err := cachedDb.QueryRow(`SELECT xmin::text, detail_url FROM jobs WHERE url = $1`, job.URL).Scan(&xmin, &detailURL); err != nil {
+			t.Fatal(err)
+		}
+		return xmin, detailURL
+	}
+
+	seedJobs(t, job)
+	first, detailURL := version()
+
+	if detailURL == nil || *detailURL != job.DetailURL {
+		t.Errorf("detail_url = %v, want %q", detailURL, job.DetailURL)
+	}
+
+	// Same scrape again, and again without a post date: neither rewrites the row.
+	seedJobs(t, job)
+	undated := job
+	undated.PostedAt = time.Time{}
+	if err := WriteJobsToDatabase(t.Context(), []jobs.Job{undated}); err != nil {
+		t.Fatal(err)
+	}
+
+	if again, _ := version(); again != first {
+		t.Errorf("unchanged job was rewritten (xmin %s -> %s)", first, again)
+	}
+
+	// A description-only change still reaches the search index.
+	changed := job
+	changed.Description = "Write Plokm services"
+	seedJobs(t, changed)
+
+	if again, _ := version(); again == first {
+		t.Error("changed description didn't update the row")
+	}
+
+	if titles := searchTitles(t, &JobSearchParams{SearchQuery: "plokm"}); !slices.Equal(titles, []string{"Go Dev"}) {
+		t.Errorf("search on new description = %v", titles)
+	}
+
+	if titles := searchTitles(t, &JobSearchParams{SearchQuery: "zxqv"}); len(titles) != 0 {
+		t.Errorf("search on old description = %v, want none", titles)
 	}
 }

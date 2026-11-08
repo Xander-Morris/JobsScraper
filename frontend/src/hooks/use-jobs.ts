@@ -1,6 +1,7 @@
 import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchJob,
+  fetchJobDescription,
   fetchJobs,
   fetchTailoredResume,
   generateApplicationContent,
@@ -30,6 +31,15 @@ export function jobQueryOptions(id: number, isAuthenticated: boolean) {
   })
 }
 
+export function jobDescriptionQueryOptions(id: number) {
+  return queryOptions({
+    queryKey: queryKeys.jobDescription(id),
+    queryFn: () => fetchJobDescription(id),
+    // Postings rarely change; the server caches them too.
+    staleTime: 60 * 60 * 1000
+  })
+}
+
 export function tailoredResumeQueryOptions(jobId: number) {
   return queryOptions({
     queryKey: queryKeys.tailoredResume(jobId),
@@ -52,6 +62,10 @@ export function useJobQuery(id: number) {
 
   // Waits out auth init so the anonymous and authed keys don't both fetch.
   return useQuery({ ...jobQueryOptions(id, isAuthenticated), enabled: Number.isFinite(id) && !isInitializing })
+}
+
+export function useJobDescriptionQuery(id: number) {
+  return useQuery({ ...jobDescriptionQueryOptions(id), enabled: Number.isFinite(id) })
 }
 
 function useJobAppliedMutation(mutationFn: (id: number) => Promise<{ status: string }>) {

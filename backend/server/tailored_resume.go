@@ -50,6 +50,8 @@ func handleGenerateTailoredResume(w http.ResponseWriter, r *http.Request, profil
 	ctx, cancel := llmContext(w, r, "tailor resume")
 	defer cancel()
 
+	withDescription(ctx, job)
+
 	tailored, err := llm.TailorResume(ctx, extraction.ExtractedResume, jobPosting(job))
 
 	if err != nil {

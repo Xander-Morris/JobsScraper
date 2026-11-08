@@ -143,7 +143,7 @@ func runScraper(ctx context.Context, sources []jobs.JobSource) {
 	embedCtx, cancel := context.WithTimeout(ctx, embedJobsTimeout)
 	defer cancel()
 
-	if err := database.EmbedPendingJobs(embedCtx); err != nil {
+	if err := database.EmbedPendingJobs(embedCtx, fetchedJobs); err != nil {
 		slog.Error("scraper: embed pending jobs", "error", err)
 	}
 }

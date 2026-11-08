@@ -1,5 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { MapPinIcon } from 'lucide-react'
+import { jobDescriptionQueryOptions } from '../../hooks/use-jobs'
 import type { JobListItem } from '../../schemas'
 import { formatRelativeDate, formatSalary, formatWorkplaceType, STRONG_MATCH } from '../../lib/format'
 import { cn } from '../../lib/utils'
@@ -14,6 +16,9 @@ export function JobCard({ job }: { job: JobListItem }) {
   const matchPercent = job.match_percent ?? null
   const strongMatch = matchPercent != null && matchPercent >= STRONG_MATCH
   const extraTags = job.tags.length - MAX_TAGS
+  const queryClient = useQueryClient()
+  // Hover usually comes just before the click, so the posting is loading by the time the page opens.
+  const prefetchDescription = () => void queryClient.prefetchQuery(jobDescriptionQueryOptions(job.id))
 
   return (
     <li>
@@ -21,6 +26,8 @@ export function JobCard({ job }: { job: JobListItem }) {
         to="/jobs/$jobId"
         params={{ jobId: String(job.id) }}
         state={{ fromJobsList: true }}
+        onMouseEnter={prefetchDescription}
+        onFocus={prefetchDescription}
         className={cn(
           'group flex items-center gap-4 px-4 py-4 no-underline transition-colors outline-none hover:bg-primary/[0.04] focus-visible:bg-primary/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:gap-6 sm:px-5',
           strongMatch && 'shadow-[inset_2px_0_0_var(--primary)]'
