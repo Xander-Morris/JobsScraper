@@ -1,7 +1,10 @@
 package jobdetail
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -81,6 +84,47 @@ func TestFetchFromDetailAPI(t *testing.T) {
 	// A server error is transient, not "unavailable", so it isn't cached as missing.
 	if _, err := Fetch(t.Context(), "", base+"/down"); err == nil || errors.Is(err, ErrUnavailable) {
 		t.Errorf("server error: err = %v, want transient error", err)
+	}
+}
+
+func TestFetchFromHimalayasAPI(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "himalayas.app" || r.URL.Path != "/jobs/api/companies/acme/jobs/go-dev" {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Write([]byte(`{"job":{"title":"Go Dev","description":"<p>Ship <b>Go</b></p>"}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	// Route the real Himalayas host to the test server.
+	prev := httpClient
+	httpClient = &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
+		},
+	}}
+	t.Cleanup(func() { httpClient = prev })
+
+	got, err := Fetch(t.Context(), "https://himalayas.app/companies/acme/jobs/go-dev?utm_source=api", "")
+	if err != nil || got != "Ship Go" {
+		t.Errorf("Fetch = %q, %v; want Ship Go", got, err)
+	}
+}
+
+func TestHimalayasAPIURL(t *testing.T) {
+	for posting, want := range map[string]string{
+		"https://himalayas.app/companies/acme/jobs/go-dev?utm_source=api": "https://himalayas.app/jobs/api/companies/acme/jobs/go-dev",
+		"https://www.himalayas.app/companies/acme/jobs/go-dev":            "https://himalayas.app/jobs/api/companies/acme/jobs/go-dev",
+		"https://himalayas.app/jobs/go-dev":                               "",
+		"https://jobs.lever.co/companies/acme":                            "",
+		"://bad":                                                          "",
+	} {
+		if got := himalayasAPIURL(posting); got != want {
+			t.Errorf("himalayasAPIURL(%q) = %q, want %q", posting, got, want)
+		}
 	}
 }
 

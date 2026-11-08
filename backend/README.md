@@ -101,7 +101,7 @@ Full list with comments is in `.env.example`. The short version:
 
 Routes are all registered in `server/routes.go`. Roughly: job search/detail is public, marking a job as applied and everything under `/api/profile` requires a bearer token, login/signup are rate limited separately from everything else.
 
-Job descriptions aren't stored. A job row keeps only what search and ranking need (title, company, location, salary, tags, URL, a `search_vector` built from the title and description at write time, and the embedding). `GET /api/jobs/{id}/description` fetches the description live: from the posting page's `JobPosting` JSON-LD, or from `detail_url` when the page has none (Greenhouse sets it to its per-job API). Results are cached in Redis for 12 hours (1 hour for "no description"), or in process without `REDIS_URL`. Outbound fetches refuse private and loopback addresses, since crawled URLs come from third-party pages. Cover letters and tailored resumes load the description the same way. When a posting has none (Himalayas blocks scrapers), the job page links to the original instead.
+Job descriptions aren't stored. A job row keeps only what search and ranking need (title, company, location, salary, tags, URL, a `search_vector` built from the title and description at write time, and the embedding). `GET /api/jobs/{id}/description` fetches the description live: from the posting page's `JobPosting` JSON-LD, or from `detail_url` when the page has none (Greenhouse sets it to its per-job API). Himalayas pages answer 403, so their URLs map to Himalayas' single-job API instead. Results are cached in Redis for 12 hours (1 hour for "no description"), or in process without `REDIS_URL`. Outbound fetches refuse private and loopback addresses, since crawled URLs come from third-party pages. Cover letters and tailored resumes load the description the same way. When a posting has none (Himalayas blocks scrapers), the job page links to the original instead.
 
 Rarer search terms weigh more (IDF). Those weights come from one count over all jobs, cached in process for 15 minutes and cleared whenever this process writes or deletes jobs.
 
@@ -145,7 +145,7 @@ To crawl another site, add a `Seed` to `crawler/seeds.go`. Any site whose job pa
 
 ### Adding a job source
 
-Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. Fill `Description` (it feeds search and embeddings, but isn't stored). If the source's posting pages carry no `JobPosting` JSON-LD, set `DetailURL` to a JSON endpoint whose `content` field holds the description, or job pages will only link out. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead, and for a career site with no API, add a crawler seed (see "Crawler" above).
+Implement `jobs.JobSource` in a new file under `jobs/` with a `toJob` test, register it in `allSources` in `scraper/scraper.go`, and update the source lists in this README and the root README. Fill `Description` (it feeds search and embeddings, but isn't stored). If the source's posting pages carry no `JobPosting` JSON-LD, set `DetailURL` to a JSON endpoint whose `content` (or `job.description`) field holds the description, or job pages will only link out. For another company on Greenhouse, Lever, or Ashby, add its board slug to that source's list instead, and for a career site with no API, add a crawler seed (see "Crawler" above).
 
 ## Docker
 

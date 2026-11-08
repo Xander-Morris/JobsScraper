@@ -58,11 +58,25 @@ func Fetch(ctx context.Context, postingURL, detailURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
+	if detailURL == "" {
+		detailURL = himalayasAPIURL(postingURL)
+	}
+
 	if detailURL != "" {
 		return fetchAPI(ctx, detailURL)
 	}
 
 	return fetchPage(ctx, postingURL)
+}
+
+// himalayasAPIURL maps a Himalayas posting to its single-job API, since the page itself answers 403.
+func himalayasAPIURL(postingURL string) string {
+	parsed, err := url.Parse(postingURL)
+	if err != nil || (parsed.Host != "himalayas.app" && parsed.Host != "www.himalayas.app") || !strings.HasPrefix(parsed.Path, "/companies/") {
+		return ""
+	}
+
+	return "https://himalayas.app/jobs/api" + parsed.Path
 }
 
 func get(ctx context.Context, rawURL, accept string) (*http.Response, *url.URL, error) {
@@ -103,15 +117,19 @@ func fetchAPI(ctx context.Context, detailURL string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	// Greenhouse answers {content}, Himalayas {job: {description}}.
 	var body struct {
 		Content string `json:"content"`
+		Job     struct {
+			Description string `json:"description"`
+		} `json:"job"`
 	}
 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&body); err != nil {
 		return "", fmt.Errorf("decode %s: %w", detailURL, err)
 	}
 
-	description := strings.TrimSpace(utils.StripHTML(body.Content))
+	description := strings.TrimSpace(utils.StripHTML(body.Content + body.Job.Description))
 	if description == "" {
 		return "", ErrUnavailable
 	}
